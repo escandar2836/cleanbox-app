@@ -1,8 +1,13 @@
+CleanBox: AI Email Sorting App
+================================
+
+본 앱의 공식 이름은 **CleanBox** 입니다. 모든 기능, UI, 문서, 변수명 등에 CleanBox라는 이름을 반영해야 합니다.
+
 Please build an AI email sorting app. I should be able to sign in with Google, define some categories, with descriptions, that I want AI to sort my emails into. When I get a new email, it should use AI to sort it into a category and then also summarize it. Then, it should archive the email in Gmail. When I click on a category in your app, it should show me an AI summary of each email in that category and then have bulk actions I can take on the emails in the category.
 
-Here’s how it should work:
+Here’s how it should work (CleanBox):
 
-- I can “Sign in with Google” via OAuth
+- I can “Sign in with Google” via OAuth (CleanBox 로그인)
 - It asks for scopes related to email (This will be a dev app, on Google, you’ll need to add my Gmail as a test user in order for me to use the app because in order for apps with email scopes to be approved you have to do a security review which takes weeks. I’ll give you my Gmail if you submit a working app.)
 - It shows me a page with 3 sections:
     - A way to connect other Gmail accounts so this works across multiple inboxes

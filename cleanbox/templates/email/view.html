@@ -1,0 +1,253 @@
+{% extends "base.html" %}
+
+{% block title %}CleanBox - 이메일 상세{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 mx-auto">
+        <div class="card cleanbox-card">
+            <div class="card-header bg-primary text-white">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-envelope"></i> 이메일 상세</h5>
+                    <div>
+                        <a href="{{ url_for('email.list_emails') }}" class="btn btn-light btn-sm">
+                            <i class="fas fa-arrow-left"></i> 목록으로
+                        </a>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body">
+                <!-- 이메일 헤더 -->
+                <div class="mb-4">
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <div>
+                            <h4>{{ email.subject }}</h4>
+                            <p class="text-muted mb-1">
+                                <i class="fas fa-user"></i> {{ email.sender }}
+                            </p>
+                            <p class="text-muted mb-2">
+                                <i class="fas fa-clock"></i> 
+                                {{ email.received_at.strftime('%Y년 %m월 %d일 %H:%M') if email.received_at else email.created_at.strftime('%Y년 %m월 %d일 %H:%M') }}
+                            </p>
+                        </div>
+                        <div class="btn-group">
+                            {% if not email.is_read %}
+                            <a href="{{ url_for('email.mark_as_read', email_id=email.id) }}" class="btn btn-success btn-sm">
+                                <i class="fas fa-check"></i> 읽음 표시
+                            </a>
+                            {% endif %}
+                            {% if not email.is_archived %}
+                            <a href="{{ url_for('email.archive_email', email_id=email.id) }}" class="btn btn-warning btn-sm">
+                                <i class="fas fa-archive"></i> 아카이브
+                            </a>
+                            {% endif %}
+                            <button class="btn btn-info btn-sm" onclick="analyzeEmail({{ email.id }})">
+                                <i class="fas fa-robot"></i> AI 분석
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- 카테고리 정보 -->
+                    <div class="mb-3">
+                        {% if category %}
+                        <span class="badge" style="background-color: {{ category.color }};">
+                            <i class="{{ category.icon }}"></i> {{ category.name }}
+                        </span>
+                        {% else %}
+                        <span class="badge bg-secondary">미분류</span>
+                        {% endif %}
+                        
+                        <!-- 카테고리 변경 -->
+                        <div class="dropdown d-inline-block ms-2">
+                            <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                <i class="fas fa-edit"></i> 분류 변경
+                            </button>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="#" onclick="changeCategory({{ email.id }}, 0)">미분류</a></li>
+                                {% for cat in categories %}
+                                <li><a class="dropdown-item" href="#" onclick="changeCategory({{ email.id }}, {{ cat.id }})">
+                                    <i class="{{ cat.icon }}" style="color: {{ cat.color }};"></i> {{ cat.name }}
+                                </a></li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- AI 요약 -->
+                {% if email.summary %}
+                <div class="alert alert-info">
+                    <h6><i class="fas fa-robot"></i> AI 요약</h6>
+                    <p class="mb-0">{{ email.summary }}</p>
+                </div>
+                {% endif %}
+                
+                <!-- 이메일 본문 -->
+                <div class="mb-4">
+                    <h6><i class="fas fa-file-alt"></i> 이메일 내용</h6>
+                    <div class="border rounded p-3 bg-light">
+                        <pre style="white-space: pre-wrap; font-family: inherit;">{{ email.content }}</pre>
+                    </div>
+                </div>
+                
+                <!-- 이메일 정보 -->
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-info-circle"></i> 이메일 정보</h6>
+                        <ul class="list-unstyled">
+                            <li><strong>Gmail ID:</strong> {{ email.gmail_id }}</li>
+                            {% if email.thread_id %}
+                            <li><strong>Thread ID:</strong> {{ email.thread_id }}</li>
+                            {% endif %}
+                            <li><strong>상태:</strong> 
+                                {% if email.is_read %}
+                                <span class="badge bg-success">읽음</span>
+                                {% else %}
+                                <span class="badge bg-warning">읽지 않음</span>
+                                {% endif %}
+                            </li>
+                            <li><strong>아카이브:</strong> 
+                                {% if email.is_archived %}
+                                <span class="badge bg-info">아카이브됨</span>
+                                {% else %}
+                                <span class="badge bg-secondary">활성</span>
+                                {% endif %}
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-chart-bar"></i> 통계</h6>
+                        <ul class="list-unstyled">
+                            <li><strong>생성일:</strong> {{ email.created_at.strftime('%Y년 %m월 %d일 %H:%M') }}</li>
+                            <li><strong>수정일:</strong> {{ email.updated_at.strftime('%Y년 %m월 %d일 %H:%M') }}</li>
+                            <li><strong>내용 길이:</strong> {{ email.content|length }}자</li>
+                            {% if email.summary %}
+                            <li><strong>요약 길이:</strong> {{ email.summary|length }}자</li>
+                            {% endif %}
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- AI 분석 모달 -->
+<div class="modal fade" id="analysisModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title"><i class="fas fa-robot"></i> AI 분석 결과</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="analysisContent">
+                <div class="text-center">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">분석 중...</span>
+                    </div>
+                    <p class="mt-2">AI가 이메일을 분석하고 있습니다...</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">닫기</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// 카테고리 변경 함수
+function changeCategory(emailId, categoryId) {
+    const formData = new FormData();
+    formData.append('category_id', categoryId);
+    
+    fetch(`/email/${emailId}/classify`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload(); // 페이지 새로고침
+        } else {
+            alert('카테고리 변경 실패: ' + data.message);
+        }
+    })
+    .catch(error => {
+        alert('오류: ' + error);
+    });
+}
+
+// AI 분석 함수
+function analyzeEmail(emailId) {
+    const modal = new bootstrap.Modal(document.getElementById('analysisModal'));
+    modal.show();
+    
+    fetch(`/email/${emailId}/analyze`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                displayAnalysis(data.analysis);
+            } else {
+                document.getElementById('analysisContent').innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-triangle"></i> ${data.message}
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            document.getElementById('analysisContent').innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle"></i> 분석 중 오류가 발생했습니다: ${error}
+                </div>
+            `;
+        });
+}
+
+// 분석 결과 표시
+function displayAnalysis(analysis) {
+    const content = document.getElementById('analysisContent');
+    
+    let sentimentClass = 'secondary';
+    if (analysis.sentiment.sentiment === 'positive') sentimentClass = 'success';
+    else if (analysis.sentiment.sentiment === 'negative') sentimentClass = 'danger';
+    
+    let spamClass = analysis.spam_check.is_spam ? 'danger' : 'success';
+    
+    content.innerHTML = `
+        <div class="row">
+            <div class="col-md-6">
+                <h6><i class="fas fa-heart"></i> 감정 분석</h6>
+                <div class="mb-3">
+                    <span class="badge bg-${sentimentClass}">${analysis.sentiment.sentiment}</span>
+                    <small class="text-muted">신뢰도: ${analysis.sentiment.confidence}%</small>
+                </div>
+                <p class="small text-muted">${analysis.sentiment.reason || '분석 이유 없음'}</p>
+            </div>
+            <div class="col-md-6">
+                <h6><i class="fas fa-shield-alt"></i> 스팸 판별</h6>
+                <div class="mb-3">
+                    <span class="badge bg-${spamClass}">${analysis.spam_check.is_spam ? '스팸' : '정상'}</span>
+                    <small class="text-muted">신뢰도: ${analysis.spam_check.confidence}%</small>
+                </div>
+                <p class="small text-muted">${analysis.spam_check.reason || '판별 이유 없음'}</p>
+            </div>
+        </div>
+        <hr>
+        <div class="row">
+            <div class="col-md-6">
+                <h6><i class="fas fa-tags"></i> 키워드</h6>
+                <div class="mb-3">
+                    ${analysis.keywords.map(keyword => `<span class="badge bg-light text-dark me-1">${keyword}</span>`).join('')}
+                </div>
+            </div>
+            <div class="col-md-6">
+                <h6><i class="fas fa-file-alt"></i> AI 요약</h6>
+                <p class="small">${analysis.summary}</p>
+            </div>
+        </div>
+    `;
+}
+</script>
+{% endblock %} 

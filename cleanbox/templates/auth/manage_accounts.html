@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+
+{% block title %}CleanBox - 계정 관리{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1><i class="fas fa-users"></i> Gmail 계정 관리</h1>
+            <div>
+                <a href="{{ url_for('category.list_categories') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> 대시보드로 돌아가기
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 연결된 계정 목록 -->
+<div class="row">
+    <div class="col-12">
+        <div class="card cleanbox-card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="fas fa-list"></i> 연결된 Gmail 계정</h5>
+            </div>
+            <div class="card-body">
+                {% if accounts %}
+                <div class="list-group">
+                    {% for account in accounts %}
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div class="d-flex align-items-center">
+                                <div class="me-3">
+                                    {% if account.is_primary %}
+                                    <span class="badge bg-success me-2">기본</span>
+                                    {% endif %}
+                                    <i class="fas fa-envelope fa-2x text-primary"></i>
+                                </div>
+                                <div>
+                                    <h6 class="mb-1">{{ account.account_email }}</h6>
+                                    {% if account.account_name %}
+                                    <small class="text-muted">{{ account.account_name }}</small>
+                                    {% endif %}
+                                    <br>
+                                    <small class="text-muted">
+                                        연결일: {{ account.created_at.strftime('%Y년 %m월 %d일') }}
+                                    </small>
+                                </div>
+                            </div>
+                            <div class="btn-group">
+                                {% if not account.is_primary %}
+                                <a href="{{ url_for('auth.switch_account', account_id=account.id) }}" 
+                                   class="btn btn-outline-primary btn-sm">
+                                    <i class="fas fa-exchange-alt"></i> 전환
+                                </a>
+                                <form method="POST" action="{{ url_for('auth.remove_account', account_id=account.id) }}" 
+                                      style="display: inline;" onsubmit="return confirm('정말로 이 계정 연결을 해제하시겠습니까?')">
+                                    <button type="submit" class="btn btn-outline-danger btn-sm">
+                                        <i class="fas fa-unlink"></i> 연결 해제
+                                    </button>
+                                </form>
+                                {% else %}
+                                <span class="badge bg-success">현재 계정</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="fas fa-users fa-3x text-muted mb-3"></i>
+                    <h4 class="text-muted">연결된 Gmail 계정이 없습니다</h4>
+                    <p class="text-muted">Gmail 계정을 연결하여 CleanBox를 사용해보세요!</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 새 계정 연결 -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card cleanbox-card">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="fas fa-plus"></i> 새 Gmail 계정 연결</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-8">
+                        <h6>CleanBox에 추가 Gmail 계정을 연결하세요</h6>
+                        <p class="text-muted">
+                            여러 Gmail 계정을 연결하면 모든 계정의 이메일을 CleanBox에서 통합 관리할 수 있습니다.
+                            각 계정의 이메일은 별도로 분류되고 관리됩니다.
+                        </p>
+                        <ul class="text-muted">
+                            <li>각 계정의 이메일은 독립적으로 분류됩니다</li>
+                            <li>계정 간 전환이 가능합니다</li>
+                            <li>기본 계정은 연결 해제할 수 없습니다</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-4 text-center">
+                        <a href="{{ url_for('auth.add_account') }}" class="btn btn-success btn-lg">
+                            <i class="fas fa-plus"></i> Gmail 계정 추가
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 사용법 안내 -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card cleanbox-card">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="fas fa-question-circle"></i> 사용법 안내</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-check-circle text-success"></i> 계정 전환</h6>
+                        <p class="text-muted">
+                            상단의 "전환" 버튼을 클릭하여 다른 Gmail 계정으로 전환할 수 있습니다.
+                            전환된 계정의 이메일만 표시됩니다.
+                        </p>
+                    </div>
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-sync-alt text-primary"></i> 이메일 동기화</h6>
+                        <p class="text-muted">
+                            각 계정별로 Gmail 동기화를 수행할 수 있습니다.
+                            현재 선택된 계정의 이메일만 동기화됩니다.
+                        </p>
+                    </div>
+                </div>
+                <div class="row mt-3">
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-tags text-warning"></i> 카테고리 관리</h6>
+                        <p class="text-muted">
+                            카테고리는 모든 계정에서 공유됩니다.
+                            각 계정의 이메일을 동일한 카테고리로 분류할 수 있습니다.
+                        </p>
+                    </div>
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-shield-alt text-danger"></i> 보안</h6>
+                        <p class="text-muted">
+                            모든 계정의 OAuth 토큰은 암호화되어 안전하게 저장됩니다.
+                            연결 해제 시 해당 계정의 데이터는 즉시 삭제됩니다.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

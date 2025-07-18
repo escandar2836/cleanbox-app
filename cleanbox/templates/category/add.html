@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+
+{% block title %}CleanBox - 카테고리 추가{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 mx-auto">
+        <div class="card cleanbox-card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="fas fa-plus"></i> 새 카테고리 추가</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('category.add_category') }}">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">
+                            <i class="fas fa-tag"></i> 카테고리 이름 <span class="text-danger">*</span>
+                        </label>
+                        <input type="text" class="form-control" id="name" name="name" 
+                               placeholder="예: 업무, 개인, 뉴스레터" required>
+                        <div class="form-text">이메일을 분류할 카테고리 이름을 입력하세요.</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="description" class="form-label">
+                            <i class="fas fa-align-left"></i> 설명
+                        </label>
+                        <textarea class="form-control" id="description" name="description" rows="3"
+                                  placeholder="카테고리에 대한 설명을 입력하세요 (선택사항)"></textarea>
+                        <div class="form-text">AI가 이메일을 분류할 때 참고할 설명입니다.</div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="color" class="form-label">
+                                    <i class="fas fa-palette"></i> 색상
+                                </label>
+                                <input type="color" class="form-control form-control-color" id="color" name="color" 
+                                       value="#007bff" title="카테고리 색상 선택">
+                                <div class="form-text">카테고리를 구분할 색상을 선택하세요.</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="icon" class="form-label">
+                                    <i class="fas fa-icons"></i> 아이콘
+                                </label>
+                                <select class="form-select" id="icon" name="icon">
+                                    <option value="fas fa-tag">🏷️ 태그</option>
+                                    <option value="fas fa-briefcase">💼 업무</option>
+                                    <option value="fas fa-user">👤 개인</option>
+                                    <option value="fas fa-newspaper">📰 뉴스</option>
+                                    <option value="fas fa-shopping-cart">🛒 쇼핑</option>
+                                    <option value="fas fa-graduation-cap">🎓 교육</option>
+                                    <option value="fas fa-heart">❤️ 건강</option>
+                                    <option value="fas fa-home">🏠 가정</option>
+                                    <option value="fas fa-car">🚗 교통</option>
+                                    <option value="fas fa-utensils">🍽️ 음식</option>
+                                    <option value="fas fa-plane">✈️ 여행</option>
+                                    <option value="fas fa-gamepad">🎮 게임</option>
+                                    <option value="fas fa-music">🎵 음악</option>
+                                    <option value="fas fa-film">🎬 영화</option>
+                                    <option value="fas fa-book">📚 도서</option>
+                                    <option value="fas fa-dumbbell">🏋️ 운동</option>
+                                    <option value="fas fa-coffee">☕ 커피</option>
+                                    <option value="fas fa-gift">🎁 선물</option>
+                                    <option value="fas fa-calendar">📅 일정</option>
+                                </select>
+                                <div class="form-text">카테고리를 나타낼 아이콘을 선택하세요.</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('category.list_categories') }}" class="btn btn-secondary">
+                            <i class="fas fa-arrow-left"></i> 돌아가기
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-plus"></i> 카테고리 추가
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- 도움말 카드 -->
+        <div class="card cleanbox-card mt-4">
+            <div class="card-header bg-info text-white">
+                <h6 class="mb-0"><i class="fas fa-lightbulb"></i> CleanBox 카테고리 팁</h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-robot text-success"></i> AI 분류 도움말</h6>
+                        <ul class="list-unstyled small">
+                            <li>• 구체적인 설명을 입력하면 AI가 더 정확하게 분류합니다</li>
+                            <li>• "업무 - 회사 관련 이메일" 같은 형태로 작성하세요</li>
+                            <li>• 색상과 아이콘으로 카테고리를 쉽게 구분할 수 있습니다</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-cog text-primary"></i> 관리 팁</h6>
+                        <ul class="list-unstyled small">
+                            <li>• 카테고리는 언제든지 수정/삭제할 수 있습니다</li>
+                            <li>• 삭제된 카테고리의 이메일은 '미분류'로 이동합니다</li>
+                            <li>• 카테고리별로 이메일 통계를 확인할 수 있습니다</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// 색상 선택 시 미리보기
+document.getElementById('color').addEventListener('change', function() {
+    const color = this.value;
+    const iconSelect = document.getElementById('icon');
+    iconSelect.style.color = color;
+});
+
+// 아이콘 선택 시 미리보기
+document.getElementById('icon').addEventListener('change', function() {
+    const icon = this.value;
+    const color = document.getElementById('color').value;
+    this.style.color = color;
+});
+</script>
+{% endblock %} 

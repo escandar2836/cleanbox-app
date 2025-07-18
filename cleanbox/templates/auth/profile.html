@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}CleanBox - 프로필{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 mx-auto">
+        <div class="card cleanbox-card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="fas fa-user-circle"></i> CleanBox 프로필</h5>
+            </div>
+            <div class="card-body">
+                <div class="text-center mb-4">
+                    {% if user.picture %}
+                    <img src="{{ user.picture }}" alt="프로필" class="rounded-circle mb-3" width="120" height="120">
+                    {% else %}
+                    <i class="fas fa-user-circle fa-5x text-muted mb-3"></i>
+                    {% endif %}
+                    <h4>{{ user.name or user.email }}</h4>
+                    <p class="text-muted">{{ user.email }}</p>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-info-circle"></i> 계정 정보</h6>
+                        <ul class="list-unstyled">
+                            <li><strong>이름:</strong> {{ user.name or '설정되지 않음' }}</li>
+                            <li><strong>이메일:</strong> {{ user.email }}</li>
+                            <li><strong>가입일:</strong> {{ user.created_at.strftime('%Y년 %m월 %d일') if user.created_at else '알 수 없음' }}</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-cog"></i> CleanBox 설정</h6>
+                        <ul class="list-unstyled">
+                            <li><strong>상태:</strong> <span class="badge bg-success">활성</span></li>
+                            <li><strong>권한:</strong> Gmail 접근</li>
+                            <li><strong>마지막 로그인:</strong> 방금 전</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <hr>
+                
+                <div class="text-center">
+                    <a href="{{ url_for('category.list_categories') }}" class="btn btn-primary">
+                        <i class="fas fa-arrow-left"></i> CleanBox로 돌아가기
+                    </a>
+                    <a href="{{ url_for('auth.logout') }}" class="btn btn-outline-danger">
+                        <i class="fas fa-sign-out-alt"></i> 로그아웃
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

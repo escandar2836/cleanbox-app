@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+
+{% block title %}CleanBox - 카테고리 수정{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 mx-auto">
+        <div class="card cleanbox-card">
+            <div class="card-header bg-warning text-dark">
+                <h5 class="mb-0"><i class="fas fa-edit"></i> 카테고리 수정</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('category.edit_category', category_id=category.id) }}">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">
+                            <i class="fas fa-tag"></i> 카테고리 이름 <span class="text-danger">*</span>
+                        </label>
+                        <input type="text" class="form-control" id="name" name="name" 
+                               value="{{ category.name }}" placeholder="예: 업무, 개인, 뉴스레터" required>
+                        <div class="form-text">이메일을 분류할 카테고리 이름을 입력하세요.</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="description" class="form-label">
+                            <i class="fas fa-align-left"></i> 설명
+                        </label>
+                        <textarea class="form-control" id="description" name="description" rows="3"
+                                  placeholder="카테고리에 대한 설명을 입력하세요 (선택사항)">{{ category.description or '' }}</textarea>
+                        <div class="form-text">AI가 이메일을 분류할 때 참고할 설명입니다.</div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="color" class="form-label">
+                                    <i class="fas fa-palette"></i> 색상
+                                </label>
+                                <input type="color" class="form-control form-control-color" id="color" name="color" 
+                                       value="{{ category.color }}" title="카테고리 색상 선택">
+                                <div class="form-text">카테고리를 구분할 색상을 선택하세요.</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="icon" class="form-label">
+                                    <i class="fas fa-icons"></i> 아이콘
+                                </label>
+                                <select class="form-select" id="icon" name="icon">
+                                    <option value="fas fa-tag" {% if category.icon == 'fas fa-tag' %}selected{% endif %}>🏷️ 태그</option>
+                                    <option value="fas fa-briefcase" {% if category.icon == 'fas fa-briefcase' %}selected{% endif %}>💼 업무</option>
+                                    <option value="fas fa-user" {% if category.icon == 'fas fa-user' %}selected{% endif %}>👤 개인</option>
+                                    <option value="fas fa-newspaper" {% if category.icon == 'fas fa-newspaper' %}selected{% endif %}>📰 뉴스</option>
+                                    <option value="fas fa-shopping-cart" {% if category.icon == 'fas fa-shopping-cart' %}selected{% endif %}>🛒 쇼핑</option>
+                                    <option value="fas fa-graduation-cap" {% if category.icon == 'fas fa-graduation-cap' %}selected{% endif %}>🎓 교육</option>
+                                    <option value="fas fa-heart" {% if category.icon == 'fas fa-heart' %}selected{% endif %}>❤️ 건강</option>
+                                    <option value="fas fa-home" {% if category.icon == 'fas fa-home' %}selected{% endif %}>🏠 가정</option>
+                                    <option value="fas fa-car" {% if category.icon == 'fas fa-car' %}selected{% endif %}>🚗 교통</option>
+                                    <option value="fas fa-utensils" {% if category.icon == 'fas fa-utensils' %}selected{% endif %}>🍽️ 음식</option>
+                                    <option value="fas fa-plane" {% if category.icon == 'fas fa-plane' %}selected{% endif %}>✈️ 여행</option>
+                                    <option value="fas fa-gamepad" {% if category.icon == 'fas fa-gamepad' %}selected{% endif %}>🎮 게임</option>
+                                    <option value="fas fa-music" {% if category.icon == 'fas fa-music' %}selected{% endif %}>🎵 음악</option>
+                                    <option value="fas fa-film" {% if category.icon == 'fas fa-film' %}selected{% endif %}>🎬 영화</option>
+                                    <option value="fas fa-book" {% if category.icon == 'fas fa-book' %}selected{% endif %}>📚 도서</option>
+                                    <option value="fas fa-dumbbell" {% if category.icon == 'fas fa-dumbbell' %}selected{% endif %}>🏋️ 운동</option>
+                                    <option value="fas fa-coffee" {% if category.icon == 'fas fa-coffee' %}selected{% endif %}>☕ 커피</option>
+                                    <option value="fas fa-gift" {% if category.icon == 'fas fa-gift' %}selected{% endif %}>🎁 선물</option>
+                                    <option value="fas fa-calendar" {% if category.icon == 'fas fa-calendar' %}selected{% endif %}>📅 일정</option>
+                                </select>
+                                <div class="form-text">카테고리를 나타낼 아이콘을 선택하세요.</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('category.list_categories') }}" class="btn btn-secondary">
+                            <i class="fas fa-arrow-left"></i> 돌아가기
+                        </a>
+                        <div>
+                            <button type="submit" class="btn btn-warning">
+                                <i class="fas fa-save"></i> 수정 완료
+                            </button>
+                            <button type="button" class="btn btn-danger ms-2" onclick="confirmDelete()">
+                                <i class="fas fa-trash"></i> 삭제
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- 카테고리 정보 카드 -->
+        <div class="card cleanbox-card mt-4">
+            <div class="card-header bg-info text-white">
+                <h6 class="mb-0"><i class="fas fa-info-circle"></i> 카테고리 정보</h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><strong>생성일:</strong> {{ category.created_at.strftime('%Y년 %m월 %d일') }}</p>
+                        <p><strong>수정일:</strong> {{ category.updated_at.strftime('%Y년 %m월 %d일') }}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>이메일 수:</strong> <span class="badge bg-primary">{{ category.emails|length }}개</span></p>
+                        <p><strong>상태:</strong> <span class="badge bg-success">활성</span></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 삭제 확인 모달 -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title"><i class="fas fa-exclamation-triangle"></i> 카테고리 삭제</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p><strong>"{{ category.name }}"</strong> 카테고리를 삭제하시겠습니까?</p>
+                <p class="text-muted small">
+                    • 이 카테고리에 속한 이메일 {{ category.emails|length }}개가 '미분류'로 이동됩니다.<br>
+                    • 삭제된 카테고리는 복구할 수 없습니다.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">취소</button>
+                <form method="POST" action="{{ url_for('category.delete_category', category_id=category.id) }}" style="display: inline;">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-trash"></i> 삭제 확인
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// 색상 선택 시 미리보기
+document.getElementById('color').addEventListener('change', function() {
+    const color = this.value;
+    const iconSelect = document.getElementById('icon');
+    iconSelect.style.color = color;
+});
+
+// 아이콘 선택 시 미리보기
+document.getElementById('icon').addEventListener('change', function() {
+    const icon = this.value;
+    const color = document.getElementById('color').value;
+    this.style.color = color;
+});
+
+// 삭제 확인
+function confirmDelete() {
+    const modal = new bootstrap.Modal(document.getElementById('deleteModal'));
+    modal.show();
+}
+</script>
+{% endblock %} 

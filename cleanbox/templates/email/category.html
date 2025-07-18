@@ -1,0 +1,390 @@
+{% extends "base.html" %}
+
+{% block title %}CleanBox - {{ category.name }} 이메일{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h1>
+                    <i class="{{ category.icon }}" style="color: {{ category.color }};"></i> 
+                    {{ category.name }}
+                </h1>
+                {% if category.description %}
+                <p class="text-muted">{{ category.description }}</p>
+                {% endif %}
+            </div>
+            <div>
+                <a href="{{ url_for('category.list_categories') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> 카테고리 목록
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 대량 작업 도구바 -->
+<div class="row mb-3" id="bulkActionsToolbar" style="display: none;">
+    <div class="col-12">
+        <div class="card cleanbox-card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <span class="badge bg-primary" id="selectedCount">0</span> 개의 이메일이 선택되었습니다
+                    </div>
+                    <div class="btn-group">
+                        <button class="btn btn-outline-success" onclick="bulkMarkAsRead()">
+                            <i class="fas fa-check"></i> 읽음 표시
+                        </button>
+                        <button class="btn btn-outline-warning" onclick="bulkArchive()">
+                            <i class="fas fa-archive"></i> 아카이브
+                        </button>
+                        <button class="btn btn-outline-danger" onclick="bulkDelete()">
+                            <i class="fas fa-trash"></i> 삭제
+                        </button>
+                        <button class="btn btn-outline-info" onclick="bulkUnsubscribe()">
+                            <i class="fas fa-unlink"></i> 구독 해지
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 이메일 목록 -->
+<div class="row">
+    <div class="col-12">
+        <div class="card cleanbox-card">
+            <div class="card-header" style="background-color: {{ category.color }}; color: white;">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="{{ category.icon }}"></i> 
+                        {{ category.name }} 이메일 ({{ emails|length }}개)
+                    </h5>
+                    <div>
+                        <button class="btn btn-light btn-sm" onclick="selectAll()">
+                            <i class="fas fa-check-square"></i> 전체 선택
+                        </button>
+                        <button class="btn btn-light btn-sm" onclick="deselectAll()">
+                            <i class="fas fa-square"></i> 선택 해제
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body">
+                {% if emails %}
+                <div class="list-group">
+                    {% for email in emails %}
+                    <div class="list-group-item">
+                        <div class="d-flex align-items-start">
+                            <!-- 체크박스 -->
+                            <div class="me-3 mt-1">
+                                <input type="checkbox" class="form-check-input email-checkbox" 
+                                       value="{{ email.id }}" onchange="updateBulkActions()">
+                            </div>
+                            
+                            <!-- 이메일 내용 -->
+                            <div class="flex-grow-1">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div class="flex-grow-1">
+                                        <div class="d-flex align-items-center mb-2">
+                                            {% if not email.is_read %}
+                                            <span class="badge bg-warning me-2">새</span>
+                                            {% endif %}
+                                            <h6 class="mb-1">{{ email.subject }}</h6>
+                                        </div>
+                                        <p class="text-muted mb-1">
+                                            <i class="fas fa-user"></i> {{ email.sender }}
+                                        </p>
+                                        {% if email.summary %}
+                                        <p class="mb-1">{{ email.summary }}</p>
+                                        {% endif %}
+                                        <small class="text-muted">
+                                            <i class="fas fa-clock"></i> 
+                                            {{ email.received_at.strftime('%Y년 %m월 %d일 %H:%M') if email.received_at else email.created_at.strftime('%Y년 %m월 %d일 %H:%M') }}
+                                        </small>
+                                    </div>
+                                    <div class="btn-group btn-group-sm">
+                                        <a href="{{ url_for('email.view_email', email_id=email.id) }}" class="btn btn-outline-primary" title="상세 보기">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                        {% if not email.is_read %}
+                                        <a href="{{ url_for('email.mark_as_read', email_id=email.id) }}" class="btn btn-outline-success" title="읽음 표시">
+                                            <i class="fas fa-check"></i>
+                                        </a>
+                                        {% endif %}
+                                        {% if not email.is_archived %}
+                                        <a href="{{ url_for('email.archive_email', email_id=email.id) }}" class="btn btn-outline-warning" title="아카이브">
+                                            <i class="fas fa-archive"></i>
+                                        </a>
+                                        {% endif %}
+                                        <button class="btn btn-outline-info" onclick="analyzeEmail({{ email.id }})" title="AI 분석">
+                                            <i class="fas fa-robot"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                    <h4 class="text-muted">{{ category.name }} 카테고리에 이메일이 없습니다</h4>
+                    <p class="text-muted">Gmail 동기화를 통해 이메일을 가져와보세요!</p>
+                    <form method="POST" action="{{ url_for('email.sync_emails') }}">
+                        <button type="submit" class="btn btn-success">
+                            <i class="fas fa-sync-alt"></i> Gmail 동기화
+                        </button>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- AI 분석 모달 -->
+<div class="modal fade" id="analysisModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title"><i class="fas fa-robot"></i> AI 분석 결과</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="analysisContent">
+                <div class="text-center">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">분석 중...</span>
+                    </div>
+                    <p class="mt-2">AI가 이메일을 분석하고 있습니다...</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">닫기</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// 대량 작업 관련 함수들
+function updateBulkActions() {
+    const checkboxes = document.querySelectorAll('.email-checkbox:checked');
+    const toolbar = document.getElementById('bulkActionsToolbar');
+    const countElement = document.getElementById('selectedCount');
+    
+    if (checkboxes.length > 0) {
+        toolbar.style.display = 'block';
+        countElement.textContent = checkboxes.length;
+    } else {
+        toolbar.style.display = 'none';
+    }
+}
+
+function selectAll() {
+    const checkboxes = document.querySelectorAll('.email-checkbox');
+    checkboxes.forEach(checkbox => checkbox.checked = true);
+    updateBulkActions();
+}
+
+function deselectAll() {
+    const checkboxes = document.querySelectorAll('.email-checkbox');
+    checkboxes.forEach(checkbox => checkbox.checked = false);
+    updateBulkActions();
+}
+
+function getSelectedEmailIds() {
+    const checkboxes = document.querySelectorAll('.email-checkbox:checked');
+    return Array.from(checkboxes).map(cb => cb.value);
+}
+
+// 대량 작업 함수들
+function bulkMarkAsRead() {
+    const emailIds = getSelectedEmailIds();
+    if (emailIds.length === 0) return;
+    
+    if (confirm(`${emailIds.length}개의 이메일을 읽음으로 표시하시겠습니까?`)) {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '{{ url_for("email.bulk_actions") }}';
+        
+        const actionInput = document.createElement('input');
+        actionInput.type = 'hidden';
+        actionInput.name = 'action';
+        actionInput.value = 'mark_read';
+        form.appendChild(actionInput);
+        
+        emailIds.forEach(id => {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'email_ids';
+            input.value = id;
+            form.appendChild(input);
+        });
+        
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+
+function bulkArchive() {
+    const emailIds = getSelectedEmailIds();
+    if (emailIds.length === 0) return;
+    
+    if (confirm(`${emailIds.length}개의 이메일을 아카이브하시겠습니까?`)) {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '{{ url_for("email.bulk_actions") }}';
+        
+        const actionInput = document.createElement('input');
+        actionInput.type = 'hidden';
+        actionInput.name = 'action';
+        actionInput.value = 'archive';
+        form.appendChild(actionInput);
+        
+        emailIds.forEach(id => {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'email_ids';
+            input.value = id;
+            form.appendChild(input);
+        });
+        
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+
+function bulkDelete() {
+    const emailIds = getSelectedEmailIds();
+    if (emailIds.length === 0) return;
+    
+    if (confirm(`${emailIds.length}개의 이메일을 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다.`)) {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '{{ url_for("email.bulk_actions") }}';
+        
+        const actionInput = document.createElement('input');
+        actionInput.type = 'hidden';
+        actionInput.name = 'action';
+        actionInput.value = 'delete';
+        form.appendChild(actionInput);
+        
+        emailIds.forEach(id => {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'email_ids';
+            input.value = id;
+            form.appendChild(input);
+        });
+        
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+
+function bulkUnsubscribe() {
+    const emailIds = getSelectedEmailIds();
+    if (emailIds.length === 0) return;
+    
+    if (confirm(`${emailIds.length}개의 이메일에서 구독 해지를 시도하시겠습니까?`)) {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '{{ url_for("email.bulk_actions") }}';
+        
+        const actionInput = document.createElement('input');
+        actionInput.type = 'hidden';
+        actionInput.name = 'action';
+        actionInput.value = 'unsubscribe';
+        form.appendChild(actionInput);
+        
+        emailIds.forEach(id => {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'email_ids';
+            input.value = id;
+            form.appendChild(input);
+        });
+        
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+
+// AI 분석 함수
+function analyzeEmail(emailId) {
+    const modal = new bootstrap.Modal(document.getElementById('analysisModal'));
+    modal.show();
+    
+    fetch(`/email/${emailId}/analyze`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                displayAnalysis(data.analysis);
+            } else {
+                document.getElementById('analysisContent').innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-triangle"></i> ${data.message}
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            document.getElementById('analysisContent').innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle"></i> 분석 중 오류가 발생했습니다: ${error}
+                </div>
+            `;
+        });
+}
+
+// 분석 결과 표시
+function displayAnalysis(analysis) {
+    const content = document.getElementById('analysisContent');
+    
+    let sentimentClass = 'secondary';
+    if (analysis.sentiment.sentiment === 'positive') sentimentClass = 'success';
+    else if (analysis.sentiment.sentiment === 'negative') sentimentClass = 'danger';
+    
+    let spamClass = analysis.spam_check.is_spam ? 'danger' : 'success';
+    
+    content.innerHTML = `
+        <div class="row">
+            <div class="col-md-6">
+                <h6><i class="fas fa-heart"></i> 감정 분석</h6>
+                <div class="mb-3">
+                    <span class="badge bg-${sentimentClass}">${analysis.sentiment.sentiment}</span>
+                    <small class="text-muted">신뢰도: ${analysis.sentiment.confidence}%</small>
+                </div>
+                <p class="small text-muted">${analysis.sentiment.reason || '분석 이유 없음'}</p>
+            </div>
+            <div class="col-md-6">
+                <h6><i class="fas fa-shield-alt"></i> 스팸 판별</h6>
+                <div class="mb-3">
+                    <span class="badge bg-${spamClass}">${analysis.spam_check.is_spam ? '스팸' : '정상'}</span>
+                    <small class="text-muted">신뢰도: ${analysis.spam_check.confidence}%</small>
+                </div>
+                <p class="small text-muted">${analysis.spam_check.reason || '판별 이유 없음'}</p>
+            </div>
+        </div>
+        <hr>
+        <div class="row">
+            <div class="col-md-6">
+                <h6><i class="fas fa-tags"></i> 키워드</h6>
+                <div class="mb-3">
+                    ${analysis.keywords.map(keyword => `<span class="badge bg-light text-dark me-1">${keyword}</span>`).join('')}
+                </div>
+            </div>
+            <div class="col-md-6">
+                <h6><i class="fas fa-file-alt"></i> AI 요약</h6>
+                <p class="small">${analysis.summary}</p>
+            </div>
+        </div>
+    `;
+}
+</script>
+{% endblock %} 
