@@ -217,6 +217,27 @@ def _handle_add_account_callback(credentials, id_info):
 
         db.session.commit()
 
+        # Gmail 웹훅 자동 설정 (선택사항)
+        try:
+            from ..email.gmail_service import GmailService
+
+            gmail_service = GmailService(current_user.id, account.id)
+
+            # 환경변수에서 토픽 이름 가져오기
+            topic_name = os.environ.get(
+                "GOOGLE_CLOUD_TOPIC_NAME", "gmail-notifications"
+            )
+            if topic_name:
+                # 프로젝트 ID와 함께 전체 토픽 이름 생성
+                project_id = os.environ.get("GOOGLE_CLOUD_PROJECT_ID")
+                if project_id:
+                    full_topic_name = f"projects/{project_id}/topics/{topic_name}"
+                    gmail_service.setup_gmail_watch(full_topic_name)
+                    print(f"✅ Gmail 웹훅 자동 설정 완료: {account.account_email}")
+        except Exception as e:
+            print(f"⚠️ Gmail 웹훅 자동 설정 실패: {e}")
+            # 웹훅 설정 실패는 치명적이지 않으므로 계속 진행
+
         # 세션 정리
         session.pop("state", None)
         session.pop("adding_account", None)

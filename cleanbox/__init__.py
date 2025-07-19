@@ -55,11 +55,13 @@ def create_app(config_class=Config):
     from .main.routes import main_bp
     from .category.routes import category_bp
     from .email.routes import email_bp
+    from .email.webhook_routes import webhook_bp
 
     app.register_blueprint(auth_bp, url_prefix="/auth")
     app.register_blueprint(main_bp, url_prefix="/main")
     app.register_blueprint(category_bp, url_prefix="/category")
     app.register_blueprint(email_bp, url_prefix="/email")
+    app.register_blueprint(webhook_bp, url_prefix="/webhook")
 
     # 메인 라우트 (루트 URL)
     @app.route("/")

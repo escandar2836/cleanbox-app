@@ -357,3 +357,33 @@ class GmailService:
                 "message": f"구독해지 처리 실패: {str(e)}",
                 "steps": [f"오류 발생: {str(e)}"],
             }
+
+    def setup_gmail_watch(self, topic_name: str) -> bool:
+        """Gmail 웹훅 설정"""
+        try:
+            # Gmail Watch 요청
+            request = {
+                "labelIds": ["INBOX"],
+                "topicName": topic_name,
+                "labelFilterAction": "include",
+            }
+
+            response = self.service.users().watch(userId="me", body=request).execute()
+
+            print(f"✅ Gmail 웹훅 설정 완료: {self.account_id}")
+            return True
+
+        except Exception as e:
+            print(f"❌ Gmail 웹훅 설정 실패: {self.account_id} - {e}")
+            return False
+
+    def stop_gmail_watch(self) -> bool:
+        """Gmail 웹훅 중지"""
+        try:
+            self.service.users().stop(userId="me").execute()
+            print(f"✅ Gmail 웹훅 중지 완료: {self.account_id}")
+            return True
+
+        except Exception as e:
+            print(f"❌ Gmail 웹훅 중지 실패: {self.account_id} - {e}")
+            return False
