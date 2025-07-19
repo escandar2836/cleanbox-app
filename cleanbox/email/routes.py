@@ -653,7 +653,7 @@ def setup_webhook():
                 # 웹훅 설정 (topic_name은 환경변수에서 가져오거나 기본값 사용)
                 topic_name = os.environ.get(
                     "GMAIL_WEBHOOK_TOPIC",
-                    "projects/cleanbox-app/topics/gmail-notifications",
+                    "projects/cleanbox-466314/topics/gmail-notifications",
                 )
 
                 if gmail_service.setup_gmail_watch(topic_name):
@@ -766,7 +766,7 @@ def auto_renew_webhook():
         failed_accounts = []
         topic_name = os.environ.get(
             "GMAIL_WEBHOOK_TOPIC",
-            "projects/cleanbox-app/topics/gmail-notifications",
+            "projects/cleanbox-466314/topics/gmail-notifications",
         )
 
         for account in accounts:
@@ -905,4 +905,76 @@ def debug_info():
     except Exception as e:
         return jsonify(
             {"success": False, "message": f"디버깅 정보 조회 실패: {str(e)}"}
+        )
+
+
+@email_bp.route("/debug-webhook-setup")
+@login_required
+def debug_webhook_setup():
+    """웹훅 설정 디버깅 정보"""
+    try:
+        # 모든 활성 계정 가져오기
+        accounts = UserAccount.query.filter_by(
+            user_id=current_user.id, is_active=True
+        ).all()
+
+        if not accounts:
+            return jsonify({"success": False, "message": "연결된 계정이 없습니다."})
+
+        debug_info = {
+            "environment": {
+                "project_id": os.environ.get("GOOGLE_CLOUD_PROJECT_ID"),
+                "topic_name": os.environ.get("GMAIL_WEBHOOK_TOPIC"),
+                "webhook_url": "https://cleanbox-app.onrender.com/webhook/gmail",
+            },
+            "accounts": [],
+        }
+
+        for account in accounts:
+            try:
+                gmail_service = GmailService(current_user.id, account.id)
+
+                # 웹훅 상태 확인
+                webhook_status = gmail_service.get_webhook_status()
+
+                # Gmail API 연결 테스트
+                try:
+                    # 간단한 Gmail API 호출 테스트
+                    profile = (
+                        gmail_service.service.users().getProfile(userId="me").execute()
+                    )
+                    gmail_connection = {
+                        "success": True,
+                        "email": profile.get("emailAddress"),
+                        "messagesTotal": profile.get("messagesTotal"),
+                        "threadsTotal": profile.get("threadsTotal"),
+                    }
+                except Exception as e:
+                    gmail_connection = {"success": False, "error": str(e)}
+
+                account_info = {
+                    "account_email": account.account_email,
+                    "account_name": account.account_name,
+                    "is_primary": account.is_primary,
+                    "webhook_status": webhook_status,
+                    "gmail_connection": gmail_connection,
+                }
+
+                debug_info["accounts"].append(account_info)
+
+            except Exception as e:
+                debug_info["accounts"].append(
+                    {
+                        "account_email": account.account_email,
+                        "account_name": account.account_name,
+                        "is_primary": account.is_primary,
+                        "error": str(e),
+                    }
+                )
+
+        return jsonify({"success": True, "debug_info": debug_info})
+
+    except Exception as e:
+        return jsonify(
+            {"success": False, "message": f"디버깅 정보 수집 실패: {str(e)}"}
         )

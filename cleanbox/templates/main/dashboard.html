@@ -211,7 +211,7 @@ function processNewEmails() {
     });
 }
 
-// 웹훅 재설정 함수
+// 웹훅 상태 확인 및 자동 재설정 함수
 function checkAndRenewWebhook() {
     const button = event.target;
     const originalText = button.innerHTML;
@@ -219,29 +219,46 @@ function checkAndRenewWebhook() {
     button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 확인 중...';
     button.disabled = true;
     
-    fetch('/email/check-webhook-status')
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            alert(data.message);
-            if (data.needs_renewal) {
-                if (confirm('웹훅이 만료되었습니다. 새로 설정하시겠습니까?')) {
-                    setupWebhook(); // 웹훅 재설정 함수 호출
+    // 먼저 웹훅 상태 확인
+    fetch('/email/webhook-status')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                let message = `웹훅 상태: ${data.healthy_accounts}/${data.total_accounts}개 계정 정상`;
+                
+                // 비정상 상태가 있으면 자동 재설정 제안
+                if (data.healthy_accounts < data.total_accounts) {
+                    if (confirm(`${message}\n\n비정상 상태의 웹훅을 자동으로 재설정하시겠습니까?`)) {
+                        return fetch('/email/auto-renew-webhook', {
+                            method: 'POST'
+                        });
+                    }
+                } else {
+                    showAlert('success', message);
                 }
             } else {
-                alert('웹훅이 정상적으로 설정되어 있습니다.');
+                showAlert('error', data.message);
             }
-        } else {
-            alert('웹훅 상태 확인 실패: ' + data.message);
-        }
-    })
-    .catch(error => {
-        alert('웹훅 상태 확인 중 오류가 발생했습니다: ' + error);
-    })
-    .finally(() => {
-        button.innerHTML = originalText;
-        button.disabled = false;
-    });
+        })
+        .then(response => {
+            if (response) {
+                return response.json();
+            }
+        })
+        .then(data => {
+            if (data && data.success) {
+                showAlert('success', data.message);
+            } else if (data) {
+                showAlert('error', data.message);
+            }
+        })
+        .catch(error => {
+            showAlert('error', '웹훅 상태 확인 중 오류가 발생했습니다.');
+        })
+        .finally(() => {
+            button.innerHTML = originalText;
+            button.disabled = false;
+        });
 }
 
 // 웹훅 재설정 함수

@@ -89,6 +89,16 @@ class GmailService:
     def fetch_recent_emails(self, max_results: int = 20, offset: int = 0) -> List[Dict]:
         """최근 이메일 가져오기 (페이지네이션 지원)"""
         try:
+            # 최근 24시간 내의 이메일을 가져오기 위한 쿼리
+            from datetime import datetime, timedelta
+
+            yesterday = datetime.utcnow() - timedelta(hours=24)
+            after_date = yesterday.strftime("%Y/%m/%d")
+
+            print(
+                f"🔍 Gmail API 호출 - 계정: {self.account_id}, 쿼리: after:{after_date} is:inbox"
+            )
+
             # Gmail API로 이메일 목록 가져오기
             results = (
                 self.service.users()
@@ -96,12 +106,15 @@ class GmailService:
                 .list(
                     userId="me",
                     maxResults=max_results,
-                    q="is:unread OR is:inbox",  # 읽지 않은 이메일 또는 받은 편지함
+                    q=f"after:{after_date} is:inbox",  # 최근 24시간 내 받은 편지함 이메일
                 )
                 .execute()
             )
 
             messages = results.get("messages", [])
+            print(
+                f"📧 Gmail API 응답 - 계정: {self.account_id}, 메시지 수: {len(messages)}"
+            )
 
             # 오프셋 적용 (Gmail API는 페이지네이션을 자체적으로 처리)
             if offset > 0 and "nextPageToken" in results:
@@ -116,24 +129,39 @@ class GmailService:
                             userId="me",
                             maxResults=max_results,
                             pageToken=results["nextPageToken"],
-                            q="is:unread OR is:inbox",
+                            q=f"after:{after_date} is:inbox",
                         )
                         .execute()
                     )
                     messages = results.get("messages", [])
 
             emails = []
-            for message in messages:
+            for i, message in enumerate(messages):
+                print(
+                    f"📨 이메일 처리 중 ({i+1}/{len(messages)}) - ID: {message['id']}"
+                )
                 email_data = self._get_email_details(message["id"])
                 if email_data:
                     # 이메일을 데이터베이스에 저장
                     email_obj = self.save_email_to_db(email_data)
                     emails.append(email_data)
+                    print(
+                        f"✅ 이메일 저장 완료 - 제목: {email_data.get('subject', '제목 없음')}"
+                    )
+                else:
+                    print(f"❌ 이메일 상세 정보 가져오기 실패 - ID: {message['id']}")
 
+            print(
+                f"🎉 이메일 처리 완료 - 계정: {self.account_id}, 총 {len(emails)}개 처리됨"
+            )
             return emails
 
         except HttpError as error:
+            print(f"❌ Gmail API 오류 - 계정: {self.account_id}, 오류: {error}")
             raise Exception(f"Gmail API 오류: {error}")
+        except Exception as e:
+            print(f"❌ 예상치 못한 오류 - 계정: {self.account_id}, 오류: {e}")
+            raise Exception(f"이메일 가져오기 실패: {str(e)}")
 
     def _get_email_details(self, message_id: str) -> Optional[Dict]:
         """이메일 상세 정보 가져오기"""
@@ -401,6 +429,8 @@ class GmailService:
     def setup_gmail_watch(self, topic_name: str) -> bool:
         """Gmail 웹훅 설정"""
         try:
+            print(f"🔧 웹훅 설정 시작 - 계정: {self.account_id}, 토픽: {topic_name}")
+
             # Gmail Watch 요청
             request = {
                 "labelIds": ["INBOX"],
@@ -408,7 +438,15 @@ class GmailService:
                 "labelFilterAction": "include",
             }
 
+            print(f"📤 Gmail API 요청 - 계정: {self.account_id}")
+            print(f"   토픽: {topic_name}")
+            print(f"   라벨: {request['labelIds']}")
+
             response = self.service.users().watch(userId="me", body=request).execute()
+
+            print(f"✅ Gmail API 응답 성공 - 계정: {self.account_id}")
+            print(f"   historyId: {response.get('historyId')}")
+            print(f"   expiration: {response.get('expiration')}")
 
             # DB에 웹훅 상태 저장
             from ..models import WebhookStatus
@@ -436,7 +474,15 @@ class GmailService:
             return True
 
         except Exception as e:
-            print(f"❌ Gmail 웹훅 설정 실패: {self.account_id} - {e}")
+            print(f"❌ Gmail 웹훅 설정 실패: {self.account_id}")
+            print(f"   오류 타입: {type(e).__name__}")
+            print(f"   오류 메시지: {str(e)}")
+
+            # HttpError인 경우 더 자세한 정보 출력
+            if hasattr(e, "resp") and hasattr(e, "content"):
+                print(f"   HTTP 상태 코드: {e.resp.status}")
+                print(f"   응답 내용: {e.content}")
+
             return False
 
     def stop_gmail_watch(self) -> bool:
