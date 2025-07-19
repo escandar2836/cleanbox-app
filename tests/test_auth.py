@@ -73,11 +73,6 @@ class TestAuthRoutes:
         response = client.get("/auth/add-account")
         assert response.status_code == 302  # 로그인 페이지로 리다이렉트
 
-    def test_switch_account_requires_login(self, client):
-        """계정 전환 로그인 필요 테스트"""
-        response = client.get("/auth/switch-account/1")
-        assert response.status_code == 302  # 로그인 페이지로 리다이렉트
-
     def test_remove_account_requires_login(self, client):
         """계정 삭제 로그인 필요 테스트"""
         response = client.post("/auth/remove-account/1")

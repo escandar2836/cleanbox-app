@@ -1,7 +1,7 @@
 import os
 import logging
 from logging.handlers import RotatingFileHandler
-from flask import Flask, render_template
+from flask import Flask, render_template, redirect, url_for
 from flask_login import LoginManager
 from flask_sqlalchemy import SQLAlchemy
 from .config import Config
@@ -67,6 +67,11 @@ def create_app(config_class=Config):
     @app.route("/")
     def index():
         return render_template("landing.html")
+
+    # home 엔드포인트 추가
+    @app.route("/home")
+    def home():
+        return redirect(url_for("main.dashboard"))
 
     # 데이터베이스 초기화 (테스트 환경이 아닌 경우에만)
     if not app.config.get("TESTING", False):

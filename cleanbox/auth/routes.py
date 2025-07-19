@@ -176,7 +176,7 @@ def _handle_login_callback(credentials, id_info):
 
         login_user(user)
         flash("CleanBox에 성공적으로 로그인했습니다!", "success")
-        return redirect(url_for("category.list_categories"))
+        return redirect(url_for("main.dashboard"))
 
     except Exception as e:
         print(f"로그인 콜백 처리 에러: {str(e)}")

@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for
 from flask_login import login_required, current_user
-from ..models import Email, Category, db
+from ..models import Email, Category, UserAccount, db
 from .gmail_service import GmailService
 from .ai_classifier import AIClassifier
 from datetime import datetime
