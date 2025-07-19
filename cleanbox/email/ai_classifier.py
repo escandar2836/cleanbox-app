@@ -66,7 +66,8 @@ class AIClassifier:
 
     def _call_openai_api(self, prompt: str) -> Optional[str]:
         try:
-            completion = openai.ChatCompletion.create(
+            client = openai.OpenAI(api_key=self.api_key)
+            completion = client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {
