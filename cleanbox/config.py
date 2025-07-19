@@ -30,8 +30,20 @@ def get_encryption_key():
 
 class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY") or "dev-secret-key"
-    SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL") or "sqlite:///cleanbox.db"
+    SQLALCHEMY_DATABASE_URI = (
+        os.environ.get("DATABASE_URI")
+        or os.environ.get("DATABASE_URL")
+        or "sqlite:///cleanbox.db"
+    )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+
+    # PostgreSQL 연결 설정 (psycopg3 호환성)
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "pool_pre_ping": True,
+        "pool_recycle": 300,
+        "pool_size": 10,
+        "max_overflow": 20,
+    }
 
     # Google OAuth 설정
     GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
@@ -93,9 +105,8 @@ class TestConfig(Config):
     # SQLite용 설정 (PostgreSQL 옵션 제거)
     SQLALCHEMY_ENGINE_OPTIONS = {
         "pool_pre_ping": True,
-        "connect_args": {
-            "timeout": 10,
-        },
+        "pool_size": 5,
+        "max_overflow": 10,
     }
     WTF_CSRF_ENABLED = False
     # 테스트 환경에서는 데이터베이스 초기화를 수동으로 제어

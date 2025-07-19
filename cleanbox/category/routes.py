@@ -53,31 +53,14 @@ def list_categories():
 @login_required
 def add_category():
     """새 카테고리 추가"""
-    print(
-        f"🔍 카테고리 추가 페이지 접근 - 사용자: {current_user.id if current_user.is_authenticated else 'Not authenticated'}"
-    )
-
-    # DB 설정 확인
-    import os
-
-    print(f"🔍 DATABASE_URL: {os.environ.get('DATABASE_URL', 'Not set')}")
-    print(f"🔍 SQLALCHEMY_DATABASE_URI: {db.engine.url}")
-
     if request.method == "POST":
         try:
-            print(f"🔍 카테고리 생성 시작 - 사용자: {current_user.id}")
-
             name = request.form.get("name")
             description = request.form.get("description")
             color = request.form.get("color", "#007bff")
             icon = request.form.get("icon", "fas fa-tag")
 
-            print(
-                f"📝 폼 데이터: name={name}, description={description}, color={color}, icon={icon}"
-            )
-
             if not name:
-                print("❌ 카테고리 이름이 없음")
                 flash("카테고리 이름을 입력해주세요.", "error")
                 return render_template("category/add.html", user=current_user)
 
@@ -86,7 +69,6 @@ def add_category():
                 user_id=current_user.id, name=name
             ).first()
             if existing:
-                print(f"❌ 중복 카테고리 이름: {name}")
                 flash("이미 존재하는 카테고리 이름입니다.", "error")
                 return render_template("category/add.html", user=current_user)
 
@@ -100,47 +82,13 @@ def add_category():
                 is_active=True,
             )
 
-            print(f"✅ 카테고리 객체 생성 완료: {category}")
-
             db.session.add(category)
-            print("✅ DB session에 추가됨")
-
             db.session.commit()
-            print(f"✅ DB 커밋 완료 - 카테고리 ID: {category.id}")
-
-            # 실제 DB에서 데이터 확인
-            from sqlalchemy import text
-
-            try:
-                # DB URL 확인
-                db_url = db.engine.url
-                print(f"🔍 현재 DB URL: {db_url}")
-
-                # 실제 DB에서 카테고리 조회
-                result = db.session.execute(
-                    text("SELECT * FROM categories WHERE id = :id"), {"id": category.id}
-                )
-                db_category = result.fetchone()
-                print(f"🔍 DB에서 조회한 카테고리: {db_category}")
-
-                # 모든 카테고리 조회
-                all_categories = db.session.execute(text("SELECT * FROM categories"))
-                all_cats = all_categories.fetchall()
-                print(f"🔍 DB의 모든 카테고리 수: {len(all_cats)}")
-
-            except Exception as e:
-                print(f"❌ DB 확인 중 오류: {str(e)}")
 
             flash("카테고리가 성공적으로 추가되었습니다.", "success")
             return redirect(url_for("category.list_categories"))
 
         except Exception as e:
-            print(f"❌ 카테고리 생성 실패: {str(e)}")
-            print(f"❌ 오류 타입: {type(e).__name__}")
-            import traceback
-
-            print(f"❌ 상세 오류: {traceback.format_exc()}")
-
             db.session.rollback()
             flash(f"카테고리 추가 중 오류가 발생했습니다: {str(e)}", "error")
             return render_template("category/add.html", user=current_user)
