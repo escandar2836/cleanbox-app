@@ -1,6 +1,7 @@
 import os
 from cryptography.fernet import Fernet
 from dotenv import load_dotenv
+from datetime import timedelta
 
 # .env 파일 로드
 load_dotenv()
@@ -25,34 +26,24 @@ def get_encryption_key():
 
 
 class Config:
-    SECRET_KEY = os.environ.get("CLEANBOX_SECRET_KEY", "dev")
-    SQLALCHEMY_DATABASE_URI = os.environ.get(
-        "CLEANBOX_DATABASE_URI",
-        "postgresql://cleanbox_user:cleanbox_password@localhost:5432/cleanbox",
-    )
-    SQLALCHEMY_ENGINE_OPTIONS = {
-        "pool_pre_ping": True,
-        "pool_recycle": 300,
-        "pool_timeout": 20,
-        "max_overflow": 10,
-        "pool_size": 5,
-        "connect_args": {
-            "sslmode": "require",
-            "connect_timeout": 10,
-            "application_name": "cleanbox_app",
-            "keepalives_idle": 600,
-            "keepalives_interval": 30,
-            "keepalives_count": 5,
-        },
-    }
+    SECRET_KEY = os.environ.get("SECRET_KEY") or "dev-secret-key"
+    SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL") or "sqlite:///cleanbox.db"
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # Google OAuth 설정
     GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
     GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
-    GOOGLE_REDIRECT_URI = os.environ.get(
-        "GOOGLE_REDIRECT_URI", "http://localhost:5000/auth/callback"
-    )
+
+    # Google Cloud 설정
+    GOOGLE_CLOUD_PROJECT_ID = os.environ.get("GOOGLE_CLOUD_PROJECT_ID")
+    GMAIL_WEBHOOK_TOPIC = os.environ.get("GMAIL_WEBHOOK_TOPIC")
+
+    # OpenAI 설정
+    OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+
+    # APScheduler 설정
+    SCHEDULER_API_ENABLED = True
+    SCHEDULER_TIMEZONE = "UTC"
 
     # Gmail API 범위
     GMAIL_SCOPES = [
@@ -72,7 +63,6 @@ class Config:
 
     # AI 기능 설정
     ENABLE_AI_FEATURES = os.environ.get("CLEANBOX_ENABLE_AI", "true").lower() == "true"
-    OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
     OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4.1-nano")
 
     # 스케줄러 설정 제거 - PROJECT_DESCRIPTION 기준으로 불필요한 기능

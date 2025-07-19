@@ -191,6 +191,15 @@ def _handle_login_callback(credentials, id_info):
         session.pop("adding_account", None)
 
         login_user(user)
+
+        # 로그인 후 웹훅 상태 확인 및 자동 복구
+        try:
+            from ..email.routes import check_and_repair_webhooks_for_user
+
+            check_and_repair_webhooks_for_user(user.id)
+        except Exception as e:
+            print(f"⚠️ 로그인 후 웹훅 복구 실패: {user.email}, 오류: {str(e)}")
+
         flash("CleanBox에 성공적으로 로그인했습니다!", "success")
         return redirect(url_for("main.dashboard"))
 

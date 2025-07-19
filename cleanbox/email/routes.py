@@ -638,8 +638,128 @@ def unsubscribe_email(email_id):
         return redirect(url_for("email.list_emails"))
 
 
+def process_missed_emails_for_account(
+    user_id: str, account_id: int, from_date: datetime
+) -> dict:
+    """특정 계정의 누락된 이메일 처리"""
+    try:
+        from .gmail_service import GmailService
+        from .ai_classifier import AIClassifier
+        from datetime import datetime
+
+        print(f"📧 누락된 이메일 처리 시작 - 계정: {account_id}, 시작일: {from_date}")
+
+        # Gmail 서비스 및 AI 분류기 초기화
+        gmail_service = GmailService(user_id, account_id)
+        ai_classifier = AIClassifier()
+
+        # 누락된 기간의 이메일 가져오기
+        missed_emails = gmail_service.fetch_recent_emails(
+            max_results=100, after_date=from_date  # 최대 100개 이메일 처리
+        )
+
+        if not missed_emails:
+            print(f"📭 누락된 이메일 없음 - 계정: {account_id}")
+            return {
+                "success": True,
+                "processed_count": 0,
+                "classified_count": 0,
+                "message": "누락된 이메일이 없습니다.",
+            }
+
+        print(f"📥 누락된 이메일 {len(missed_emails)}개 발견 - 계정: {account_id}")
+
+        # 사용자 카테고리 가져오기
+        categories = gmail_service.get_user_categories()
+
+        processed_count = 0
+        classified_count = 0
+
+        for email_data in missed_emails:
+            try:
+                # 이메일이 이미 DB에 있는지 확인
+                existing_email = Email.query.filter_by(
+                    user_id=user_id,
+                    account_id=account_id,
+                    gmail_id=email_data.get("gmail_id"),
+                ).first()
+
+                if existing_email:
+                    print(
+                        f"⏭️ 이미 처리된 이메일 건너뛰기: {email_data.get('subject', 'No subject')}"
+                    )
+                    continue
+
+                # 이메일 분류
+                classification_result = ai_classifier.classify_email(
+                    email_data.get("subject", ""),
+                    email_data.get("snippet", ""),
+                    email_data.get("sender", ""),
+                    categories,
+                )
+
+                # 이메일 DB에 저장
+                email = Email(
+                    user_id=user_id,
+                    account_id=account_id,
+                    gmail_id=email_data.get("gmail_id"),
+                    subject=email_data.get("subject", ""),
+                    sender=email_data.get("sender", ""),
+                    recipient=email_data.get("recipient", ""),
+                    date=email_data.get("date"),
+                    snippet=email_data.get("snippet", ""),
+                    body=email_data.get("body", ""),
+                    category_id=classification_result.get("category_id"),
+                    category_name=classification_result.get("category_name"),
+                    confidence_score=classification_result.get("confidence_score", 0.0),
+                    is_read=False,
+                    is_archived=False,
+                    created_at=datetime.utcnow(),
+                )
+
+                db.session.add(email)
+                processed_count += 1
+
+                if classification_result.get("category_id"):
+                    classified_count += 1
+
+                print(
+                    f"✅ 누락된 이메일 처리 완료: {email_data.get('subject', 'No subject')} -> {classification_result.get('category_name', '미분류')}"
+                )
+
+            except Exception as e:
+                print(
+                    f"❌ 누락된 이메일 처리 실패: {email_data.get('subject', 'No subject')}, 오류: {str(e)}"
+                )
+                continue
+
+        db.session.commit()
+
+        result = {
+            "success": True,
+            "processed_count": processed_count,
+            "classified_count": classified_count,
+            "total_missed": len(missed_emails),
+            "message": f"누락된 이메일 {processed_count}개 처리 완료 (분류: {classified_count}개)",
+        }
+
+        print(
+            f"🎉 누락된 이메일 처리 완료 - 계정: {account_id}, 처리: {processed_count}개, 분류: {classified_count}개"
+        )
+
+        return result
+
+    except Exception as e:
+        print(f"❌ 누락된 이메일 처리 중 오류 - 계정: {account_id}, 오류: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "message": f"누락된 이메일 처리 실패: {str(e)}",
+        }
+
+
 def setup_webhook_for_account(user_id: str, account_id: int) -> bool:
-    """계정별 웹훅 자동 설정"""
+    """계정별 웹훅 자동 설정 (누락된 이메일 처리 포함)"""
     try:
         from .models import User, UserAccount
         from .gmail_service import GmailService
@@ -655,6 +775,17 @@ def setup_webhook_for_account(user_id: str, account_id: int) -> bool:
                 f"❌ 사용자 또는 계정을 찾을 수 없음: user_id={user_id}, account_id={account_id}"
             )
             return False
+
+        # 기존 웹훅 상태 확인 (누락된 이메일 처리용)
+        existing_webhook = WebhookStatus.query.filter_by(
+            user_id=user_id, account_id=account_id, is_active=True
+        ).first()
+
+        missed_period_start = None
+        if existing_webhook and existing_webhook.is_expired:
+            # 만료된 웹훅의 만료 시간을 누락 기간 시작점으로 사용
+            missed_period_start = existing_webhook.expires_at
+            print(f"📅 누락된 이메일 기간 확인: {missed_period_start} ~ 현재")
 
         # 환경 변수 확인
         project_id = os.environ.get("GOOGLE_CLOUD_PROJECT_ID")
@@ -695,6 +826,19 @@ def setup_webhook_for_account(user_id: str, account_id: int) -> bool:
 
             db.session.commit()
             print(f"✅ 웹훅 설정 완료: {account.account_email}")
+
+            # 누락된 이메일 처리
+            if missed_period_start:
+                print(f"📧 누락된 이메일 처리 시작: {account.account_email}")
+                missed_result = process_missed_emails_for_account(
+                    user_id, account_id, missed_period_start
+                )
+
+                if missed_result["success"]:
+                    print(f"✅ 누락된 이메일 처리 완료: {missed_result['message']}")
+                else:
+                    print(f"⚠️ 누락된 이메일 처리 실패: {missed_result['message']}")
+
             return True
         else:
             print(f"❌ 웹훅 설정 실패: {account.account_email}")
@@ -771,8 +915,11 @@ def setup_webhook():
 @email_bp.route("/webhook-status")
 @login_required
 def webhook_status():
-    """웹훅 상태 확인"""
+    """웹훅 상태 확인 (자동 복구 포함)"""
     try:
+        # 먼저 사용자의 웹훅 상태 확인 및 자동 복구
+        repair_result = check_and_repair_webhooks_for_user(current_user.id)
+
         # 모든 활성 계정 가져오기
         accounts = UserAccount.query.filter_by(
             user_id=current_user.id, is_active=True
@@ -814,12 +961,24 @@ def webhook_status():
                     }
                 )
 
+        # 복구 결과 메시지 추가
+        repair_message = ""
+        if repair_result["success"]:
+            if repair_result["repaired_count"] > 0:
+                repair_message = (
+                    f"웹훅 자동 복구 완료: {repair_result['repaired_count']}개 계정"
+                )
+            elif repair_result["healthy_count"] > 0:
+                repair_message = f"모든 웹훅이 정상 상태입니다 ({repair_result['healthy_count']}개 계정)"
+
         return jsonify(
             {
                 "success": True,
                 "total_accounts": total_accounts,
                 "healthy_accounts": healthy_accounts,
                 "webhook_statuses": webhook_statuses,
+                "repair_result": repair_result,
+                "repair_message": repair_message,
             }
         )
 
@@ -921,6 +1080,100 @@ def auto_renew_webhook():
         )
 
 
+def check_and_repair_webhooks_for_user(user_id: str) -> dict:
+    """사용자의 웹훅 상태를 확인하고 만료된 웹훅을 자동 복구 (누락된 이메일 처리 포함)"""
+    try:
+        from datetime import datetime, timedelta
+
+        print(f"🔍 사용자 웹훅 상태 확인: {user_id}")
+
+        # 사용자의 모든 활성 계정 가져오기
+        accounts = UserAccount.query.filter_by(user_id=user_id, is_active=True).all()
+
+        if not accounts:
+            print(f"⚠️ 사용자 {user_id}의 활성 계정이 없음")
+            return {"success": False, "message": "활성 계정이 없습니다."}
+
+        repaired_count = 0
+        failed_count = 0
+        healthy_count = 0
+        missed_emails_processed = 0
+        missed_emails_classified = 0
+
+        for account in accounts:
+            try:
+                # 웹훅 상태 확인
+                webhook_status = WebhookStatus.query.filter_by(
+                    user_id=user_id, account_id=account.id, is_active=True
+                ).first()
+
+                # 웹훅이 없거나 만료된 경우 복구
+                if not webhook_status or webhook_status.is_expired:
+                    print(f"🔄 웹훅 복구 시도 - 계정: {account.account_email}")
+
+                    success = setup_webhook_for_account(user_id, account.id)
+
+                    if success:
+                        repaired_count += 1
+                        print(f"✅ 웹훅 복구 성공 - 계정: {account.account_email}")
+
+                        # 누락된 이메일 처리 결과 확인 (setup_webhook_for_account에서 이미 처리됨)
+                        # 여기서는 로그만 확인
+                        print(
+                            f"📧 누락된 이메일 처리 완료 - 계정: {account.account_email}"
+                        )
+                    else:
+                        failed_count += 1
+                        print(f"❌ 웹훅 복구 실패 - 계정: {account.account_email}")
+                else:
+                    # 만료 예정인지 확인 (48시간 이내)
+                    expiry_threshold = datetime.utcnow() + timedelta(hours=48)
+                    if webhook_status.expires_at <= expiry_threshold:
+                        print(f"🔄 웹훅 예방적 갱신 - 계정: {account.account_email}")
+
+                        success = setup_webhook_for_account(user_id, account.id)
+
+                        if success:
+                            repaired_count += 1
+                            print(
+                                f"✅ 웹훅 예방적 갱신 성공 - 계정: {account.account_email}"
+                            )
+                        else:
+                            failed_count += 1
+                            print(
+                                f"❌ 웹훅 예방적 갱신 실패 - 계정: {account.account_email}"
+                            )
+                    else:
+                        healthy_count += 1
+                        print(f"✅ 웹훅 정상 상태 - 계정: {account.account_email}")
+
+            except Exception as e:
+                failed_count += 1
+                print(
+                    f"❌ 웹훅 복구 중 오류 - 계정: {account.account_email}, 오류: {str(e)}"
+                )
+
+        result = {
+            "success": True,
+            "repaired_count": repaired_count,
+            "failed_count": failed_count,
+            "healthy_count": healthy_count,
+            "total_accounts": len(accounts),
+            "missed_emails_processed": missed_emails_processed,
+            "missed_emails_classified": missed_emails_classified,
+        }
+
+        print(
+            f"🎉 사용자 웹훅 상태 확인 완료 - 복구: {repaired_count}개, 실패: {failed_count}개, 정상: {healthy_count}개"
+        )
+
+        return result
+
+    except Exception as e:
+        print(f"❌ 사용자 웹훅 상태 확인 중 오류: {str(e)}")
+        return {"success": False, "error": str(e)}
+
+
 def monitor_and_renew_webhooks():
     """모든 사용자의 웹훅 상태를 모니터링하고 만료된 웹훅을 자동 재설정"""
     try:
@@ -928,8 +1181,8 @@ def monitor_and_renew_webhooks():
 
         print("🔄 웹훅 모니터링 시작...")
 
-        # 만료 예정인 웹훅들 조회 (24시간 이내 만료)
-        expiry_threshold = datetime.utcnow() + timedelta(hours=24)
+        # 만료 예정인 웹훅들 조회 (48시간 이내 만료 - 더 일찍 예방적 갱신)
+        expiry_threshold = datetime.utcnow() + timedelta(hours=48)
 
         expiring_webhooks = WebhookStatus.query.filter(
             WebhookStatus.is_active == True,
@@ -998,6 +1251,169 @@ def trigger_webhook_monitoring():
     except Exception as e:
         return jsonify(
             {"success": False, "message": f"웹훅 모니터링 중 오류: {str(e)}"}
+        )
+
+
+@email_bp.route("/process-missed-emails", methods=["POST"])
+@login_required
+def process_missed_emails():
+    """누락된 이메일 수동 처리"""
+    try:
+        from datetime import datetime, timedelta
+
+        # 모든 활성 계정 가져오기
+        accounts = UserAccount.query.filter_by(
+            user_id=current_user.id, is_active=True
+        ).all()
+
+        if not accounts:
+            return jsonify({"success": False, "message": "연결된 계정이 없습니다."})
+
+        total_processed = 0
+        total_classified = 0
+        account_results = []
+
+        for account in accounts:
+            try:
+                # 웹훅 상태 확인
+                webhook_status = WebhookStatus.query.filter_by(
+                    user_id=current_user.id, account_id=account.id, is_active=True
+                ).first()
+
+                # 누락된 기간 계산
+                missed_period_start = None
+                if webhook_status and webhook_status.is_expired:
+                    missed_period_start = webhook_status.expires_at
+                else:
+                    # 웹훅이 없거나 만료되지 않은 경우, 7일 전부터 처리
+                    missed_period_start = datetime.utcnow() - timedelta(days=7)
+
+                print(
+                    f"📧 누락된 이메일 처리 - 계정: {account.account_email}, 시작일: {missed_period_start}"
+                )
+
+                # 누락된 이메일 처리
+                result = process_missed_emails_for_account(
+                    current_user.id, account.id, missed_period_start
+                )
+
+                if result["success"]:
+                    total_processed += result["processed_count"]
+                    total_classified += result["classified_count"]
+
+                    account_results.append(
+                        {
+                            "account": account.account_email,
+                            "status": "success",
+                            "processed": result["processed_count"],
+                            "classified": result["classified_count"],
+                            "message": result["message"],
+                        }
+                    )
+                else:
+                    account_results.append(
+                        {
+                            "account": account.account_email,
+                            "status": "failed",
+                            "message": result["message"],
+                        }
+                    )
+
+            except Exception as e:
+                print(f"계정 {account.account_email} 누락된 이메일 처리 실패: {str(e)}")
+                account_results.append(
+                    {
+                        "account": account.account_email,
+                        "status": "error",
+                        "message": str(e),
+                    }
+                )
+
+        # 결과 메시지 생성
+        if total_processed > 0:
+            message = f"누락된 이메일 {total_processed}개 처리 완료 (분류: {total_classified}개)"
+        else:
+            message = "처리할 누락된 이메일이 없습니다."
+
+        return jsonify(
+            {
+                "success": True,
+                "message": message,
+                "total_processed": total_processed,
+                "total_classified": total_classified,
+                "account_results": account_results,
+            }
+        )
+
+    except Exception as e:
+        return jsonify(
+            {"success": False, "message": f"누락된 이메일 처리 중 오류: {str(e)}"}
+        )
+
+
+@email_bp.route("/scheduler-status")
+@login_required
+def scheduler_status():
+    """스케줄러 상태 확인"""
+    try:
+        from flask_apscheduler import APScheduler
+        from app import scheduler
+
+        # 스케줄러 작업 상태 확인
+        jobs = scheduler.get_jobs()
+        webhook_job = None
+
+        for job in jobs:
+            if job.id == "webhook_monitor":
+                webhook_job = job
+                break
+
+        if webhook_job:
+            status = {
+                "scheduler_running": scheduler.running,
+                "webhook_job_active": webhook_job.next_run_time is not None,
+                "next_run_time": (
+                    webhook_job.next_run_time.isoformat()
+                    if webhook_job.next_run_time
+                    else None
+                ),
+                "job_interval": str(webhook_job.trigger),
+            }
+        else:
+            status = {
+                "scheduler_running": scheduler.running,
+                "webhook_job_active": False,
+                "next_run_time": None,
+                "job_interval": "Not found",
+            }
+
+        return jsonify({"success": True, "status": status})
+
+    except Exception as e:
+        return jsonify(
+            {"success": False, "message": f"스케줄러 상태 확인 실패: {str(e)}"}
+        )
+
+
+@email_bp.route("/trigger-scheduled-monitoring", methods=["POST"])
+@login_required
+def trigger_scheduled_monitoring():
+    """스케줄된 웹훅 모니터링 수동 트리거"""
+    try:
+        from app import scheduled_webhook_monitoring
+
+        print("🔄 수동 스케줄된 웹훅 모니터링 트리거...")
+
+        # 스케줄된 함수 직접 호출
+        scheduled_webhook_monitoring()
+
+        return jsonify(
+            {"success": True, "message": "스케줄된 웹훅 모니터링이 실행되었습니다."}
+        )
+
+    except Exception as e:
+        return jsonify(
+            {"success": False, "message": f"스케줄된 웹훅 모니터링 실행 실패: {str(e)}"}
         )
 
 
