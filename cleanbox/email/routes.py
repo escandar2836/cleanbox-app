@@ -13,7 +13,7 @@ email_bp = Blueprint("email", __name__)
 @email_bp.route("/")
 @login_required
 def list_emails():
-    """이메일 목록 페이지 (계정별 필터링 지원)"""
+    """이메일 목록 페이지 (모든 계정 통합)"""
     try:
         # 모든 활성 계정 가져오기
         accounts = UserAccount.query.filter_by(
@@ -26,39 +26,16 @@ def list_emails():
                 "email/list.html", user=current_user, emails=[], stats={}, accounts=[]
             )
 
-        # URL 파라미터에서 선택된 계정 ID 가져오기
-        selected_account_id = request.args.get("account_id", type=int)
-
-        # 계정별 이메일 조회
-        if selected_account_id:
-            # 특정 계정의 이메일만 조회
-            emails = (
-                Email.query.filter(
-                    Email.user_id == current_user.id,
-                    Email.account_id == selected_account_id,
-                )
-                .order_by(Email.created_at.desc())
-                .limit(100)
-                .all()
+        # 모든 계정의 이메일 통합 조회
+        emails = (
+            Email.query.filter(
+                Email.user_id == current_user.id,
+                Email.account_id.in_([acc.id for acc in accounts]),
             )
-            selected_account = next(
-                (acc for acc in accounts if acc.id == selected_account_id), None
-            )
-        else:
-            # 기본적으로 첫 번째 계정(주 계정)의 이메일만 조회
-            primary_account = next(
-                (acc for acc in accounts if acc.is_primary), accounts[0]
-            )
-            emails = (
-                Email.query.filter(
-                    Email.user_id == current_user.id,
-                    Email.account_id == primary_account.id,
-                )
-                .order_by(Email.created_at.desc())
-                .limit(100)
-                .all()
-            )
-            selected_account = primary_account
+            .order_by(Email.created_at.desc())
+            .limit(100)
+            .all()
+        )
 
         # 계정 정보를 이메일에 추가
         account_dict = {acc.id: acc for acc in accounts}
@@ -92,7 +69,6 @@ def list_emails():
             "unread": sum(1 for e in emails if not e.is_read),
             "archived": sum(1 for e in emails if e.is_archived),
             "account_stats": account_stats,
-            "selected_account": selected_account,
         }
 
         return render_template(

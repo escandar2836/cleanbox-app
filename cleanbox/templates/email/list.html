@@ -29,36 +29,7 @@
     </div>
 </div>
 
-<!-- 계정 선택 드롭다운 -->
-{% if accounts and accounts|length > 1 %}
-<div class="row mb-3">
-    <div class="col-12">
-        <div class="card cleanbox-card">
-            <div class="card-body">
-                <div class="d-flex align-items-center">
-                    <label for="accountSelect" class="form-label me-3 mb-0">
-                        <i class="fas fa-user"></i> 계정 선택:
-                    </label>
-                    <select class="form-select" id="accountSelect" onchange="changeAccount()" style="max-width: 300px;">
-                        {% for account in accounts %}
-                        <option value="{{ account.id }}" 
-                                {% if stats.selected_account and stats.selected_account.id == account.id %}selected{% endif %}>
-                            {{ account.account_email }}
-                            {% if account.is_primary %}(기본){% endif %}
-                        </option>
-                        {% endfor %}
-                    </select>
-                    <div class="ms-3">
-                        <small class="text-muted">
-                            현재 표시: <strong>{{ stats.selected_account.account_email if stats.selected_account else '선택된 계정 없음' }}</strong>
-                        </small>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-{% endif %}
+
 
 <!-- 계정별 통계 -->
 {% if accounts and accounts|length > 1 %}
@@ -181,18 +152,6 @@
                 <div class="d-flex justify-content-between align-items-center">
                     <h5 class="mb-0"><i class="fas fa-list"></i> 최근 이메일</h5>
                     <div>
-                        {% if accounts and accounts|length > 1 %}
-                        <div class="btn-group btn-group-sm me-2">
-                            <button class="btn btn-light" onclick="filterByAccount('all')" id="filter-all">
-                                <i class="fas fa-globe"></i> 모든 계정
-                            </button>
-                            {% for account in accounts %}
-                            <button class="btn btn-outline-light" onclick="filterByAccount('{{ account.id }}')" id="filter-{{ account.id }}">
-                                <i class="fas fa-envelope"></i> {{ account.account_email }}
-                            </button>
-                            {% endfor %}
-                        </div>
-                        {% endif %}
                         <div class="btn-group btn-group-sm">
                             <button class="btn btn-light btn-sm" onclick="selectAll()">
                                 <i class="fas fa-check-square"></i> 전체 선택
@@ -733,44 +692,6 @@ function setupWebhook() {
     });
 }
 
-// 계정별 필터링 함수
-function filterByAccount(accountId) {
-    const emailItems = document.querySelectorAll('.list-group-item');
-    const filterButtons = document.querySelectorAll('[id^="filter-"]');
-    
-    // 버튼 스타일 업데이트
-    filterButtons.forEach(btn => {
-        btn.classList.remove('btn-light');
-        btn.classList.add('btn-outline-light');
-    });
-    
-    const activeButton = document.getElementById(`filter-${accountId}`);
-    if (activeButton) {
-        activeButton.classList.remove('btn-outline-light');
-        activeButton.classList.add('btn-light');
-    }
-    
-    // 이메일 필터링
-    emailItems.forEach(item => {
-        if (accountId === 'all') {
-            item.style.display = 'block';
-        } else {
-            const accountInfo = item.querySelector('.text-info');
-            if (accountInfo && accountInfo.textContent.includes(accountId)) {
-                item.style.display = 'block';
-            } else {
-                item.style.display = 'none';
-            }
-        }
-    });
-}
 
-// 계정 변경 시 통계 및 이메일 목록 업데이트
-function changeAccount() {
-    const selectedAccountId = document.getElementById('accountSelect').value;
-    const currentUrl = new URL(window.location.href);
-    currentUrl.searchParams.set('account_id', selectedAccountId);
-    window.location.href = currentUrl.toString();
-}
 </script>
 {% endblock %} 
