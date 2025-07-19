@@ -57,6 +57,12 @@ def add_category():
         f"🔍 카테고리 추가 페이지 접근 - 사용자: {current_user.id if current_user.is_authenticated else 'Not authenticated'}"
     )
 
+    # DB 설정 확인
+    import os
+
+    print(f"🔍 DATABASE_URL: {os.environ.get('DATABASE_URL', 'Not set')}")
+    print(f"🔍 SQLALCHEMY_DATABASE_URI: {db.engine.url}")
+
     if request.method == "POST":
         try:
             print(f"🔍 카테고리 생성 시작 - 사용자: {current_user.id}")
@@ -101,6 +107,29 @@ def add_category():
 
             db.session.commit()
             print(f"✅ DB 커밋 완료 - 카테고리 ID: {category.id}")
+
+            # 실제 DB에서 데이터 확인
+            from sqlalchemy import text
+
+            try:
+                # DB URL 확인
+                db_url = db.engine.url
+                print(f"🔍 현재 DB URL: {db_url}")
+
+                # 실제 DB에서 카테고리 조회
+                result = db.session.execute(
+                    text("SELECT * FROM categories WHERE id = :id"), {"id": category.id}
+                )
+                db_category = result.fetchone()
+                print(f"🔍 DB에서 조회한 카테고리: {db_category}")
+
+                # 모든 카테고리 조회
+                all_categories = db.session.execute(text("SELECT * FROM categories"))
+                all_cats = all_categories.fetchall()
+                print(f"🔍 DB의 모든 카테고리 수: {len(all_cats)}")
+
+            except Exception as e:
+                print(f"❌ DB 확인 중 오류: {str(e)}")
 
             flash("카테고리가 성공적으로 추가되었습니다.", "success")
             return redirect(url_for("category.list_categories"))
