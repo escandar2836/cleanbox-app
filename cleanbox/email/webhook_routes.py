@@ -53,6 +53,21 @@ def gmail_webhook():
         # 새 이메일 처리
         process_new_emails_for_account(account)
 
+        # 웹훅 수신 시간 업데이트
+        try:
+            from ..models import WebhookStatus
+
+            webhook_status = WebhookStatus.query.filter_by(
+                user_id=account.user_id, account_id=account.id, is_active=True
+            ).first()
+
+            if webhook_status:
+                webhook_status.last_webhook_received = datetime.utcnow()
+                db.session.commit()
+                logger.info(f"웹훅 수신 시간 업데이트: {email_address}")
+        except Exception as e:
+            logger.error(f"웹훅 수신 시간 업데이트 실패: {e}")
+
         logger.info(f"웹훅 처리 완료: {email_address}")
         return jsonify({"status": "success"})
 

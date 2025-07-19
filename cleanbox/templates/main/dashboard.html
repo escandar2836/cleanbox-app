@@ -11,8 +11,11 @@
                 <a href="{{ url_for('email.list_emails') }}" class="btn btn-success me-2">
                     <i class="fas fa-envelope"></i> 이메일 관리
                 </a>
-                <button onclick="processNewEmails()" class="btn btn-primary">
+                <button onclick="processNewEmails()" class="btn btn-primary me-2">
                     <i class="fas fa-robot"></i> 새 이메일 처리
+                </button>
+                <button onclick="checkAndRenewWebhook()" class="btn btn-outline-info">
+                    <i class="fas fa-sync-alt"></i> 웹훅 상태 확인
                 </button>
             </div>
         </div>
@@ -170,32 +173,98 @@ function processNewEmails() {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            // 계정별 결과 표시
-            let message = `새 이메일 처리 완료: ${data.processed}개 처리, ${data.classified}개 AI 분류`;
-            
-            if (data.account_results && data.account_results.length > 0) {
-                message += '\n\n계정별 결과:';
-                data.account_results.forEach(result => {
-                    if (result.status === 'success') {
-                        message += `\n• ${result.account}: ${result.processed}개 처리, ${result.classified}개 분류`;
-                    } else if (result.status === 'no_new_emails') {
-                        message += `\n• ${result.account}: 새 이메일 없음`;
-                    } else {
-                        message += `\n• ${result.account}: 오류 - ${result.error}`;
-                    }
-                });
+            // 새로운 이메일이 없는 경우 간단한 메시지 표시
+            if (data.no_new_emails) {
+                alert('새로운 이메일이 없습니다.');
+            } else {
+                // 계정별 결과 표시
+                let message = `새 이메일 처리 완료: ${data.processed}개 처리, ${data.classified}개 AI 분류`;
+                
+                if (data.account_results && data.account_results.length > 0) {
+                    message += '\n\n계정별 결과:';
+                    data.account_results.forEach(result => {
+                        if (result.status === 'success') {
+                            message += `\n• ${result.account}: ${result.processed}개 처리, ${result.classified}개 분류`;
+                        } else if (result.status === 'no_new_emails') {
+                            message += `\n• ${result.account}: 새 이메일 없음`;
+                        } else {
+                            message += `\n• ${result.account}: 오류 - ${result.error}`;
+                        }
+                    });
+                }
+                
+                alert(message);
+                
+                // 페이지 새로고침 (새 이메일이 있을 때만)
+                location.reload();
             }
-            
-            alert(message);
-            
-            // 페이지 새로고침
-            location.reload();
         } else {
             alert('새 이메일 처리 실패: ' + data.message);
         }
     })
     .catch(error => {
         alert('새 이메일 처리 중 오류가 발생했습니다: ' + error);
+    })
+    .finally(() => {
+        button.innerHTML = originalText;
+        button.disabled = false;
+    });
+}
+
+// 웹훅 재설정 함수
+function checkAndRenewWebhook() {
+    const button = event.target;
+    const originalText = button.innerHTML;
+    
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 확인 중...';
+    button.disabled = true;
+    
+    fetch('/email/check-webhook-status')
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            if (data.needs_renewal) {
+                if (confirm('웹훅이 만료되었습니다. 새로 설정하시겠습니까?')) {
+                    setupWebhook(); // 웹훅 재설정 함수 호출
+                }
+            } else {
+                alert('웹훅이 정상적으로 설정되어 있습니다.');
+            }
+        } else {
+            alert('웹훅 상태 확인 실패: ' + data.message);
+        }
+    })
+    .catch(error => {
+        alert('웹훅 상태 확인 중 오류가 발생했습니다: ' + error);
+    })
+    .finally(() => {
+        button.innerHTML = originalText;
+        button.disabled = false;
+    });
+}
+
+// 웹훅 재설정 함수
+function setupWebhook() {
+    const button = event.target;
+    const originalText = button.innerHTML;
+    
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 설정 중...';
+    button.disabled = true;
+    
+    fetch('/email/setup-webhook', {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+        } else {
+            alert('웹훅 설정 실패: ' + data.message);
+        }
+    })
+    .catch(error => {
+        alert('웹훅 설정 중 오류가 발생했습니다: ' + error);
     })
     .finally(() => {
         button.innerHTML = originalText;

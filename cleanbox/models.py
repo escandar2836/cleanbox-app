@@ -1,6 +1,6 @@
 from flask_login import UserMixin
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime
+from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 import json
 from cryptography.fernet import Fernet
@@ -214,3 +214,53 @@ class Email(db.Model):
 
     def __repr__(self):
         return f"<Email {self.subject}>"
+
+
+class WebhookStatus(db.Model):
+    """웹훅 상태 추적 모델"""
+
+    __tablename__ = "webhook_status"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.String(255), db.ForeignKey("users.id"), nullable=False)
+    account_id = db.Column(
+        db.Integer, db.ForeignKey("user_accounts.id"), nullable=False
+    )
+    topic_name = db.Column(db.String(500), nullable=False)
+    is_active = db.Column(db.Boolean, default=True)
+    setup_at = db.Column(db.DateTime, default=datetime.utcnow)
+    expires_at = db.Column(db.DateTime, nullable=False)  # Gmail 웹훅은 7일 후 만료
+    last_webhook_received = db.Column(db.DateTime)  # 마지막 웹훅 수신 시간
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(
+        db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    # 관계
+    user = db.relationship("User", backref="webhook_statuses")
+    account = db.relationship("UserAccount", backref="webhook_statuses")
+
+    def __repr__(self):
+        return f"<WebhookStatus {self.user_id}:{self.account_id}>"
+
+    @property
+    def is_expired(self):
+        """웹훅이 만료되었는지 확인"""
+        return datetime.utcnow() > self.expires_at
+
+    @property
+    def is_healthy(self):
+        """웹훅이 정상 작동하는지 확인"""
+        if not self.is_active:
+            return False
+
+        # 7일 이내에 설정되었고, 최근 24시간 내에 웹훅을 받았으면 정상
+        if self.is_expired:
+            return False
+
+        if self.last_webhook_received:
+            # 최근 24시간 내에 웹훅을 받았으면 정상
+            return datetime.utcnow() - self.last_webhook_received < timedelta(hours=24)
+
+        # 웹훅을 한 번도 받지 못했으면 설정 후 1시간 이내면 정상
+        return datetime.utcnow() - self.setup_at < timedelta(hours=1)

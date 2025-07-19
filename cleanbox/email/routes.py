@@ -5,6 +5,7 @@ from .gmail_service import GmailService
 from .ai_classifier import AIClassifier
 from datetime import datetime
 import traceback
+import os
 
 email_bp = Blueprint("email", __name__)
 
@@ -137,7 +138,7 @@ def category_emails(category_id):
 @email_bp.route("/process-new", methods=["POST"])
 @login_required
 def process_new_emails():
-    """최초 서비스 접속 시간 이후의 새 이메일 처리"""
+    """최근 24시간 이내의 새 이메일 처리"""
     try:
         # 모든 활성 계정 가져오기
         accounts = UserAccount.query.filter_by(
@@ -150,9 +151,12 @@ def process_new_emails():
         total_processed = 0
         total_classified = 0
         account_results = []
+        all_accounts_no_emails = True  # 모든 계정에서 새 이메일이 없는지 확인
 
-        # 최초 서비스 접속 시간 이후의 이메일만 처리
-        first_access_time = current_user.first_service_access
+        # 최근 24시간 이내의 이메일만 처리 (first_service_access 대신)
+        from datetime import datetime, timedelta
+
+        after_date = datetime.utcnow() - timedelta(hours=24)
 
         # 모든 계정에 대해 새 이메일 처리
         for account in accounts:
@@ -162,8 +166,8 @@ def process_new_emails():
                 gmail_service = GmailService(current_user.id, account.id)
                 ai_classifier = AIClassifier()
 
-                # 최근 이메일 가져오기 (최초 접속 시간 이후만)
-                recent_emails = gmail_service.fetch_emails_after_date(first_access_time)
+                # 최근 이메일 가져오기 (최근 24시간 이내)
+                recent_emails = gmail_service.fetch_recent_emails(max_results=50)
 
                 if not recent_emails:
                     account_results.append(
@@ -175,6 +179,9 @@ def process_new_emails():
                         }
                     )
                     continue
+
+                # 이메일이 있으면 all_accounts_no_emails를 False로 설정
+                all_accounts_no_emails = False
 
                 # 사용자 카테고리 가져오기
                 categories = gmail_service.get_user_categories()
@@ -253,6 +260,19 @@ def process_new_emails():
                     }
                 )
 
+        # 모든 계정에서 새 이메일이 없는 경우
+        if all_accounts_no_emails:
+            return jsonify(
+                {
+                    "success": True,
+                    "processed": 0,
+                    "classified": 0,
+                    "account_results": account_results,
+                    "no_new_emails": True,
+                    "message": "새로운 이메일이 없습니다.",
+                }
+            )
+
         flash(
             f"새 이메일 처리 완료: {total_processed}개 처리, {total_classified}개 AI 분류",
             "success",
@@ -264,6 +284,7 @@ def process_new_emails():
                 "processed": total_processed,
                 "classified": total_classified,
                 "account_results": account_results,
+                "no_new_emails": False,
             }
         )
 
@@ -606,6 +627,189 @@ def unsubscribe_email(email_id):
         return redirect(url_for("email.list_emails"))
 
 
+@email_bp.route("/setup-webhook", methods=["POST"])
+@login_required
+def setup_webhook():
+    """Gmail 웹훅 설정"""
+    try:
+        # 모든 활성 계정 가져오기
+        accounts = UserAccount.query.filter_by(
+            user_id=current_user.id, is_active=True
+        ).all()
+
+        if not accounts:
+            return jsonify({"success": False, "message": "연결된 계정이 없습니다."})
+
+        success_count = 0
+        failed_accounts = []
+
+        for account in accounts:
+            try:
+                gmail_service = GmailService(current_user.id, account.id)
+
+                # 웹훅 중지 후 재설정
+                gmail_service.stop_gmail_watch()
+
+                # 웹훅 설정 (topic_name은 환경변수에서 가져오거나 기본값 사용)
+                topic_name = os.environ.get(
+                    "GMAIL_WEBHOOK_TOPIC",
+                    "projects/cleanbox-app/topics/gmail-notifications",
+                )
+
+                if gmail_service.setup_gmail_watch(topic_name):
+                    success_count += 1
+                else:
+                    failed_accounts.append(account.account_email)
+
+            except Exception as e:
+                print(f"웹훅 설정 실패 - 계정 {account.account_email}: {str(e)}")
+                failed_accounts.append(account.account_email)
+
+        if success_count > 0:
+            message = f"웹훅 설정 완료: {success_count}개 계정"
+            if failed_accounts:
+                message += f", 실패: {', '.join(failed_accounts)}"
+
+            return jsonify(
+                {
+                    "success": True,
+                    "message": message,
+                    "success_count": success_count,
+                    "failed_accounts": failed_accounts,
+                }
+            )
+        else:
+            return jsonify(
+                {
+                    "success": False,
+                    "message": f"모든 계정에서 웹훅 설정 실패: {', '.join(failed_accounts)}",
+                }
+            )
+
+    except Exception as e:
+        return jsonify({"success": False, "message": f"웹훅 설정 중 오류: {str(e)}"})
+
+
+@email_bp.route("/webhook-status")
+@login_required
+def webhook_status():
+    """웹훅 상태 확인"""
+    try:
+        # 모든 활성 계정 가져오기
+        accounts = UserAccount.query.filter_by(
+            user_id=current_user.id, is_active=True
+        ).all()
+
+        if not accounts:
+            return jsonify({"success": False, "message": "연결된 계정이 없습니다."})
+
+        webhook_statuses = []
+        total_accounts = len(accounts)
+        healthy_accounts = 0
+
+        for account in accounts:
+            try:
+                gmail_service = GmailService(current_user.id, account.id)
+                status = gmail_service.get_webhook_status()
+
+                webhook_statuses.append(
+                    {
+                        "account_email": account.account_email,
+                        "account_name": account.account_name,
+                        "is_primary": account.is_primary,
+                        **status,
+                    }
+                )
+
+                if status["status"] == "healthy":
+                    healthy_accounts += 1
+
+            except Exception as e:
+                webhook_statuses.append(
+                    {
+                        "account_email": account.account_email,
+                        "account_name": account.account_name,
+                        "is_primary": account.is_primary,
+                        "is_active": False,
+                        "status": "error",
+                        "message": f"상태 확인 실패: {str(e)}",
+                    }
+                )
+
+        return jsonify(
+            {
+                "success": True,
+                "total_accounts": total_accounts,
+                "healthy_accounts": healthy_accounts,
+                "webhook_statuses": webhook_statuses,
+            }
+        )
+
+    except Exception as e:
+        return jsonify({"success": False, "message": f"웹훅 상태 확인 실패: {str(e)}"})
+
+
+@email_bp.route("/auto-renew-webhook", methods=["POST"])
+@login_required
+def auto_renew_webhook():
+    """웹훅 자동 재설정"""
+    try:
+        # 모든 활성 계정 가져오기
+        accounts = UserAccount.query.filter_by(
+            user_id=current_user.id, is_active=True
+        ).all()
+
+        if not accounts:
+            return jsonify({"success": False, "message": "연결된 계정이 없습니다."})
+
+        renewed_count = 0
+        failed_accounts = []
+        topic_name = os.environ.get(
+            "GMAIL_WEBHOOK_TOPIC",
+            "projects/cleanbox-app/topics/gmail-notifications",
+        )
+
+        for account in accounts:
+            try:
+                gmail_service = GmailService(current_user.id, account.id)
+
+                # 웹훅 상태 확인 후 필요시 재설정
+                if gmail_service.check_and_renew_webhook(topic_name):
+                    renewed_count += 1
+                else:
+                    failed_accounts.append(account.account_email)
+
+            except Exception as e:
+                print(f"웹훅 자동 재설정 실패 - 계정 {account.account_email}: {str(e)}")
+                failed_accounts.append(account.account_email)
+
+        if renewed_count > 0:
+            message = f"웹훅 자동 재설정 완료: {renewed_count}개 계정"
+            if failed_accounts:
+                message += f", 실패: {', '.join(failed_accounts)}"
+
+            return jsonify(
+                {
+                    "success": True,
+                    "message": message,
+                    "renewed_count": renewed_count,
+                    "failed_accounts": failed_accounts,
+                }
+            )
+        else:
+            return jsonify(
+                {
+                    "success": False,
+                    "message": f"모든 계정에서 웹훅 재설정 실패: {', '.join(failed_accounts)}",
+                }
+            )
+
+    except Exception as e:
+        return jsonify(
+            {"success": False, "message": f"웹훅 자동 재설정 중 오류: {str(e)}"}
+        )
+
+
 def get_user_emails(user_id, limit=50):
     """사용자의 이메일을 가져오는 헬퍼 함수"""
     return (
@@ -614,3 +818,91 @@ def get_user_emails(user_id, limit=50):
         .limit(limit)
         .all()
     )
+
+
+@email_bp.route("/debug-info")
+@login_required
+def debug_info():
+    """디버깅 정보 확인"""
+    try:
+        # 사용자 정보
+        user_info = {
+            "user_id": current_user.id,
+            "email": current_user.email,
+            "first_service_access": (
+                current_user.first_service_access.isoformat()
+                if current_user.first_service_access
+                else None
+            ),
+            "created_at": (
+                current_user.created_at.isoformat() if current_user.created_at else None
+            ),
+        }
+
+        # 계정 정보
+        accounts = UserAccount.query.filter_by(
+            user_id=current_user.id, is_active=True
+        ).all()
+
+        account_info = []
+        for account in accounts:
+            # 각 계정의 최근 이메일 확인
+            gmail_service = GmailService(current_user.id, account.id)
+
+            try:
+                # 최근 이메일 가져오기 시도
+                recent_emails = gmail_service.fetch_recent_emails(max_results=5)
+
+                account_data = {
+                    "account_id": account.id,
+                    "account_email": account.account_email,
+                    "account_name": account.account_name,
+                    "is_primary": account.is_primary,
+                    "is_active": account.is_active,
+                    "recent_emails_count": len(recent_emails) if recent_emails else 0,
+                    "recent_emails": [],
+                }
+
+                # 최근 이메일 상세 정보
+                if recent_emails:
+                    for email in recent_emails[:3]:  # 최대 3개만
+                        account_data["recent_emails"].append(
+                            {
+                                "gmail_id": email.get("gmail_id"),
+                                "subject": email.get("subject"),
+                                "sender": email.get("sender"),
+                                "date": email.get("date"),
+                                "snippet": (
+                                    email.get("snippet", "")[:100] + "..."
+                                    if email.get("snippet")
+                                    else ""
+                                ),
+                            }
+                        )
+
+                account_info.append(account_data)
+
+            except Exception as e:
+                account_data = {
+                    "account_id": account.id,
+                    "account_email": account.account_email,
+                    "account_name": account.account_name,
+                    "is_primary": account.is_primary,
+                    "is_active": account.is_active,
+                    "error": str(e),
+                }
+                account_info.append(account_data)
+
+        return jsonify(
+            {
+                "success": True,
+                "user_info": user_info,
+                "accounts": account_info,
+                "current_time": datetime.utcnow().isoformat(),
+            }
+        )
+
+    except Exception as e:
+        return jsonify(
+            {"success": False, "message": f"디버깅 정보 조회 실패: {str(e)}"}
+        )

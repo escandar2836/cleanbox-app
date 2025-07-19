@@ -410,6 +410,28 @@ class GmailService:
 
             response = self.service.users().watch(userId="me", body=request).execute()
 
+            # DB에 웹훅 상태 저장
+            from ..models import WebhookStatus
+            from datetime import datetime, timedelta
+
+            # 기존 웹훅 상태 비활성화
+            WebhookStatus.query.filter_by(
+                user_id=self.user_id, account_id=self.account_id, is_active=True
+            ).update({"is_active": False})
+
+            # 새 웹훅 상태 저장 (7일 후 만료)
+            webhook_status = WebhookStatus(
+                user_id=self.user_id,
+                account_id=self.account_id,
+                topic_name=topic_name,
+                is_active=True,
+                setup_at=datetime.utcnow(),
+                expires_at=datetime.utcnow() + timedelta(days=7),
+            )
+
+            db.session.add(webhook_status)
+            db.session.commit()
+
             print(f"✅ Gmail 웹훅 설정 완료: {self.account_id}")
             return True
 
@@ -421,9 +443,97 @@ class GmailService:
         """Gmail 웹훅 중지"""
         try:
             self.service.users().stop(userId="me").execute()
+
+            # DB에서 웹훅 상태 비활성화
+            from ..models import WebhookStatus
+
+            WebhookStatus.query.filter_by(
+                user_id=self.user_id, account_id=self.account_id, is_active=True
+            ).update({"is_active": False})
+            db.session.commit()
+
             print(f"✅ Gmail 웹훅 중지 완료: {self.account_id}")
             return True
 
         except Exception as e:
             print(f"❌ Gmail 웹훅 중지 실패: {self.account_id} - {e}")
+            return False
+
+    def get_webhook_status(self) -> Dict:
+        """웹훅 상태 확인"""
+        try:
+            from ..models import WebhookStatus
+
+            webhook_status = WebhookStatus.query.filter_by(
+                user_id=self.user_id, account_id=self.account_id, is_active=True
+            ).first()
+
+            if not webhook_status:
+                return {
+                    "is_active": False,
+                    "status": "not_setup",
+                    "message": "웹훅이 설정되지 않았습니다.",
+                }
+
+            if webhook_status.is_expired:
+                return {
+                    "is_active": False,
+                    "status": "expired",
+                    "message": "웹훅이 만료되었습니다.",
+                    "expires_at": webhook_status.expires_at.isoformat(),
+                    "setup_at": webhook_status.setup_at.isoformat(),
+                }
+
+            if not webhook_status.is_healthy:
+                return {
+                    "is_active": True,
+                    "status": "unhealthy",
+                    "message": "웹훅이 비정상 상태입니다.",
+                    "last_webhook_received": (
+                        webhook_status.last_webhook_received.isoformat()
+                        if webhook_status.last_webhook_received
+                        else None
+                    ),
+                    "setup_at": webhook_status.setup_at.isoformat(),
+                }
+
+            return {
+                "is_active": True,
+                "status": "healthy",
+                "message": "웹훅이 정상 작동 중입니다.",
+                "last_webhook_received": (
+                    webhook_status.last_webhook_received.isoformat()
+                    if webhook_status.last_webhook_received
+                    else None
+                ),
+                "setup_at": webhook_status.setup_at.isoformat(),
+                "expires_at": webhook_status.expires_at.isoformat(),
+            }
+
+        except Exception as e:
+            return {
+                "is_active": False,
+                "status": "error",
+                "message": f"웹훅 상태 확인 실패: {str(e)}",
+            }
+
+    def check_and_renew_webhook(self, topic_name: str) -> bool:
+        """웹훅 상태 확인 후 필요시 재설정"""
+        try:
+            status = self.get_webhook_status()
+
+            # 웹훅이 없거나 만료되었거나 비정상이면 재설정
+            if status["status"] in ["not_setup", "expired", "unhealthy"]:
+                print(f"🔄 웹훅 재설정 필요: {self.account_id} - {status['status']}")
+
+                # 기존 웹훅 중지
+                self.stop_gmail_watch()
+
+                # 새 웹훅 설정
+                return self.setup_gmail_watch(topic_name)
+
+            return True
+
+        except Exception as e:
+            print(f"❌ 웹훅 상태 확인 실패: {self.account_id} - {e}")
             return False
