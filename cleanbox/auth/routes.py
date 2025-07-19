@@ -8,7 +8,6 @@ from flask import (
     session,
     flash,
     render_template,
-    jsonify,
 )
 from flask_login import login_user, logout_user, login_required, current_user
 from google_auth_oauthlib.flow import Flow
@@ -175,9 +174,6 @@ def _handle_login_callback(credentials, id_info):
         session.pop("state", None)
         session.pop("adding_account", None)
 
-        # 현재 계정 ID 설정
-        session["current_account_id"] = account.id
-
         login_user(user)
         flash("CleanBox에 성공적으로 로그인했습니다!", "success")
         return redirect(url_for("category.list_categories"))
@@ -271,25 +267,6 @@ def manage_accounts():
     )
 
 
-@auth_bp.route("/switch-account/<int:account_id>")
-@login_required
-def switch_account(account_id):
-    """계정 전환"""
-    account = UserAccount.query.filter_by(
-        id=account_id, user_id=current_user.id, is_active=True
-    ).first()
-
-    if not account:
-        flash("계정을 찾을 수 없습니다.", "error")
-        return redirect(url_for("auth.manage_accounts"))
-
-    # 세션에 현재 계정 ID 저장
-    session["current_account_id"] = account_id
-    flash(f"{account.account_email} 계정으로 전환되었습니다.", "success")
-
-    return redirect(request.referrer or url_for("email.list_emails"))
-
-
 @auth_bp.route("/remove-account/<int:account_id>", methods=["POST"])
 @login_required
 def remove_account(account_id):
@@ -332,13 +309,6 @@ def logout():
     return redirect(url_for("auth.login"))
 
 
-@auth_bp.route("/profile")
-@login_required
-def profile():
-    """사용자 프로필"""
-    return render_template("auth/profile.html", user=current_user)
-
-
 def get_user_credentials(user_id, account_id=None):
     """사용자의 OAuth 토큰을 가져오는 헬퍼 함수"""
     if account_id:
@@ -368,24 +338,12 @@ def get_current_account_id():
     if not current_user.is_authenticated:
         return None
 
-    # 세션에서 현재 계정 ID 확인
-    if "current_account_id" in session:
-        account_id = session["current_account_id"]
-        # 계정이 실제로 존재하고 활성인지 확인
-        account = UserAccount.query.filter_by(
-            id=account_id, user_id=current_user.id, is_active=True
-        ).first()
-        if account:
-            return account_id
-
-    # 세션에 없거나 유효하지 않으면 기본 계정 ID 반환
+    # 기본 계정 ID 반환
     primary_account = UserAccount.query.filter_by(
         user_id=current_user.id, is_primary=True, is_active=True
     ).first()
 
     if primary_account:
-        # 세션에 기본 계정 ID 설정
-        session["current_account_id"] = primary_account.id
         return primary_account.id
 
     # 활성 계정이 없으면 첫 번째 활성 계정 반환
@@ -394,37 +352,6 @@ def get_current_account_id():
     ).first()
 
     if first_account:
-        session["current_account_id"] = first_account.id
         return first_account.id
 
     return None
-
-
-@auth_bp.route("/debug-accounts")
-@login_required
-def debug_accounts():
-    """계정 정보 디버깅 (개발용)"""
-    accounts = UserAccount.query.filter_by(
-        user_id=current_user.id, is_active=True
-    ).all()
-
-    current_account_id = get_current_account_id()
-
-    debug_info = {
-        "user_id": current_user.id,
-        "current_account_id": current_account_id,
-        "session_current_account": session.get("current_account_id"),
-        "accounts": [
-            {
-                "id": acc.id,
-                "email": acc.account_email,
-                "name": acc.account_name,
-                "is_primary": acc.is_primary,
-                "is_active": acc.is_active,
-                "is_current": acc.id == current_account_id,
-            }
-            for acc in accounts
-        ],
-    }
-
-    return jsonify(debug_info)

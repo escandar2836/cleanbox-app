@@ -12,7 +12,7 @@
                     <i class="fas fa-envelope"></i> 이메일 관리
                 </a>
                 <button onclick="syncAllAccounts()" class="btn btn-primary">
-                    <i class="fas fa-sync-alt"></i> 모든 계정 동기화
+                    <i class="fas fa-sync-alt"></i> Gmail 동기화
                 </button>
             </div>
         </div>
@@ -21,7 +21,7 @@
 
 <!-- 3개 섹션 메인 페이지 -->
 <div class="row">
-    <!-- 섹션 1: 다중 Gmail 계정 연결 -->
+    <!-- 섹션 1: Gmail 계정 연결 -->
     <div class="col-md-4">
         <div class="card cleanbox-card h-100">
             <div class="card-header bg-primary text-white">
@@ -54,16 +54,11 @@
                         <i class="fas fa-cogs"></i> 계정 관리
                     </a>
                 </div>
-                
-                <div class="alert alert-info small">
-                    <i class="fas fa-info-circle"></i>
-                    <strong>다중 계정 기능:</strong> 여러 Gmail 계정을 연결하여 모든 이메일을 CleanBox에서 통합 관리할 수 있습니다.
-                </div>
             </div>
         </div>
     </div>
     
-    <!-- 섹션 2: 카테고리 요약 -->
+    <!-- 섹션 2: 카테고리 목록 -->
     <div class="col-md-4">
         <div class="card cleanbox-card h-100">
             <div class="card-header bg-success text-white">
@@ -111,79 +106,20 @@
         </div>
     </div>
     
-    <!-- 섹션 3: 빠른 액션 -->
+    <!-- 섹션 3: 새 카테고리 추가 -->
     <div class="col-md-4">
         <div class="card cleanbox-card h-100">
             <div class="card-header bg-warning text-dark">
-                <h5 class="mb-0"><i class="fas fa-bolt"></i> 빠른 액션</h5>
+                <h5 class="mb-0"><i class="fas fa-plus"></i> 새 카테고리 추가</h5>
             </div>
             <div class="card-body">
-                <div class="d-grid gap-2">
+                <div class="text-center py-4">
+                    <i class="fas fa-folder-plus fa-3x text-warning mb-3"></i>
+                    <h6>새 카테고리를 만들어보세요</h6>
+                    <p class="text-muted small">카테고리를 만들면 AI가 이메일을 자동으로 분류합니다.</p>
                     <a href="{{ url_for('category.add_category') }}" class="btn btn-warning">
                         <i class="fas fa-plus"></i> 새 카테고리 추가
                     </a>
-                    <a href="{{ url_for('email.sync_emails') }}" class="btn btn-primary">
-                        <i class="fas fa-sync-alt"></i> Gmail 동기화
-                    </a>
-                    <a href="{{ url_for('email.list_emails') }}" class="btn btn-success">
-                        <i class="fas fa-envelope"></i> 이메일 관리
-                    </a>
-                    <a href="{{ url_for('category.list_categories') }}" class="btn btn-info">
-                        <i class="fas fa-cogs"></i> 카테고리 관리
-                    </a>
-                </div>
-                
-                <hr>
-                
-                <div class="alert alert-success small">
-                    <i class="fas fa-clock"></i>
-                    <strong>자동 동기화:</strong> 현재 활성 상태인 사용자에 대해서만 5분마다 새로운 이메일을 자동으로 가져와 AI가 분류합니다.
-                </div>
-                
-                <hr>
-                
-                <div class="small">
-                    <h6><i class="fas fa-lightbulb"></i> CleanBox 팁</h6>
-                    <ul class="list-unstyled">
-                        <li><i class="fas fa-check text-success"></i> 카테고리를 만들면 AI가 이메일을 자동으로 분류합니다</li>
-                        <li><i class="fas fa-check text-success"></i> Gmail 동기화로 최신 이메일을 가져올 수 있습니다</li>
-                        <li><i class="fas fa-check text-success"></i> 여러 Gmail 계정을 연결하여 통합 관리할 수 있습니다</li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- 통계 및 요약 -->
-<div class="row mt-4">
-    <div class="col-12">
-        <div class="card cleanbox-card">
-            <div class="card-header bg-info text-white">
-                <h5 class="mb-0"><i class="fas fa-chart-bar"></i> CleanBox 통계</h5>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-3 text-center">
-                        <i class="fas fa-envelope fa-2x text-primary mb-2"></i>
-                        <h5 id="totalEmails">-</h5>
-                        <p class="text-muted">전체 이메일</p>
-                    </div>
-                    <div class="col-md-3 text-center">
-                        <i class="fas fa-envelope-open fa-2x text-warning mb-2"></i>
-                        <h5 id="unreadEmails">-</h5>
-                        <p class="text-muted">읽지 않은 이메일</p>
-                    </div>
-                    <div class="col-md-3 text-center">
-                        <i class="fas fa-archive fa-2x text-success mb-2"></i>
-                        <h5 id="archivedEmails">-</h5>
-                        <p class="text-muted">아카이브된 이메일</p>
-                    </div>
-                    <div class="col-md-3 text-center">
-                        <i class="fas fa-robot fa-2x text-info mb-2"></i>
-                        <h5 id="aiClassified">-</h5>
-                        <p class="text-muted">AI 분류된 이메일</p>
-                    </div>
                 </div>
             </div>
         </div>
@@ -191,26 +127,7 @@
 </div>
 
 <script>
-// 통계 업데이트
-document.addEventListener('DOMContentLoaded', function() {
-    fetch('/email/statistics')
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                document.getElementById('totalEmails').textContent = data.statistics.total;
-                document.getElementById('unreadEmails').textContent = data.statistics.unread;
-                document.getElementById('archivedEmails').textContent = data.statistics.archived;
-                
-                const classifiedCount = Object.values(data.statistics.categories).reduce((a, b) => a + b, 0);
-                document.getElementById('aiClassified').textContent = classifiedCount;
-            }
-        })
-        .catch(error => {
-            console.error('통계 조회 실패:', error);
-        });
-});
-
-// 모든 계정 동기화 함수
+// Gmail 동기화 함수
 function syncAllAccounts() {
     const button = event.target;
     const originalText = button.innerHTML;
@@ -246,7 +163,7 @@ function syncAllAccounts() {
             
             alert(message);
             
-            // 통계 업데이트
+            // 페이지 새로고침
             location.reload();
         } else {
             alert('동기화 실패: ' + data.message);

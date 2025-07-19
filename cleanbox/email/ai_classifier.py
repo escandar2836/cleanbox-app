@@ -258,117 +258,115 @@ class AIClassifier:
             print(f"분류 응답 파싱 실패: {str(e)}")
             return 0, 0, "응답 파싱 실패"
 
-    def analyze_email_sentiment(self, content: str, subject: str) -> Dict:
-        """이메일 감정 분석"""
+    def extract_unsubscribe_links(self, content: str) -> List[str]:
+        """이메일에서 구독해지 링크 추출"""
         try:
-            prompt = f"""다음 이메일의 감정을 분석해주세요.
+            import re
+            from urllib.parse import urljoin, urlparse
 
-제목: {subject}
-내용: {content[:500]}...
+            # HTML 링크에서 구독해지 패턴 찾기
+            unsubscribe_patterns = [
+                r'href=["\']([^"\']*unsubscribe[^"\']*)["\']',
+                r'href=["\']([^"\']*opt.?out[^"\']*)["\']',
+                r'href=["\']([^"\']*cancel[^"\']*)["\']',
+                r'href=["\']([^"\']*remove[^"\']*)["\']',
+                r'href=["\']([^"\']*unsub[^"\']*)["\']',
+            ]
 
-감정 분석 결과를 다음 형식으로 응답하세요:
-감정: [positive/negative/neutral]
-신뢰도: [0-100]
-이유: [간단한 설명]"""
+            links = []
+            for pattern in unsubscribe_patterns:
+                matches = re.findall(pattern, content, re.IGNORECASE)
+                links.extend(matches)
 
-            response = self._call_ollama_api(prompt)
+            # 텍스트에서 구독해지 링크 찾기
+            text_patterns = [
+                r'https?://[^\s<>"]*unsubscribe[^\s<>"]*',
+                r'https?://[^\s<>"]*opt.?out[^\s<>"]*',
+                r'https?://[^\s<>"]*cancel[^\s<>"]*',
+            ]
 
-            if response:
-                return self._parse_sentiment_response(response)
+            for pattern in text_patterns:
+                matches = re.findall(pattern, content, re.IGNORECASE)
+                links.extend(matches)
 
-            return {"sentiment": "neutral", "confidence": 0}
+            # 중복 제거 및 유효한 URL만 필터링
+            valid_links = []
+            for link in set(links):
+                try:
+                    parsed = urlparse(link)
+                    if parsed.scheme and parsed.netloc:
+                        valid_links.append(link)
+                except:
+                    continue
+
+            return valid_links[:5]  # 최대 5개 링크 반환
 
         except Exception as e:
-            return {"sentiment": "neutral", "confidence": 0, "error": str(e)}
-
-    def _parse_sentiment_response(self, response: str) -> Dict:
-        """감정 분석 응답 파싱"""
-        try:
-            lines = response.strip().split("\n")
-            sentiment = "neutral"
-            confidence = 0
-            reason = ""
-
-            for line in lines:
-                if line.startswith("감정:"):
-                    sentiment = line.split(":")[1].strip().lower()
-                elif line.startswith("신뢰도:"):
-                    try:
-                        confidence = int(line.split(":")[1].strip())
-                    except:
-                        confidence = 0
-                elif line.startswith("이유:"):
-                    reason = line.split(":")[1].strip()
-
-            return {"sentiment": sentiment, "confidence": confidence, "reason": reason}
-
-        except Exception as e:
-            return {"sentiment": "neutral", "confidence": 0, "error": str(e)}
-
-    def extract_keywords(self, content: str) -> List[str]:
-        """키워드 추출"""
-        try:
-            prompt = f"""다음 이메일에서 중요한 키워드 5개를 추출해주세요.
-
-내용: {content[:1000]}...
-
-키워드만 쉼표로 구분하여 응답하세요. 예시: 회의, 프로젝트, 마감일, 예산, 팀원"""
-
-            response = self._call_ollama_api(prompt)
-
-            if response:
-                keywords = [kw.strip() for kw in response.split(",")]
-                return keywords[:5]  # 최대 5개
-
+            print(f"구독해지 링크 추출 실패: {str(e)}")
             return []
 
-        except Exception as e:
-            return []
-
-    def is_spam_or_unwanted(self, content: str, subject: str, sender: str) -> Dict:
-        """스팸/원하지 않는 이메일 판별"""
+    def analyze_unsubscribe_page(self, url: str) -> Dict:
+        """구독해지 페이지 분석"""
         try:
-            prompt = f"""다음 이메일이 스팸이거나 원하지 않는 이메일인지 판별해주세요.
+            import requests
+            from bs4 import BeautifulSoup
 
-제목: {subject}
-발신자: {sender}
-내용: {content[:500]}...
+            # 페이지 가져오기
+            response = requests.get(url, timeout=10)
+            if response.status_code != 200:
+                return {"success": False, "message": "페이지 접근 실패"}
 
-판별 결과를 다음 형식으로 응답하세요:
-스팸여부: [true/false]
-신뢰도: [0-100]
-이유: [판별 이유]"""
+            soup = BeautifulSoup(response.content, "html.parser")
 
-            response = self._call_ollama_api(prompt)
+            # 구독해지 관련 요소 찾기
+            unsubscribe_elements = []
 
-            if response:
-                return self._parse_spam_response(response)
+            # 버튼과 링크 찾기
+            for element in soup.find_all(["button", "a", "input"]):
+                text = element.get_text().lower()
+                if any(
+                    keyword in text
+                    for keyword in ["unsubscribe", "opt out", "cancel", "remove"]
+                ):
+                    unsubscribe_elements.append(
+                        {
+                            "type": element.name,
+                            "text": element.get_text().strip(),
+                            "id": element.get("id", ""),
+                            "class": element.get("class", []),
+                            "href": element.get("href", ""),
+                            "action": element.get("action", ""),
+                        }
+                    )
 
-            return {"is_spam": False, "confidence": 0}
+            # 폼 찾기
+            forms = soup.find_all("form")
+            form_info = []
+            for form in forms:
+                action = form.get("action", "")
+                method = form.get("method", "get")
+                if any(
+                    keyword in action.lower()
+                    for keyword in ["unsubscribe", "opt", "cancel"]
+                ):
+                    form_info.append(
+                        {
+                            "action": action,
+                            "method": method,
+                            "fields": [
+                                field.get("name", "")
+                                for field in form.find_all("input")
+                            ],
+                        }
+                    )
+
+            return {
+                "success": True,
+                "url": url,
+                "unsubscribe_elements": unsubscribe_elements,
+                "forms": form_info,
+                "page_title": soup.title.get_text() if soup.title else "",
+            }
 
         except Exception as e:
-            return {"is_spam": False, "confidence": 0, "error": str(e)}
-
-    def _parse_spam_response(self, response: str) -> Dict:
-        """스팸 판별 응답 파싱"""
-        try:
-            lines = response.strip().split("\n")
-            is_spam = False
-            confidence = 0
-            reason = ""
-
-            for line in lines:
-                if line.startswith("스팸여부:"):
-                    is_spam = line.split(":")[1].strip().lower() == "true"
-                elif line.startswith("신뢰도:"):
-                    try:
-                        confidence = int(line.split(":")[1].strip())
-                    except:
-                        confidence = 0
-                elif line.startswith("이유:"):
-                    reason = line.split(":")[1].strip()
-
-            return {"is_spam": is_spam, "confidence": confidence, "reason": reason}
-
-        except Exception as e:
-            return {"is_spam": False, "confidence": 0, "error": str(e)}
+            return {"success": False, "message": f"페이지 분석 실패: {str(e)}"}

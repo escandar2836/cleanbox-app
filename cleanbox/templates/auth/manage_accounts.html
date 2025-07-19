@@ -48,15 +48,6 @@
                                 </div>
                             </div>
                             <div class="btn-group">
-                                {% if account.id == session.get('current_account_id') %}
-                                <span class="badge bg-success">현재 활성</span>
-                                {% else %}
-                                <a href="{{ url_for('auth.switch_account', account_id=account.id) }}" 
-                                   class="btn btn-outline-primary btn-sm">
-                                    <i class="fas fa-exchange-alt"></i> 전환
-                                </a>
-                                {% endif %}
-                                
                                 {% if not account.is_primary %}
                                 <form method="POST" action="{{ url_for('auth.remove_account', account_id=account.id) }}" 
                                       style="display: inline;" onsubmit="return confirm('정말로 이 계정 연결을 해제하시겠습니까?')">
@@ -99,7 +90,6 @@
                         </p>
                         <ul class="text-muted">
                             <li>각 계정의 이메일은 독립적으로 분류됩니다</li>
-                            <li>계정 간 전환이 가능합니다</li>
                             <li>기본 계정은 연결 해제할 수 없습니다</li>
                         </ul>
                     </div>
@@ -107,51 +97,6 @@
                         <a href="{{ url_for('auth.add_account') }}" class="btn btn-success btn-lg">
                             <i class="fas fa-plus"></i> Gmail 계정 추가
                         </a>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- 사용법 안내 -->
-<div class="row mt-4">
-    <div class="col-12">
-        <div class="card cleanbox-card">
-            <div class="card-header bg-info text-white">
-                <h5 class="mb-0"><i class="fas fa-question-circle"></i> 사용법 안내</h5>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-6">
-                        <h6><i class="fas fa-check-circle text-success"></i> 계정 전환</h6>
-                        <p class="text-muted">
-                            상단의 "전환" 버튼을 클릭하여 다른 Gmail 계정으로 전환할 수 있습니다.
-                            전환된 계정의 이메일만 표시됩니다.
-                        </p>
-                    </div>
-                    <div class="col-md-6">
-                        <h6><i class="fas fa-sync-alt text-primary"></i> 이메일 동기화</h6>
-                        <p class="text-muted">
-                            각 계정별로 Gmail 동기화를 수행할 수 있습니다.
-                            현재 선택된 계정의 이메일만 동기화됩니다.
-                        </p>
-                    </div>
-                </div>
-                <div class="row mt-3">
-                    <div class="col-md-6">
-                        <h6><i class="fas fa-tags text-warning"></i> 카테고리 관리</h6>
-                        <p class="text-muted">
-                            카테고리는 모든 계정에서 공유됩니다.
-                            각 계정의 이메일을 동일한 카테고리로 분류할 수 있습니다.
-                        </p>
-                    </div>
-                    <div class="col-md-6">
-                        <h6><i class="fas fa-shield-alt text-danger"></i> 보안</h6>
-                        <p class="text-muted">
-                            모든 계정의 OAuth 토큰은 암호화되어 안전하게 저장됩니다.
-                            연결 해제 시 해당 계정의 데이터는 즉시 삭제됩니다.
-                        </p>
                     </div>
                 </div>
             </div>

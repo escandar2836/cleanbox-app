@@ -485,47 +485,33 @@ function analyzeEmail(emailId) {
         });
 }
 
-// 분석 결과 표시
+// 분석 결과 표시 (경량화)
 function displayAnalysis(analysis) {
     const content = document.getElementById('analysisContent');
     
-    let sentimentClass = 'secondary';
-    if (analysis.sentiment.sentiment === 'positive') sentimentClass = 'success';
-    else if (analysis.sentiment.sentiment === 'negative') sentimentClass = 'danger';
-    
-    let spamClass = analysis.spam_check.is_spam ? 'danger' : 'success';
+    let unsubscribeHtml = '';
+    if (analysis.has_unsubscribe && analysis.unsubscribe_links.length > 0) {
+        unsubscribeHtml = `
+            <div class="col-md-6">
+                <h6><i class="fas fa-unlink"></i> 구독해지 링크</h6>
+                <div class="mb-3">
+                    ${analysis.unsubscribe_links.map(link => 
+                        `<a href="${link}" target="_blank" class="btn btn-outline-danger btn-sm me-2 mb-2">
+                            <i class="fas fa-external-link-alt"></i> 구독해지
+                        </a>`
+                    ).join('')}
+                </div>
+            </div>
+        `;
+    }
     
     content.innerHTML = `
         <div class="row">
             <div class="col-md-6">
-                <h6><i class="fas fa-heart"></i> 감정 분석</h6>
-                <div class="mb-3">
-                    <span class="badge bg-${sentimentClass}">${analysis.sentiment.sentiment}</span>
-                    <small class="text-muted">신뢰도: ${analysis.sentiment.confidence}%</small>
-                </div>
-                <p class="small text-muted">${analysis.sentiment.reason || '분석 이유 없음'}</p>
-            </div>
-            <div class="col-md-6">
-                <h6><i class="fas fa-shield-alt"></i> 스팸 판별</h6>
-                <div class="mb-3">
-                    <span class="badge bg-${spamClass}">${analysis.spam_check.is_spam ? '스팸' : '정상'}</span>
-                    <small class="text-muted">신뢰도: ${analysis.spam_check.confidence}%</small>
-                </div>
-                <p class="small text-muted">${analysis.spam_check.reason || '판별 이유 없음'}</p>
-            </div>
-        </div>
-        <hr>
-        <div class="row">
-            <div class="col-md-6">
-                <h6><i class="fas fa-tags"></i> 키워드</h6>
-                <div class="mb-3">
-                    ${analysis.keywords.map(keyword => `<span class="badge bg-light text-dark me-1">${keyword}</span>`).join('')}
-                </div>
-            </div>
-            <div class="col-md-6">
                 <h6><i class="fas fa-file-alt"></i> AI 요약</h6>
                 <p class="small">${analysis.summary}</p>
             </div>
+            ${unsubscribeHtml}
         </div>
     `;
 }

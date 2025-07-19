@@ -600,6 +600,56 @@ class TestAIClassifier:
 
         assert result[0] == 1
 
+    def test_extract_unsubscribe_links(self, app):
+        """구독해지 링크 추출 테스트"""
+        classifier = AIClassifier()
+
+        # HTML 이메일 내용
+        html_content = """
+        <html>
+            <body>
+                <a href="https://example.com/unsubscribe">구독해지</a>
+                <a href="https://newsletter.com/opt-out">구독 취소</a>
+                <p>다른 내용</p>
+            </body>
+        </html>
+        """
+
+        links = classifier.extract_unsubscribe_links(html_content)
+
+        assert len(links) >= 2
+        assert "unsubscribe" in links[0]
+        assert "opt-out" in links[1]
+
+    @patch("cleanbox.email.ai_classifier.requests.get")
+    def test_analyze_unsubscribe_page(self, mock_get, app):
+        """구독해지 페이지 분석 테스트"""
+        classifier = AIClassifier()
+
+        # 모의 HTML 응답
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.content = """
+        <html>
+            <head><title>구독해지</title></head>
+            <body>
+                <button>구독해지</button>
+                <a href="/unsubscribe">구독해지 링크</a>
+                <form action="/opt-out" method="post">
+                    <input name="email" type="email">
+                    <button type="submit">구독해지</button>
+                </form>
+            </body>
+        </html>
+        """
+        mock_get.return_value = mock_response
+
+        result = classifier.analyze_unsubscribe_page("https://example.com/unsubscribe")
+
+        assert result["success"] == True
+        assert len(result["unsubscribe_elements"]) > 0
+        assert len(result["forms"]) > 0
+
 
 class TestAdvancedUnsubscribe:
     """고급 구독해지 테스트"""

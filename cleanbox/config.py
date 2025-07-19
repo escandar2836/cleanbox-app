@@ -2,38 +2,26 @@ import os
 from cryptography.fernet import Fernet
 from dotenv import load_dotenv
 
-# .env 파일 로드 (Docker 환경에서도 작동하도록)
+# .env 파일 로드
 load_dotenv()
 
 
-def validate_fernet_key(key):
-    """Fernet 키가 유효한지 검증"""
-    try:
-        if isinstance(key, str):
-            # 문자열인 경우 bytes로 변환
-            key_bytes = key.encode() if isinstance(key, str) else key
-        else:
-            key_bytes = key
-
-        # Fernet 키 검증
-        Fernet(key_bytes)
-        return True
-    except Exception as e:
-        print(f"Invalid Fernet key: {e}")
-        return False
-
-
 def get_encryption_key():
-    """환경변수에서 암호화 키를 안전하게 가져옴"""
+    """암호화 키 생성 또는 로드"""
     key = os.environ.get("CLEANBOX_ENCRYPTION_KEY")
 
-    if key and validate_fernet_key(key):
-        return key
+    if not key:
+        # 키가 없으면 새로 생성
+        key = Fernet.generate_key().decode()
+        print(f"⚠️  새로운 암호화 키가 생성되었습니다. .env 파일에 다음을 추가하세요:")
+        print(f"CLEANBOX_ENCRYPTION_KEY={key}")
 
-    # 키가 없거나 유효하지 않으면 새로 생성
-    new_key = Fernet.generate_key()
-    print("Warning: Invalid or missing encryption key, generated new key")
-    return new_key
+    # 키 유효성 검증
+    try:
+        Fernet(key.encode())
+        return key.encode()
+    except Exception as e:
+        raise ValueError(f"잘못된 암호화 키 형식: {e}")
 
 
 class Config:
@@ -74,14 +62,16 @@ class Config:
     OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
     OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama2:3b")
 
-    # 스케줄러 설정
-    ENABLE_SCHEDULER = (
-        os.environ.get("CLEANBOX_ENABLE_SCHEDULER", "true").lower() == "true"
-    )
-    SYNC_INTERVAL_MINUTES = int(os.environ.get("CLEANBOX_SYNC_INTERVAL", "5"))
-    TOKEN_CHECK_INTERVAL_HOURS = int(
-        os.environ.get("CLEANBOX_TOKEN_CHECK_INTERVAL", "1")
-    )
+    # 스케줄러 설정 제거 - PROJECT_DESCRIPTION 기준으로 불필요한 기능
+    # ENABLE_SCHEDULER = (
+    #     os.environ.get("CLEANBOX_ENABLE_SCHEDULER", "true").lower() == "true"
+    # )
+    # SYNC_INTERVAL_MINUTES = int(
+    #     os.environ.get("CLEANBOX_SYNC_INTERVAL", "5").split("#")[0].strip()
+    # )
+    # TOKEN_CHECK_INTERVAL_HOURS = int(
+    #     os.environ.get("CLEANBOX_TOKEN_CHECK_INTERVAL", "1").split("#")[0].strip()
+    # )
 
     # 기타 CleanBox 관련 환경설정 추가 가능
 

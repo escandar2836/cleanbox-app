@@ -14,6 +14,4 @@ webdriver-manager
 pytest
 pytest-flask
 pytest-cov
-psycopg2-binary>=2.9.9
-apscheduler
-redis 
+psycopg2-binary>=2.9.9 
