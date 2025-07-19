@@ -30,6 +30,11 @@ def get_encryption_key():
 
 class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY") or "dev-secret-key"
+    # PostgreSQL 연결을 위한 환경변수 설정
+    if os.environ.get("DATABASE_URI") or os.environ.get("DATABASE_URL"):
+        # psycopg3 사용을 위한 환경변수 설정
+        os.environ.setdefault("PSYCOPG_IMPL", "psycopg")
+
     SQLALCHEMY_DATABASE_URI = (
         os.environ.get("DATABASE_URI")
         or os.environ.get("DATABASE_URL")
@@ -43,6 +48,9 @@ class Config:
         "pool_recycle": 300,
         "pool_size": 10,
         "max_overflow": 20,
+        "connect_args": {
+            "application_name": "cleanbox",
+        },
     }
 
     # Google OAuth 설정

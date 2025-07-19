@@ -10,6 +10,12 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_apscheduler import APScheduler
 from sqlalchemy.exc import OperationalError, DisconnectionError
 
+# psycopg3 강제 설정
+import os
+
+if os.environ.get("DATABASE_URI") or os.environ.get("DATABASE_URL"):
+    os.environ.setdefault("PSYCOPG_IMPL", "psycopg")
+
 # Local imports
 from .config import Config
 from .models import db, User
