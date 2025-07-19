@@ -13,4 +13,4 @@ if __name__ == "__main__":
 
     # 환경변수에서 포트 설정 읽기 (기본값: 5001)
     port = int(os.environ.get("FLASK_PORT", 5001))
-    app.run(debug=True, port=port)
+    app.run(debug=True, host="0.0.0.0", port=port)
