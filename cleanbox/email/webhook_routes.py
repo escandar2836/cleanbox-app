@@ -16,14 +16,18 @@ webhook_bp = Blueprint("webhook", __name__)
 def gmail_webhook():
     """Gmail 웹훅 처리"""
     try:
+        logger.info("웹훅 요청 수신")
+
         # 웹훅 검증
         if not _verify_webhook(request):
+            logger.warning("웹훅 검증 실패")
             return jsonify({"status": "error", "message": "인증 실패"}), 401
 
         # 웹훅 데이터 파싱
         data = request.get_json()
 
         if not data or "message" not in data:
+            logger.warning("잘못된 웹훅 데이터 구조")
             return jsonify({"status": "error", "message": "잘못된 웹훅 데이터"}), 400
 
         # 메시지 디코딩
@@ -34,17 +38,22 @@ def gmail_webhook():
         email_address = message.get("emailAddress")
         history_id = message.get("historyId")
 
+        logger.info(f"웹훅 처리: {email_address}, history_id: {history_id}")
+
         if not email_address or not history_id:
+            logger.warning("이메일 정보 누락")
             return jsonify({"status": "error", "message": "이메일 정보 없음"}), 400
 
         # 해당 계정 찾기
         account = UserAccount.query.filter_by(account_email=email_address).first()
         if not account:
+            logger.warning(f"계정을 찾을 수 없음: {email_address}")
             return jsonify({"status": "error", "message": "계정을 찾을 수 없음"}), 404
 
         # 새 이메일 처리
         process_new_emails_for_account(account)
 
+        logger.info(f"웹훅 처리 완료: {email_address}")
         return jsonify({"status": "success"})
 
     except Exception as e:
@@ -56,11 +65,25 @@ def gmail_webhook():
 def gmail_webhook_test():
     """Gmail 웹훅 테스트 엔드포인트"""
     try:
+        # 연결된 계정 정보도 함께 반환
+        accounts = UserAccount.query.filter_by(is_active=True).all()
+        account_info = [
+            {
+                "id": acc.id,
+                "email": acc.account_email,
+                "name": acc.account_name,
+                "is_primary": acc.is_primary,
+            }
+            for acc in accounts
+        ]
+
         return jsonify(
             {
                 "status": "success",
                 "message": "웹훅 엔드포인트가 정상 작동합니다",
                 "timestamp": datetime.utcnow().isoformat(),
+                "connected_accounts": account_info,
+                "webhook_url": "/webhook/gmail",
             }
         )
     except Exception as e:
@@ -68,18 +91,25 @@ def gmail_webhook_test():
 
 
 def _verify_webhook(request):
-    """웹훅 검증"""
+    """웹훅 검증 (완화된 버전)"""
     try:
         # Content-Type 확인
         if request.content_type != "application/json":
             logger.warning("잘못된 Content-Type")
             return False
 
-        # User-Agent 확인 (Google Cloud Pub/Sub)
+        # User-Agent 확인 (Google Cloud Pub/Sub) - 완화된 검증
         user_agent = request.headers.get("User-Agent", "")
-        if "Google-Cloud-PubSub" not in user_agent:
-            logger.warning("잘못된 User-Agent")
-            return False
+        # Google Cloud Pub/Sub의 실제 User-Agent는 다양할 수 있으므로 완화
+        if not user_agent or "Google" not in user_agent:
+            logger.warning(f"의심스러운 User-Agent: {user_agent}")
+            # 개발 환경에서는 더 관대하게 처리
+            import os
+
+            if os.environ.get("FLASK_ENV") == "development":
+                logger.info("개발 환경에서 User-Agent 검증 건너뜀")
+            else:
+                return False
 
         # 기본적인 요청 구조 확인
         data = request.get_json()

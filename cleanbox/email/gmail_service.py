@@ -237,13 +237,16 @@ class GmailService:
             raise Exception(f"이메일 DB 저장 실패: {str(e)}")
 
     def _parse_date(self, date_str: Optional[str]) -> Optional[datetime]:
-        """날짜 문자열을 datetime으로 변환"""
+        """날짜 문자열을 datetime으로 변환 (timezone-naive)"""
         if not date_str:
             return None
 
         try:
             # RFC 2822 형식 파싱
             parsed_date = email.utils.parsedate_to_datetime(date_str)
+            # timezone 정보 제거하여 timezone-naive datetime 반환
+            if parsed_date.tzinfo:
+                parsed_date = parsed_date.replace(tzinfo=None)
             return parsed_date
         except:
             return datetime.utcnow()
