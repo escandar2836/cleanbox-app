@@ -2,6 +2,49 @@
 
 {% block title %}CleanBox - 이메일 상세{% endblock %}
 
+{% block extra_css %}
+<style>
+.email-content {
+    font-family: inherit;
+    line-height: 1.6;
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+.email-content img {
+    max-width: 100%;
+    height: auto;
+}
+
+.email-content table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 10px 0;
+}
+
+.email-content table, .email-content th, .email-content td {
+    border: 1px solid #ddd;
+}
+
+.email-content th, .email-content td {
+    padding: 8px;
+    text-align: left;
+}
+
+.email-content a {
+    color: #007bff;
+    text-decoration: underline;
+}
+
+.email-content blockquote {
+    border-left: 4px solid #ddd;
+    margin: 10px 0;
+    padding-left: 15px;
+    color: #666;
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="row">
     <div class="col-md-8 mx-auto">
@@ -86,7 +129,9 @@
                 <div class="mb-4">
                     <h6><i class="fas fa-file-alt"></i> 이메일 내용</h6>
                     <div class="border rounded p-3 bg-light">
-                        <pre style="white-space: pre-wrap; font-family: inherit;">{{ email.content }}</pre>
+                        <div class="email-content">
+                            {{ email.content|safe }}
+                        </div>
                     </div>
                 </div>
                 
@@ -205,21 +250,17 @@ function analyzeEmail(emailId) {
         });
 }
 
-// 분석 결과 표시 (경량화)
+// 분석 결과 표시 (구조화된 요약)
 function displayAnalysis(analysis) {
     const content = document.getElementById('analysisContent');
     
-    let unsubscribeHtml = '';
-    if (analysis.has_unsubscribe && analysis.unsubscribe_links.length > 0) {
-        unsubscribeHtml = `
+    let categoryHtml = '';
+    if (analysis.category_name && analysis.category_name !== '미분류') {
+        categoryHtml = `
             <div class="col-md-6">
-                <h6><i class="fas fa-unlink"></i> 구독해지 링크</h6>
+                <h6><i class="fas fa-tag"></i> 분류 결과</h6>
                 <div class="mb-3">
-                    ${analysis.unsubscribe_links.map(link => 
-                        `<a href="${link}" target="_blank" class="btn btn-outline-danger btn-sm me-2 mb-2">
-                            <i class="fas fa-external-link-alt"></i> 구독해지
-                        </a>`
-                    ).join('')}
+                    <span class="badge bg-primary">${analysis.category_name}</span>
                 </div>
             </div>
         `;
@@ -229,9 +270,9 @@ function displayAnalysis(analysis) {
         <div class="row">
             <div class="col-md-6">
                 <h6><i class="fas fa-file-alt"></i> AI 요약</h6>
-                <p class="small">${analysis.summary}</p>
+                <div class="small" style="white-space: pre-line;">${analysis.summary}</div>
             </div>
-            ${unsubscribeHtml}
+            ${categoryHtml}
         </div>
     `;
 }
