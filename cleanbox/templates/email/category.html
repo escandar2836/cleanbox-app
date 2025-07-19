@@ -102,10 +102,11 @@
                                             {% if accounts and accounts|length > 1 %}
                                             <small class="text-info">
                                                 <i class="fas fa-envelope"></i> 
+                                                {% set found = false %}
                                                 {% for account in accounts %}
-                                                    {% if account.id == email.account_id %}
+                                                    {% if account.id == email.account_id and not found %}
                                                         {{ account.account_email }}
-                                                        {% break %}
+                                                        {% set found = true %}
                                                     {% endif %}
                                                 {% endfor %}
                                             </small>
