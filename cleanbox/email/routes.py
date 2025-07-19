@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for
 from flask_login import login_required, current_user
-from ..models import Email, Category, UserAccount, db
+from ..models import Email, Category, UserAccount, WebhookStatus, db
 from .gmail_service import GmailService
 from .ai_classifier import AIClassifier
 from datetime import datetime
@@ -641,7 +641,7 @@ def unsubscribe_email(email_id):
 def setup_webhook_for_account(user_id: str, account_id: int) -> bool:
     """계정별 웹훅 자동 설정"""
     try:
-        from .models import User, UserAccount, WebhookStatus
+        from .models import User, UserAccount
         from .gmail_service import GmailService
         import os
         from datetime import datetime, timedelta
