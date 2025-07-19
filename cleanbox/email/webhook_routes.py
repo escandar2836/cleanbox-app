@@ -173,6 +173,7 @@ def process_new_emails_for_account(account):
 
         processed_count = 0
         classified_count = 0
+        archived_count = 0
 
         for email_data in recent_emails:
             try:
@@ -216,6 +217,18 @@ def process_new_emails_for_account(account):
                             != "AI 처리를 사용할 수 없습니다. 수동으로 확인해주세요."
                         ):
                             email_obj.summary = summary
+
+                            # AI 분석 완료 후 Gmail에서 아카이브 처리
+                            try:
+                                gmail_service.archive_email(email_data["gmail_id"])
+                                email_obj.is_archived = True
+                                archived_count += 1
+                                logger.info(
+                                    f"✅ 웹훅 이메일 아카이브 완료: {email_data.get('subject', '제목 없음')}"
+                                )
+                            except Exception as e:
+                                logger.error(f"❌ 웹훅 이메일 아카이브 실패: {str(e)}")
+
                             db.session.commit()
 
                 logger.info(
@@ -227,7 +240,7 @@ def process_new_emails_for_account(account):
                 continue
 
         logger.info(
-            f"웹훅 처리 완료 - 계정: {account.account_email}, 처리: {processed_count}개, 분류: {classified_count}개"
+            f"웹훅 처리 완료 - 계정: {account.account_email}, 처리: {processed_count}개, 분류: {classified_count}개, 아카이브: {archived_count}개"
         )
 
     except Exception as e:

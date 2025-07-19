@@ -31,7 +31,7 @@ def list_emails():
                 "email/list.html", user=current_user, emails=[], stats={}, accounts=[]
             )
 
-        # 모든 계정의 이메일 통합 조회
+        # 모든 계정의 이메일 통합 조회 (생성 시간 기준 내림차순)
         emails = (
             Email.query.filter(
                 Email.user_id == current_user.id,
@@ -59,6 +59,11 @@ def list_emails():
             account_archived = Email.query.filter_by(
                 user_id=current_user.id, account_id=account.id, is_archived=True
             ).count()
+            account_analyzed = (
+                Email.query.filter_by(user_id=current_user.id, account_id=account.id)
+                .filter(Email.summary.isnot(None))
+                .count()
+            )
 
             account_stats[account.id] = {
                 "email": account.account_email,
@@ -66,6 +71,7 @@ def list_emails():
                 "count": account_emails,
                 "unread": account_unread,
                 "archived": account_archived,
+                "analyzed": account_analyzed,
             }
 
         # 통계 정보
@@ -73,6 +79,7 @@ def list_emails():
             "total": len(emails),
             "unread": sum(1 for e in emails if not e.is_read),
             "archived": sum(1 for e in emails if e.is_archived),
+            "analyzed": sum(1 for e in emails if e.summary),
             "account_stats": account_stats,
         }
 
@@ -415,6 +422,15 @@ def analyze_email(email_id):
         ):
             email_obj.summary = summary
 
+        # AI 분석 완료 후 Gmail에서 아카이브 처리
+        try:
+            gmail_service = GmailService(current_user.id, email_obj.account_id)
+            gmail_service.archive_email(email_obj.gmail_id)
+            email_obj.is_archived = True
+            print(f"✅ 이메일 아카이브 완료: {email_obj.subject}")
+        except Exception as e:
+            print(f"❌ 이메일 아카이브 실패: {str(e)}")
+
         db.session.commit()
 
         # 카테고리 정보 가져오기
@@ -430,6 +446,7 @@ def analyze_email(email_id):
             "category_id": category_id,
             "category_name": category_name,
             "summary": summary,
+            "archived": email_obj.is_archived,
             "success": True,
         }
 
@@ -503,6 +520,12 @@ def view_email(email_id):
         if not email_obj:
             flash("이메일을 찾을 수 없습니다.", "error")
             return redirect(url_for("email.list_emails"))
+
+        # 이메일 상세보기 시 자동 읽음 처리
+        if not email_obj.is_read:
+            email_obj.is_read = True
+            email_obj.updated_at = datetime.utcnow()
+            db.session.commit()
 
         # 카테고리 정보 (미분류 및 카테고리 없음 케이스 커버)
         category = None
@@ -1653,3 +1676,114 @@ def check_oauth_scopes():
         return jsonify(
             {"success": False, "message": f"OAuth 스코프 확인 실패: {str(e)}"}
         )
+
+
+@email_bp.route("/ai-analysis-stats")
+@login_required
+def ai_analysis_statistics():
+    """AI 분석 통계"""
+    try:
+        # AI 분석 완료된 이메일 수 (summary가 있는 이메일)
+        analyzed_count = (
+            Email.query.filter_by(user_id=current_user.id)
+            .filter(Email.summary.isnot(None))
+            .count()
+        )
+
+        # 전체 이메일 수
+        total_count = Email.query.filter_by(user_id=current_user.id).count()
+
+        # AI 분석 완료율
+        analysis_rate = (analyzed_count / total_count * 100) if total_count > 0 else 0
+
+        # 카테고리별 AI 분석 통계
+        category_stats = (
+            db.session.query(Category.name, db.func.count(Email.id).label("count"))
+            .join(Email, Category.id == Email.category_id)
+            .filter(
+                Email.user_id == current_user.id,
+                Email.summary.isnot(None),  # AI 분석 완료된 이메일만
+            )
+            .group_by(Category.id, Category.name)
+            .all()
+        )
+
+        # 아카이브된 AI 분석 이메일 수
+        archived_analyzed_count = (
+            Email.query.filter_by(user_id=current_user.id, is_archived=True)
+            .filter(Email.summary.isnot(None))
+            .count()
+        )
+
+        stats = {
+            "analyzed_count": analyzed_count,
+            "total_count": total_count,
+            "analysis_rate": round(analysis_rate, 2),
+            "archived_analyzed_count": archived_analyzed_count,
+            "category_stats": [
+                {"category_name": stat.name, "count": stat.count}
+                for stat in category_stats
+            ],
+        }
+
+        return jsonify({"success": True, "statistics": stats})
+
+    except Exception as e:
+        return jsonify({"success": False, "message": f"통계 조회 중 오류: {str(e)}"})
+
+
+@email_bp.route("/ai-analyzed-emails")
+@login_required
+def get_ai_analyzed_emails():
+    """AI 분석 완료된 이메일 목록"""
+    try:
+        page = request.args.get("page", 1, type=int)
+        per_page = request.args.get("per_page", 20, type=int)
+
+        # AI 분석 완료된 이메일 조회 (summary가 있는 이메일)
+        emails = (
+            Email.query.filter_by(user_id=current_user.id)
+            .filter(Email.summary.isnot(None))
+            .order_by(Email.updated_at.desc())
+            .paginate(page=page, per_page=per_page, error_out=False)
+        )
+
+        # 카테고리 정보 추가
+        for email in emails.items:
+            if email.category_id:
+                email.category_info = Category.query.filter_by(
+                    id=email.category_id, user_id=current_user.id
+                ).first()
+
+        result = {
+            "emails": [
+                {
+                    "id": email.id,
+                    "subject": email.subject,
+                    "sender": email.sender,
+                    "summary": email.summary,
+                    "category_name": (
+                        email.category_info.name
+                        if hasattr(email, "category_info") and email.category_info
+                        else "미분류"
+                    ),
+                    "is_archived": email.is_archived,
+                    "is_read": email.is_read,
+                    "updated_at": (
+                        email.updated_at.isoformat() if email.updated_at else None
+                    ),
+                }
+                for email in emails.items
+            ],
+            "pagination": {
+                "page": page,
+                "per_page": per_page,
+                "total": emails.total,
+                "pages": emails.pages,
+            },
+        }
+
+        return jsonify({"success": True, "data": result})
+
+    except Exception as e:
+        return jsonify({"success": False, "message": f"이메일 조회 중 오류: {str(e)}"})
