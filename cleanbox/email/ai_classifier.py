@@ -1,6 +1,7 @@
 import os
 import json
 import requests
+import time
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 
@@ -9,24 +10,72 @@ class AIClassifier:
     """AI 이메일 분류 및 요약 클래스"""
 
     def __init__(self):
-        self.api_key = os.environ.get("OPENAI_API_KEY")
-        self.base_url = "https://api.openai.com/v1/chat/completions"
-
-        # Ollama 설정
+        # Ollama 설정 (기본값: Ollama 사용)
         self.use_ollama = (
             os.environ.get("CLEANBOX_USE_OLLAMA", "true").lower() == "true"
         )
         self.ollama_url = os.environ.get("OLLAMA_URL", "http://localhost:11434")
-        self.ollama_model = os.environ.get("OLLAMA_MODEL", "llama2")
+        self.ollama_model = os.environ.get("OLLAMA_MODEL", "llama2:7b-chat-q4_0")
+
+        # Ollama 모델 자동 다운로드
+        if self.use_ollama:
+            self._ensure_ollama_model()
+
+    def _ensure_ollama_model(self):
+        """필요한 Ollama 모델이 있는지 확인하고 없으면 다운로드"""
+        try:
+            # Ollama 서비스가 준비될 때까지 대기
+            max_retries = 30
+            retry_count = 0
+
+            while retry_count < max_retries:
+                try:
+                    response = requests.get(f"{self.ollama_url}/api/tags", timeout=5)
+                    if response.status_code == 200:
+                        break
+                except:
+                    pass
+
+                print(f"Ollama 서비스 대기 중... ({retry_count + 1}/{max_retries})")
+                time.sleep(10)
+                retry_count += 1
+
+            if retry_count >= max_retries:
+                print("Ollama 서비스에 연결할 수 없습니다.")
+                return
+
+            # 모델 목록 확인
+            response = requests.get(f"{self.ollama_url}/api/tags")
+            if response.status_code == 200:
+                models = response.json().get("models", [])
+                model_names = [model.get("name") for model in models]
+
+                if self.ollama_model not in model_names:
+                    print(f"모델 다운로드 중: {self.ollama_model}")
+                    download_data = {"name": self.ollama_model}
+                    download_response = requests.post(
+                        f"{self.ollama_url}/api/pull",
+                        json=download_data,
+                        timeout=300,  # 5분 타임아웃
+                    )
+
+                    if download_response.status_code == 200:
+                        print(f"✅ 모델 다운로드 완료: {self.ollama_model}")
+                    else:
+                        print(f"❌ 모델 다운로드 실패: {self.ollama_model}")
+                else:
+                    print(f"✅ 모델이 이미 존재합니다: {self.ollama_model}")
+            else:
+                print("Ollama API에 연결할 수 없습니다.")
+
+        except Exception as e:
+            print(f"Ollama 모델 확인 중 오류: {str(e)}")
 
     def classify_email(
         self, email_content: str, subject: str, sender: str, categories: List[Dict]
     ) -> Tuple[Optional[int], str]:
         """이메일을 AI로 분류"""
         try:
-            if not self.api_key:
-                return None, "AI 기능을 사용하려면 OpenAI API 키를 설정해주세요."
-
             # 카테고리 정보 구성
             category_info = []
             for cat in categories:
@@ -43,11 +92,8 @@ class AIClassifier:
                 email_content, subject, sender, category_info
             )
 
-            # AI API 호출 (Ollama 또는 OpenAI)
-            if self.use_ollama:
-                response = self._call_ollama_api(prompt)
-            else:
-                response = self._call_openai_api(prompt)
+            # Ollama API 호출
+            response = self._call_ollama_api(prompt)
 
             if response:
                 # 응답 파싱
@@ -64,17 +110,11 @@ class AIClassifier:
     def summarize_email(self, email_content: str, subject: str) -> str:
         """이메일 요약"""
         try:
-            if not self.api_key:
-                return "AI 요약을 사용하려면 OpenAI API 키를 설정해주세요."
-
             # 요약 프롬프트 구성
             prompt = self._build_summary_prompt(email_content, subject)
 
-            # AI API 호출 (Ollama 또는 OpenAI)
-            if self.use_ollama:
-                response = self._call_ollama_api(prompt)
-            else:
-                response = self._call_openai_api(prompt)
+            # Ollama API 호출
+            response = self._call_ollama_api(prompt)
 
             if response:
                 return response.strip()
@@ -140,54 +180,6 @@ class AIClassifier:
 
         return prompt
 
-    def _call_openai_api(self, prompt: str) -> Optional[str]:
-        """OpenAI API 호출"""
-        try:
-            if not self.api_key:
-                print("OpenAI API 키가 설정되지 않았습니다.")
-                return None
-
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            }
-
-            data = {
-                "model": "gpt-3.5-turbo",
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": "당신은 CleanBox 이메일 정리 시스템의 AI 어시스턴트입니다. 사용자의 이메일을 분류하고 요약하는 작업을 수행합니다.",
-                    },
-                    {"role": "user", "content": prompt},
-                ],
-                "max_tokens": 500,
-                "temperature": 0.3,
-            }
-
-            response = requests.post(
-                self.base_url, headers=headers, json=data, timeout=30
-            )
-
-            if response.status_code == 200:
-                result = response.json()
-                return result["choices"][0]["message"]["content"]
-            elif response.status_code == 429:
-                print(
-                    "OpenAI API 사용량 한도를 초과했습니다. 잠시 후 다시 시도해주세요."
-                )
-                return None
-            elif response.status_code == 401:
-                print("OpenAI API 키가 유효하지 않습니다.")
-                return None
-            else:
-                print(f"OpenAI API 오류: {response.status_code} - {response.text}")
-                return None
-
-        except Exception as e:
-            print(f"OpenAI API 호출 실패: {str(e)}")
-            return None
-
     def _call_ollama_api(self, prompt: str) -> Optional[str]:
         """Ollama API 호출"""
         try:
@@ -195,19 +187,37 @@ class AIClassifier:
                 print("Ollama가 비활성화되어 있습니다.")
                 return None
 
-            data = {"model": self.ollama_model, "prompt": prompt, "stream": False}
+            # Ollama API 요청 데이터
+            data = {
+                "model": self.ollama_model,
+                "prompt": prompt,
+                "stream": False,
+                "options": {"temperature": 0.3, "top_p": 0.9, "max_tokens": 500},
+            }
 
             response = requests.post(
-                f"{self.ollama_url}/api/generate", json=data, timeout=60
+                f"{self.ollama_url}/api/generate",
+                json=data,
+                timeout=120,  # Ollama는 더 오래 걸릴 수 있음
             )
 
             if response.status_code == 200:
                 result = response.json()
                 return result.get("response", "")
+            elif response.status_code == 404:
+                print(
+                    f"Ollama 모델 '{self.ollama_model}'을 찾을 수 없습니다. 모델을 다운로드해주세요."
+                )
+                return None
             else:
                 print(f"Ollama API 오류: {response.status_code} - {response.text}")
                 return None
 
+        except requests.exceptions.ConnectionError:
+            print(
+                "Ollama 서버에 연결할 수 없습니다. Ollama가 실행 중인지 확인해주세요."
+            )
+            return None
         except Exception as e:
             print(f"Ollama API 호출 실패: {str(e)}")
             return None
@@ -251,9 +261,6 @@ class AIClassifier:
     def analyze_email_sentiment(self, content: str, subject: str) -> Dict:
         """이메일 감정 분석"""
         try:
-            if not self.api_key:
-                return {"sentiment": "neutral", "confidence": 0}
-
             prompt = f"""다음 이메일의 감정을 분석해주세요.
 
 제목: {subject}
@@ -264,7 +271,7 @@ class AIClassifier:
 신뢰도: [0-100]
 이유: [간단한 설명]"""
 
-            response = self._call_openai_api(prompt)
+            response = self._call_ollama_api(prompt)
 
             if response:
                 return self._parse_sentiment_response(response)
@@ -301,16 +308,13 @@ class AIClassifier:
     def extract_keywords(self, content: str) -> List[str]:
         """키워드 추출"""
         try:
-            if not self.api_key:
-                return []
-
             prompt = f"""다음 이메일에서 중요한 키워드 5개를 추출해주세요.
 
 내용: {content[:1000]}...
 
 키워드만 쉼표로 구분하여 응답하세요. 예시: 회의, 프로젝트, 마감일, 예산, 팀원"""
 
-            response = self._call_openai_api(prompt)
+            response = self._call_ollama_api(prompt)
 
             if response:
                 keywords = [kw.strip() for kw in response.split(",")]
@@ -324,9 +328,6 @@ class AIClassifier:
     def is_spam_or_unwanted(self, content: str, subject: str, sender: str) -> Dict:
         """스팸/원하지 않는 이메일 판별"""
         try:
-            if not self.api_key:
-                return {"is_spam": False, "confidence": 0}
-
             prompt = f"""다음 이메일이 스팸이거나 원하지 않는 이메일인지 판별해주세요.
 
 제목: {subject}
@@ -338,7 +339,7 @@ class AIClassifier:
 신뢰도: [0-100]
 이유: [판별 이유]"""
 
-            response = self._call_openai_api(prompt)
+            response = self._call_ollama_api(prompt)
 
             if response:
                 return self._parse_spam_response(response)

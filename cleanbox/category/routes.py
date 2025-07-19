@@ -18,7 +18,7 @@ category_bp = Blueprint("category", __name__)
 @category_bp.route("/")
 @login_required
 def list_categories():
-    """카테고리 목록 페이지"""
+    """카테고리 관리 페이지"""
     # 인증 상태 재확인
     if not current_user.is_authenticated:
         flash("로그인이 필요합니다.", "error")
@@ -33,7 +33,15 @@ def list_categories():
         flash("연결된 Gmail 계정이 없습니다.", "warning")
         return redirect(url_for("auth.manage_accounts"))
 
-    return render_template("category/list.html", user=current_user, accounts=accounts)
+    # 사용자의 활성 카테고리 목록
+    categories = Category.query.filter_by(user_id=current_user.id, is_active=True).all()
+
+    return render_template(
+        "category/manage.html",
+        user=current_user,
+        accounts=accounts,
+        categories=categories,
+    )
 
 
 @category_bp.route("/add", methods=["GET", "POST"])

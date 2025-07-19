@@ -42,10 +42,12 @@ def create_app(config_class=Config):
     from .auth.routes import auth_bp
     from .category.routes import category_bp
     from .email.routes import email_bp
+    from .main.routes import main_bp
 
     app.register_blueprint(auth_bp, url_prefix="/auth")
     app.register_blueprint(category_bp, url_prefix="/category")
     app.register_blueprint(email_bp, url_prefix="/email")
+    app.register_blueprint(main_bp, url_prefix="/main")
 
     # 메인 페이지 설정
     @app.route("/")
@@ -60,7 +62,7 @@ def create_app(config_class=Config):
             session.pop("adding_account", None)
             return render_template("landing.html")
         else:
-            return redirect(url_for("category.list_categories"))
+            return redirect(url_for("main.dashboard"))
 
     # 데이터베이스 초기화 (테스트 환경이 아닌 경우에만)
     if not app.config.get("TESTING", False):

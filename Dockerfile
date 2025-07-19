@@ -8,6 +8,8 @@ RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
     libpq-dev \
+    curl \
+    postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 # Python 의존성 파일 복사 및 설치
@@ -25,5 +27,8 @@ ENV PYTHONPATH=/app
 # 포트 노출
 EXPOSE 5001
 
-# 애플리케이션 실행
-CMD ["python", "run.py"] 
+# 스크립트 실행 권한 부여
+RUN chmod +x scripts/*.sh
+
+# 애플리케이션 실행 (서비스 대기 후 시작)
+CMD ["./scripts/wait-for-services.sh", "python", "run.py"] 

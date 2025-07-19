@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+
+{% block title %}CleanBox - 카테고리 관리{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1><i class="fas fa-cogs"></i> 카테고리 관리</h1>
+            <div>
+                <a href="{{ url_for('main.dashboard') }}" class="btn btn-secondary me-2">
+                    <i class="fas fa-home"></i> 대시보드
+                </a>
+                <a href="{{ url_for('category.add_category') }}" class="btn btn-success">
+                    <i class="fas fa-plus"></i> 새 카테고리 추가
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 카테고리 목록 -->
+<div class="row">
+    <div class="col-12">
+        <div class="card cleanbox-card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="fas fa-list"></i> 내 카테고리 목록</h5>
+            </div>
+            <div class="card-body">
+                {% if categories %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>카테고리</th>
+                                <th>설명</th>
+                                <th>이메일 수</th>
+                                <th>생성일</th>
+                                <th>액션</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for category in categories %}
+                            <tr>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <i class="{{ category.icon }}" style="color: {{ category.color }}; margin-right: 10px; font-size: 1.2em;"></i>
+                                        <strong>{{ category.name }}</strong>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="text-muted">{{ category.description or '설명 없음' }}</span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-primary rounded-pill">{{ category.emails|length if category.emails else 0 }}</span>
+                                </td>
+                                <td>
+                                    <small class="text-muted">{{ category.created_at.strftime('%Y-%m-%d') if category.created_at else 'N/A' }}</small>
+                                </td>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        <a href="{{ url_for('email.category_emails', category_id=category.id) }}" class="btn btn-outline-primary" title="이메일 보기">
+                                            <i class="fas fa-envelope"></i>
+                                        </a>
+                                        <a href="{{ url_for('category.edit_category', category_id=category.id) }}" class="btn btn-outline-secondary" title="수정">
+                                            <i class="fas fa-edit"></i>
+                                        </a>
+                                        <button class="btn btn-outline-danger" onclick="confirmDelete({{ category.id }}, '{{ category.name }}')" title="삭제">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="fas fa-inbox fa-4x text-muted mb-4"></i>
+                    <h4 class="text-muted">아직 카테고리가 없습니다</h4>
+                    <p class="text-muted">첫 번째 카테고리를 추가하여 CleanBox를 시작해보세요!</p>
+                    <a href="{{ url_for('category.add_category') }}" class="btn btn-success btn-lg">
+                        <i class="fas fa-plus"></i> 첫 카테고리 추가
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 카테고리 관리 팁 -->
+{% if categories %}
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card cleanbox-card">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="fas fa-lightbulb"></i> 카테고리 관리 팁</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <h6><i class="fas fa-edit text-primary"></i> 카테고리 수정</h6>
+                        <p class="text-muted small">카테고리 이름, 설명, 색상, 아이콘을 언제든지 수정할 수 있습니다.</p>
+                    </div>
+                    <div class="col-md-4">
+                        <h6><i class="fas fa-trash text-danger"></i> 카테고리 삭제</h6>
+                        <p class="text-muted small">카테고리를 삭제하면 해당 카테고리의 이메일도 함께 정리됩니다.</p>
+                    </div>
+                    <div class="col-md-4">
+                        <h6><i class="fas fa-envelope text-success"></i> 이메일 관리</h6>
+                        <p class="text-muted small">각 카테고리의 이메일을 확인하고 관리할 수 있습니다.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- 삭제 확인 모달 -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title"><i class="fas fa-exclamation-triangle"></i> 카테고리 삭제</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>정말로 <strong id="categoryName"></strong> 카테고리를 삭제하시겠습니까?</p>
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <strong>주의:</strong> 이 카테고리에 속한 모든 이메일도 함께 삭제됩니다.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">취소</button>
+                <form id="deleteForm" method="POST" style="display: inline;">
+                    <button type="submit" class="btn btn-danger">삭제</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function confirmDelete(categoryId, categoryName) {
+    document.getElementById('categoryName').textContent = categoryName;
+    document.getElementById('deleteForm').action = "{{ url_for('category.delete_category', category_id=0) }}".replace('0', categoryId);
+    new bootstrap.Modal(document.getElementById('deleteModal')).show();
+}
+</script>
+{% endblock %} 

@@ -8,7 +8,7 @@ class Config:
         "CLEANBOX_DATABASE_URI",
         "postgresql://cleanbox_user:cleanbox_password@localhost:5432/cleanbox",
     )
-    SQLALCHEMY_ENGINE_OPTIONS = {"connect_args": {"connect_timeout": 10}}
+    SQLALCHEMY_ENGINE_OPTIONS = {}
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # Google OAuth 설정
@@ -40,8 +40,7 @@ class Config:
     ENABLE_AI_FEATURES = os.environ.get("CLEANBOX_ENABLE_AI", "true").lower() == "true"
     USE_OLLAMA = os.environ.get("CLEANBOX_USE_OLLAMA", "true").lower() == "true"
     OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
-    OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama2")
-    OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")  # 백업용
+    OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama2:7b-chat-q4_0")
 
     # 기타 CleanBox 관련 환경설정 추가 가능
 
@@ -54,7 +53,7 @@ class TestConfig(Config):
         "CLEANBOX_DATABASE_URI",
         "postgresql://cleanbox_user:cleanbox_password@localhost:5433/cleanbox_test",
     )
-    SQLALCHEMY_ENGINE_OPTIONS = {"connect_args": {"connect_timeout": 10}}
+    SQLALCHEMY_ENGINE_OPTIONS = {}
     WTF_CSRF_ENABLED = False
     # 테스트 환경에서는 데이터베이스 초기화를 수동으로 제어
     INIT_DB = False
