@@ -30,18 +30,44 @@
             <div class="card-body">
                 <div class="mb-3">
                     <h6><i class="fas fa-user"></i> 현재 연결된 계정</h6>
-                    <div class="d-flex align-items-center mb-2">
-                        {% if user.picture %}
-                        <img src="{{ user.picture }}" alt="프로필" class="rounded-circle me-2" width="32" height="32">
-                        {% else %}
-                        <i class="fas fa-user-circle fa-2x text-muted me-2"></i>
-                        {% endif %}
-                        <div>
-                            <strong>{{ user.name or user.email }}</strong><br>
-                            <small class="text-muted">{{ user.email }}</small>
+                    
+                    {% if accounts %}
+                        <div class="list-group list-group-flush">
+                            {% for account in accounts %}
+                            <div class="list-group-item d-flex justify-content-between align-items-center">
+                                <div class="d-flex align-items-center">
+                                    <i class="fas fa-envelope text-primary me-2"></i>
+                                    <div>
+                                        <strong>{{ account.account_name or account.account_email }}</strong><br>
+                                        <small class="text-muted">{{ account.account_email }}</small>
+                                    </div>
+                                </div>
+                                <div class="d-flex align-items-center">
+                                    {% if account.is_primary %}
+                                        <span class="badge bg-warning text-dark me-2">기본</span>
+                                    {% endif %}
+                                    {% if account.is_active %}
+                                        <span class="badge bg-success">활성</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">비활성</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% endfor %}
                         </div>
-                    </div>
-                    <span class="badge bg-success">연결됨</span>
+                        <div class="mt-3">
+                            <small class="text-muted">
+                                <i class="fas fa-info-circle"></i> 
+                                총 {{ accounts|length }}개의 Gmail 계정이 연결되어 있습니다.
+                            </small>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-3">
+                            <i class="fas fa-envelope fa-2x text-muted mb-2"></i>
+                            <h6 class="text-muted">연결된 Gmail 계정이 없습니다</h6>
+                            <p class="text-muted small">첫 번째 Gmail 계정을 연결하여 CleanBox를 시작해보세요!</p>
+                        </div>
+                    {% endif %}
                 </div>
                 
                 <div class="mb-3">
