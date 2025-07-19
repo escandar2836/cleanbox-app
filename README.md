@@ -23,6 +23,10 @@ CLEANBOX_ENCRYPTION_KEY=NZnrraDcMdcD7vmY0Gd5YXqkCbm-28MgyZfcaJCAYgc=
 # Google OAuth 설정
 GOOGLE_CLIENT_ID=your-google-client-id
 GOOGLE_CLIENT_SECRET=your-google-client-secret
+
+# OpenAI 설정
+OPENAI_API_KEY=your-openai-api-key
+OPENAI_MODEL=gpt-4.1-nano
 ```
 
 **Fernet 키 생성 방법**:
@@ -30,21 +34,21 @@ GOOGLE_CLIENT_SECRET=your-google-client-secret
 python3 -c "from cryptography.fernet import Fernet; print('Generated Fernet Key:', Fernet.generate_key().decode())"
 ```
 
-### 2. Docker로 실행
+### 2. 로컬 개발 환경 실행
 
 ```bash
-# 3. Docker Compose로 실행
-docker-compose up -d
+# 3. 가상환경 생성 및 활성화
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
 
-# 4. 로그 확인
-docker-compose logs -f cleanbox
-```
+# 4. 의존성 설치
+pip install -r requirements.txt
 
-### 3. 환경변수 검증
-
-```bash
-# 환경변수가 올바르게 설정되었는지 확인
+# 5. 환경변수 검증
 python scripts/validate-env.py
+
+# 6. 애플리케이션 실행
+python app.py
 ```
 
 ## 🔧 문제 해결
@@ -64,15 +68,14 @@ python scripts/validate-env.py
    CLEANBOX_ENCRYPTION_KEY=생성된_키_값
    ```
 
-3. Docker 컨테이너 재시작:
+3. 애플리케이션 재시작:
    ```bash
-   docker-compose down
-   docker-compose up -d
+   python app.py
    ```
 
 ### 환경변수 로딩 문제 해결
 
-**문제**: Docker 환경에서 환경변수가 제대로 로드되지 않음
+**문제**: 환경변수가 제대로 로드되지 않음
 
 **해결 방법**:
 1. 환경변수 검증 스크립트 실행:
@@ -80,13 +83,17 @@ python scripts/validate-env.py
    python scripts/validate-env.py
    ```
 
-2. Docker Compose 파일에서 환경변수 확인:
-   ```yaml
-   environment:
-     - CLEANBOX_ENCRYPTION_KEY=${CLEANBOX_ENCRYPTION_KEY}
-   ```
+2. `.env` 파일이 프로젝트 루트에 있는지 확인
 
-3. `.env` 파일이 프로젝트 루트에 있는지 확인
+3. 환경변수 파일 형식 확인:
+   ```bash
+   # .env 파일 예시
+   FLASK_APP=app.py
+   FLASK_ENV=development
+   FLASK_PORT=5001
+   CLEANBOX_SECRET_KEY=your-secret-key-here
+   CLEANBOX_ENCRYPTION_KEY=your-encryption-key-here
+   ```
 
 ## 📋 주요 기능
 
@@ -113,7 +120,7 @@ cp env.example .env
 # .env 파일 편집
 
 # 애플리케이션 실행
-python run.py
+python app.py
 ```
 
 ### 테스트 실행
@@ -137,7 +144,6 @@ cleanbox-app/
 │   └── main/          # 메인 기능
 ├── scripts/           # 유틸리티 스크립트
 ├── tests/            # 테스트 코드
-├── docker-compose.yml # Docker 설정
 └── requirements.txt   # Python 의존성
 ```
 
@@ -147,6 +153,22 @@ cleanbox-app/
 - **환경변수**: 민감한 정보는 환경변수로 관리
 - **OAuth 2.0**: Google API 안전한 접근
 
-## �� 라이선스
+## 🚀 배포
+
+### Render 배포
+
+1. **Render 계정 생성 및 프로젝트 연결**
+2. **환경변수 설정**:
+   ```
+   GOOGLE_CLIENT_ID=your-google-client-id
+   GOOGLE_CLIENT_SECRET=your-google-client-secret
+   GOOGLE_REDIRECT_URI=https://your-app.onrender.com/auth/callback
+   OPENAI_API_KEY=your-openai-api-key
+   OPENAI_MODEL=gpt-4.1-nano
+   ```
+3. **PostgreSQL 데이터베이스 생성** (Render에서 제공)
+4. **배포 완료**
+
+## 📄 라이선스
 
 MIT License
