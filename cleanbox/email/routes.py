@@ -12,38 +12,69 @@ email_bp = Blueprint("email", __name__)
 @email_bp.route("/")
 @login_required
 def list_emails():
-    """이메일 목록 페이지"""
+    """이메일 목록 페이지 (모든 계정 통합)"""
     try:
-        # 사용자별 이메일만 조회
+        # 모든 활성 계정 가져오기
+        accounts = UserAccount.query.filter_by(
+            user_id=current_user.id, is_active=True
+        ).all()
+
+        if not accounts:
+            flash("연결된 계정이 없습니다.", "error")
+            return render_template(
+                "email/list.html", user=current_user, emails=[], stats={}, accounts=[]
+            )
+
+        # 모든 계정의 이메일 통합 조회
         emails = (
-            Email.query.filter_by(user_id=current_user.id)
+            Email.query.filter(
+                Email.user_id == current_user.id,
+                Email.account_id.in_([acc.id for acc in accounts]),
+            )
             .order_by(Email.created_at.desc())
-            .limit(50)
+            .limit(100)  # 더 많은 이메일 표시
             .all()
         )
+
+        # 계정별 이메일 수 계산
+        account_stats = {}
+        for account in accounts:
+            account_emails = [e for e in emails if e.account_id == account.id]
+            account_stats[account.id] = {
+                "email": account.account_email,
+                "name": account.account_name,
+                "count": len(account_emails),
+                "unread": sum(1 for e in account_emails if not e.is_read),
+                "archived": sum(1 for e in account_emails if e.is_archived),
+            }
 
         # 통계 정보
         stats = {
             "total": len(emails),
             "unread": sum(1 for e in emails if not e.is_read),
             "archived": sum(1 for e in emails if e.is_archived),
+            "account_stats": account_stats,
         }
 
         return render_template(
-            "email/list.html", user=current_user, emails=emails, stats=stats
+            "email/list.html",
+            user=current_user,
+            emails=emails,
+            stats=stats,
+            accounts=accounts,
         )
 
     except Exception as e:
         flash(f"이메일 목록을 불러오는 중 오류가 발생했습니다: {str(e)}", "error")
         return render_template(
-            "email/list.html", user=current_user, emails=[], stats={}
+            "email/list.html", user=current_user, emails=[], stats={}, accounts=[]
         )
 
 
 @email_bp.route("/<int:category_id>")
 @login_required
 def category_emails(category_id):
-    """카테고리별 이메일 목록"""
+    """카테고리별 이메일 목록 (모든 계정 통합)"""
     try:
         # 사용자별 카테고리 확인
         category = Category.query.filter_by(
@@ -53,15 +84,39 @@ def category_emails(category_id):
             flash("카테고리를 찾을 수 없습니다.", "error")
             return redirect(url_for("email.list_emails"))
 
-        # 해당 카테고리의 사용자별 이메일 조회
+        # 모든 활성 계정 가져오기
+        accounts = UserAccount.query.filter_by(
+            user_id=current_user.id, is_active=True
+        ).all()
+
+        # 해당 카테고리의 모든 계정 이메일 조회
         emails = (
-            Email.query.filter_by(user_id=current_user.id, category_id=category_id)
+            Email.query.filter(
+                Email.user_id == current_user.id,
+                Email.category_id == category_id,
+                Email.account_id.in_([acc.id for acc in accounts]),
+            )
             .order_by(Email.created_at.desc())
             .all()
         )
 
+        # 계정별 이메일 수 계산
+        account_stats = {}
+        for account in accounts:
+            account_emails = [e for e in emails if e.account_id == account.id]
+            account_stats[account.id] = {
+                "email": account.account_email,
+                "name": account.account_name,
+                "count": len(account_emails),
+            }
+
         return render_template(
-            "email/category.html", user=current_user, category=category, emails=emails
+            "email/category.html",
+            user=current_user,
+            category=category,
+            emails=emails,
+            accounts=accounts,
+            account_stats=account_stats,
         )
 
     except Exception as e:
@@ -72,94 +127,142 @@ def category_emails(category_id):
 @email_bp.route("/sync", methods=["POST"])
 @login_required
 def sync_emails():
-    """Gmail에서 이메일 동기화 (페이지네이션 지원)"""
+    """Gmail에서 이메일 동기화 (모든 계정)"""
     try:
         page = request.form.get("page", 1, type=int)
         per_page = 20  # 한 번에 20개씩
 
-        gmail_service = GmailService(current_user.id)
-        ai_classifier = AIClassifier()
+        # 모든 활성 계정 가져오기
+        accounts = UserAccount.query.filter_by(
+            user_id=current_user.id, is_active=True
+        ).all()
 
-        # 페이지네이션을 위한 오프셋 계산
-        offset = (page - 1) * per_page
+        if not accounts:
+            return jsonify({"success": False, "message": "연결된 계정이 없습니다."})
 
-        # 최근 이메일 가져오기 (페이지네이션 적용)
-        recent_emails = gmail_service.fetch_recent_emails(
-            max_results=per_page, offset=offset
-        )
+        total_processed = 0
+        total_classified = 0
+        account_results = []
 
-        if not recent_emails:
-            if page == 1:
-                flash("동기화할 새 이메일이 없습니다.", "info")
-            else:
-                flash("더 이상 가져올 이메일이 없습니다.", "info")
-            return redirect(url_for("email.list_emails"))
-
-        # 사용자 카테고리 가져오기
-        categories = gmail_service.get_user_categories()
-
-        processed_count = 0
-        classified_count = 0
-
-        for email_data in recent_emails:
+        # 모든 계정에 대해 동기화 수행
+        for account in accounts:
             try:
-                # DB에 저장
-                email_obj = gmail_service.save_email_to_db(email_data)
+                print(f"🔍 동기화 - 계정: {account.account_email}")
 
-                if email_obj:
-                    processed_count += 1
+                gmail_service = GmailService(current_user.id, account.id)
+                ai_classifier = AIClassifier()
 
-                    # AI 분류 시도
-                    if categories:
-                        category_id, reasoning = ai_classifier.classify_email(
-                            email_data["body"],
-                            email_data["subject"],
-                            email_data["sender"],
-                            categories,
-                        )
+                # 페이지네이션을 위한 오프셋 계산
+                offset = (page - 1) * per_page
 
-                        if category_id:
-                            gmail_service.update_email_category(
-                                email_data["gmail_id"], category_id
-                            )
-                            classified_count += 1
+                # 최근 이메일 가져오기 (페이지네이션 적용)
+                recent_emails = gmail_service.fetch_recent_emails(
+                    max_results=per_page, offset=offset
+                )
 
-                    # AI 요약 생성
-                    summary = ai_classifier.summarize_email(
-                        email_data["body"], email_data["subject"]
+                if not recent_emails:
+                    account_results.append(
+                        {
+                            "account": account.account_email,
+                            "processed": 0,
+                            "classified": 0,
+                            "status": "no_new_emails",
+                        }
                     )
-                    if (
-                        summary
-                        and summary
-                        != "AI 요약을 사용할 수 없습니다. 이메일 내용을 직접 확인해주세요."
-                    ):
-                        email_obj.summary = summary
-                        db.session.commit()
+                    continue
+
+                # 사용자 카테고리 가져오기
+                categories = gmail_service.get_user_categories()
+
+                account_processed = 0
+                account_classified = 0
+
+                for email_data in recent_emails:
+                    try:
+                        # DB에 저장
+                        email_obj = gmail_service.save_email_to_db(email_data)
+
+                        if email_obj:
+                            account_processed += 1
+                            total_processed += 1
+
+                            # AI 분류 시도
+                            if categories:
+                                category_id, reasoning = ai_classifier.classify_email(
+                                    email_data["body"],
+                                    email_data["subject"],
+                                    email_data["sender"],
+                                    categories,
+                                )
+
+                                if category_id:
+                                    gmail_service.update_email_category(
+                                        email_data["gmail_id"], category_id
+                                    )
+                                    account_classified += 1
+                                    total_classified += 1
+
+                            # AI 요약 생성
+                            summary = ai_classifier.summarize_email(
+                                email_data["body"], email_data["subject"]
+                            )
+                            if (
+                                summary
+                                and summary
+                                != "AI 요약을 사용할 수 없습니다. 이메일 내용을 직접 확인해주세요."
+                            ):
+                                email_obj.summary = summary
+                                db.session.commit()
+
+                    except Exception as e:
+                        print(f"이메일 처리 실패: {str(e)}")
+                        continue
+
+                account_results.append(
+                    {
+                        "account": account.account_email,
+                        "processed": account_processed,
+                        "classified": account_classified,
+                        "status": "success",
+                    }
+                )
 
             except Exception as e:
-                print(f"이메일 처리 실패: {str(e)}")
-                continue
+                print(f"계정 {account.account_email} 동기화 실패: {str(e)}")
+                account_results.append(
+                    {
+                        "account": account.account_email,
+                        "processed": 0,
+                        "classified": 0,
+                        "status": "error",
+                        "error": str(e),
+                    }
+                )
 
-        # 다음 페이지가 있는지 확인
-        next_page_emails = gmail_service.fetch_recent_emails(
-            max_results=per_page, offset=offset + per_page
-        )
-
-        has_more = len(next_page_emails) > 0
+        # 다음 페이지가 있는지 확인 (첫 번째 계정 기준)
+        if accounts:
+            gmail_service = GmailService(current_user.id, accounts[0].id)
+            next_page_emails = gmail_service.fetch_recent_emails(
+                max_results=per_page, offset=offset + per_page
+            )
+            has_more = len(next_page_emails) > 0
+        else:
+            has_more = False
 
         flash(
-            f"페이지 {page}: {processed_count}개의 이메일을 처리했습니다. (AI 분류: {classified_count}개)",
+            f"모든 계정 동기화 완료: {total_processed}개 처리, {total_classified}개 AI 분류",
             "success",
         )
 
         return jsonify(
             {
                 "success": True,
-                "processed": processed_count,
-                "classified": classified_count,
+                "processed": total_processed,
+                "classified": total_classified,
                 "page": page,
                 "has_more": has_more,
                 "next_page": page + 1 if has_more else None,
+                "account_results": account_results,
             }
         )
 
@@ -278,12 +381,53 @@ def analyze_email(email_id):
 @email_bp.route("/statistics")
 @login_required
 def email_statistics():
-    """이메일 통계"""
+    """이메일 통계 (모든 계정 합산)"""
     try:
-        gmail_service = GmailService(current_user.id)
-        stats = gmail_service.get_email_statistics()
+        from ..auth.routes import get_current_account_id
 
-        return jsonify({"success": True, "statistics": stats})
+        # 모든 활성 계정 가져오기
+        accounts = UserAccount.query.filter_by(
+            user_id=current_user.id, is_active=True
+        ).all()
+
+        if not accounts:
+            return jsonify(
+                {
+                    "success": True,
+                    "statistics": {
+                        "total": 0,
+                        "unread": 0,
+                        "archived": 0,
+                        "categories": {},
+                    },
+                }
+            )
+
+        # 모든 계정의 통계 합산
+        total_stats = {"total": 0, "unread": 0, "archived": 0, "categories": {}}
+
+        for account in accounts:
+            try:
+                gmail_service = GmailService(current_user.id, account.id)
+                account_stats = gmail_service.get_email_statistics()
+
+                # 기본 통계 합산
+                total_stats["total"] += account_stats.get("total", 0)
+                total_stats["unread"] += account_stats.get("unread", 0)
+                total_stats["archived"] += account_stats.get("archived", 0)
+
+                # 카테고리별 통계 합산
+                for category_id, count in account_stats.get("categories", {}).items():
+                    if category_id in total_stats["categories"]:
+                        total_stats["categories"][category_id] += count
+                    else:
+                        total_stats["categories"][category_id] = count
+
+            except Exception as e:
+                print(f"계정 {account.account_email} 통계 조회 실패: {str(e)}")
+                continue
+
+        return jsonify({"success": True, "statistics": total_stats})
 
     except Exception as e:
         return jsonify({"success": False, "message": f"통계 조회 중 오류: {str(e)}"})

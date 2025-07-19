@@ -72,7 +72,7 @@ def login():
 
 @auth_bp.route("/callback")
 def callback():
-    """Google OAuth 콜백 처리"""
+    """Google OAuth 콜백 처리 (로그인 및 계정 추가 통합)"""
     try:
         # 세션 state 검증
         if "state" not in session:
@@ -103,6 +103,26 @@ def callback():
             GOOGLE_CLIENT_CONFIG["web"]["client_id"],
         )
 
+        # 추가 계정 연결인지 확인
+        is_adding_account = session.get("adding_account", False)
+
+        if is_adding_account:
+            # 추가 계정 연결 처리
+            return _handle_add_account_callback(credentials, id_info)
+        else:
+            # 일반 로그인 처리
+            return _handle_login_callback(credentials, id_info)
+
+    except Exception as e:
+        # 더 자세한 에러 로깅
+        print(f"OAuth 콜백 에러: {str(e)}")
+        flash(f"로그인 중 오류가 발생했습니다: {str(e)}", "error")
+        return redirect(url_for("auth.login"))
+
+
+def _handle_login_callback(credentials, id_info):
+    """일반 로그인 콜백 처리"""
+    try:
         # 사용자 조회 또는 생성
         user = User.query.get(id_info["sub"])
         if not user:
@@ -151,71 +171,30 @@ def callback():
         user.last_login = datetime.utcnow()
         db.session.commit()
 
-        # 세션 state 정리
+        # 세션 정리
         session.pop("state", None)
+        session.pop("adding_account", None)
+
+        # 현재 계정 ID 설정
+        session["current_account_id"] = account.id
 
         login_user(user)
         flash("CleanBox에 성공적으로 로그인했습니다!", "success")
         return redirect(url_for("category.list_categories"))
 
     except Exception as e:
-        # 더 자세한 에러 로깅
-        print(f"OAuth 콜백 에러: {str(e)}")
+        print(f"로그인 콜백 처리 에러: {str(e)}")
         flash(f"로그인 중 오류가 발생했습니다: {str(e)}", "error")
         return redirect(url_for("auth.login"))
 
 
-@auth_bp.route("/add-account")
-@login_required
-def add_account():
-    """추가 Gmail 계정 연결"""
-    flow = Flow.from_client_config(
-        GOOGLE_CLIENT_CONFIG,
-        scopes=[
-            "openid",
-            "https://mail.google.com/",
-            "https://www.googleapis.com/auth/userinfo.email",
-            "https://www.googleapis.com/auth/userinfo.profile",
-        ],
-    )
-    flow.redirect_uri = GOOGLE_CLIENT_CONFIG["web"]["redirect_uris"][0]
-
-    authorization_url, state = flow.authorization_url(
-        access_type="offline", include_granted_scopes="true", prompt="consent"
-    )
-
-    session["state"] = state
-    session["adding_account"] = True
-    return redirect(authorization_url)
-
-
-@auth_bp.route("/callback-add")
-def callback_add():
-    """추가 계정 OAuth 콜백 처리"""
+def _handle_add_account_callback(credentials, id_info):
+    """추가 계정 연결 콜백 처리"""
     try:
-        flow = Flow.from_client_config(
-            GOOGLE_CLIENT_CONFIG,
-            scopes=[
-                "openid",
-                "https://mail.google.com/",
-                "https://www.googleapis.com/auth/userinfo.email",
-                "https://www.googleapis.com/auth/userinfo.profile",
-            ],
-            state=session["state"],
-        )
-        flow.redirect_uri = GOOGLE_CLIENT_CONFIG["web"]["redirect_uris"][0]
-
-        # 인증 코드로 토큰 교환
-        authorization_response = request.url
-        flow.fetch_token(authorization_response=authorization_response)
-
-        # 사용자 정보 가져오기
-        credentials = flow.credentials
-        id_info = id_token.verify_oauth2_token(
-            credentials.id_token,
-            requests.Request(),
-            GOOGLE_CLIENT_CONFIG["web"]["client_id"],
-        )
+        # 로그인된 사용자 확인
+        if not current_user.is_authenticated:
+            flash("로그인이 필요합니다.", "error")
+            return redirect(url_for("auth.login"))
 
         # 이미 연결된 계정인지 확인
         existing_account = UserAccount.query.filter_by(
@@ -242,12 +221,41 @@ def callback_add():
 
         db.session.commit()
 
+        # 세션 정리
+        session.pop("state", None)
+        session.pop("adding_account", None)
+
         flash(f"Gmail 계정 {id_info['email']}이 성공적으로 연결되었습니다!", "success")
         return redirect(url_for("auth.manage_accounts"))
 
     except Exception as e:
+        print(f"추가 계정 콜백 처리 에러: {str(e)}")
         flash(f"계정 추가 중 오류가 발생했습니다: {str(e)}", "error")
         return redirect(url_for("auth.manage_accounts"))
+
+
+@auth_bp.route("/add-account")
+@login_required
+def add_account():
+    """추가 Gmail 계정 연결"""
+    flow = Flow.from_client_config(
+        GOOGLE_CLIENT_CONFIG,
+        scopes=[
+            "openid",
+            "https://mail.google.com/",
+            "https://www.googleapis.com/auth/userinfo.email",
+            "https://www.googleapis.com/auth/userinfo.profile",
+        ],
+    )
+    flow.redirect_uri = GOOGLE_CLIENT_CONFIG["web"]["redirect_uris"][0]
+
+    authorization_url, state = flow.authorization_url(
+        access_type="offline", include_granted_scopes="true", prompt="consent"
+    )
+
+    session["state"] = state
+    session["adding_account"] = True
+    return redirect(authorization_url)
 
 
 @auth_bp.route("/manage-accounts")
@@ -279,7 +287,7 @@ def switch_account(account_id):
     session["current_account_id"] = account_id
     flash(f"{account.account_email} 계정으로 전환되었습니다.", "success")
 
-    return redirect(request.referrer or url_for("category.list_categories"))
+    return redirect(request.referrer or url_for("email.list_emails"))
 
 
 @auth_bp.route("/remove-account/<int:account_id>", methods=["POST"])
@@ -356,16 +364,67 @@ def get_user_credentials(user_id, account_id=None):
 
 def get_current_account_id():
     """현재 활성 계정 ID 가져오기"""
-    if "current_account_id" in session:
-        return session["current_account_id"]
-
     # 로그인되지 않은 경우 None 반환
     if not current_user.is_authenticated:
         return None
 
-    # 기본 계정 ID 반환
+    # 세션에서 현재 계정 ID 확인
+    if "current_account_id" in session:
+        account_id = session["current_account_id"]
+        # 계정이 실제로 존재하고 활성인지 확인
+        account = UserAccount.query.filter_by(
+            id=account_id, user_id=current_user.id, is_active=True
+        ).first()
+        if account:
+            return account_id
+
+    # 세션에 없거나 유효하지 않으면 기본 계정 ID 반환
     primary_account = UserAccount.query.filter_by(
         user_id=current_user.id, is_primary=True, is_active=True
     ).first()
 
-    return primary_account.id if primary_account else None
+    if primary_account:
+        # 세션에 기본 계정 ID 설정
+        session["current_account_id"] = primary_account.id
+        return primary_account.id
+
+    # 활성 계정이 없으면 첫 번째 활성 계정 반환
+    first_account = UserAccount.query.filter_by(
+        user_id=current_user.id, is_active=True
+    ).first()
+
+    if first_account:
+        session["current_account_id"] = first_account.id
+        return first_account.id
+
+    return None
+
+
+@auth_bp.route("/debug-accounts")
+@login_required
+def debug_accounts():
+    """계정 정보 디버깅 (개발용)"""
+    accounts = UserAccount.query.filter_by(
+        user_id=current_user.id, is_active=True
+    ).all()
+
+    current_account_id = get_current_account_id()
+
+    debug_info = {
+        "user_id": current_user.id,
+        "current_account_id": current_account_id,
+        "session_current_account": session.get("current_account_id"),
+        "accounts": [
+            {
+                "id": acc.id,
+                "email": acc.account_email,
+                "name": acc.account_name,
+                "is_primary": acc.is_primary,
+                "is_active": acc.is_active,
+                "is_current": acc.id == current_account_id,
+            }
+            for acc in accounts
+        ],
+    }
+
+    return jsonify(debug_info)

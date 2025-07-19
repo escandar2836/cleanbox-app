@@ -48,19 +48,22 @@
                                 </div>
                             </div>
                             <div class="btn-group">
-                                {% if not account.is_primary %}
+                                {% if account.id == session.get('current_account_id') %}
+                                <span class="badge bg-success">현재 활성</span>
+                                {% else %}
                                 <a href="{{ url_for('auth.switch_account', account_id=account.id) }}" 
                                    class="btn btn-outline-primary btn-sm">
                                     <i class="fas fa-exchange-alt"></i> 전환
                                 </a>
+                                {% endif %}
+                                
+                                {% if not account.is_primary %}
                                 <form method="POST" action="{{ url_for('auth.remove_account', account_id=account.id) }}" 
                                       style="display: inline;" onsubmit="return confirm('정말로 이 계정 연결을 해제하시겠습니까?')">
                                     <button type="submit" class="btn btn-outline-danger btn-sm">
                                         <i class="fas fa-unlink"></i> 연결 해제
                                     </button>
                                 </form>
-                                {% else %}
-                                <span class="badge bg-success">현재 계정</span>
                                 {% endif %}
                             </div>
                         </div>

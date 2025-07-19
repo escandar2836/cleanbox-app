@@ -16,6 +16,10 @@ class GmailService:
     def __init__(self, user_id: str, account_id: Optional[int] = None):
         self.user_id = user_id
         self.account_id = account_id or get_current_account_id()
+
+        if not self.account_id:
+            raise Exception("활성 계정을 찾을 수 없습니다.")
+
         self.service = None
         self.advanced_unsubscribe = AdvancedUnsubscribeService()
         self._initialize_service()
