@@ -35,7 +35,7 @@
             
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
-                    {% if current_user.is_authenticated %}
+                    {% if current_user and current_user.is_authenticated %}
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('category.list_categories') }}">
                             <i class="fas fa-tags"></i> 카테고리
@@ -50,10 +50,10 @@
                 </ul>
                 
                 <ul class="navbar-nav">
-                    {% if current_user.is_authenticated %}
+                    {% if current_user and current_user.is_authenticated %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-user"></i> {{ current_user.name or current_user.email }}
+                            <i class="fas fa-user"></i> {{ current_user.name or current_user.email or '사용자' }}
                         </a>
                         <ul class="dropdown-menu">
                             <li><a class="dropdown-item" href="{{ url_for('auth.manage_accounts') }}">

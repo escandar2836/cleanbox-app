@@ -151,6 +151,7 @@ def _handle_login_callback(credentials, id_info):
                 is_primary=True,  # 첫 번째 계정은 기본 계정으로 설정
             )
             db.session.add(account)
+            db.session.flush()  # account.id 생성
         else:
             # 기존 계정 정보 업데이트
             account.account_name = id_info.get("name", account.account_name)
@@ -209,6 +210,7 @@ def _handle_add_account_callback(credentials, id_info):
             is_primary=False,
         )
         db.session.add(account)
+        db.session.flush()  # account.id 생성
 
         # 토큰 저장
         user_token = UserToken(user_id=current_user.id, account_id=account.id)

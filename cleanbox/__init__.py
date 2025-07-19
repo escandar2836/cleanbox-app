@@ -82,6 +82,13 @@ def create_app(config_class=Config):
     # 메인 라우트 (루트 URL)
     @app.route("/")
     def index():
+        from flask_login import current_user
+
+        # 로그인된 사용자는 대시보드로 리다이렉트
+        if current_user and current_user.is_authenticated:
+            return redirect(url_for("main.dashboard"))
+
+        # 로그인되지 않은 사용자는 랜딩 페이지 표시
         return render_template("landing.html")
 
     # home 엔드포인트 추가
