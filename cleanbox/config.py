@@ -30,7 +30,21 @@ class Config:
         "CLEANBOX_DATABASE_URI",
         "postgresql://cleanbox_user:cleanbox_password@localhost:5432/cleanbox",
     )
-    SQLALCHEMY_ENGINE_OPTIONS = {}
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "pool_pre_ping": True,
+        "pool_recycle": 300,
+        "pool_timeout": 20,
+        "max_overflow": 10,
+        "pool_size": 5,
+        "connect_args": {
+            "sslmode": "require",
+            "connect_timeout": 10,
+            "application_name": "cleanbox_app",
+            "keepalives_idle": 600,
+            "keepalives_interval": 30,
+            "keepalives_count": 5,
+        },
+    }
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # Google OAuth 설정
@@ -83,7 +97,18 @@ class TestConfig(Config):
         "CLEANBOX_DATABASE_URI",
         "postgresql://cleanbox_user:cleanbox_password@localhost:5433/cleanbox_test",
     )
-    SQLALCHEMY_ENGINE_OPTIONS = {}
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "pool_pre_ping": True,
+        "pool_recycle": 300,
+        "pool_timeout": 20,
+        "max_overflow": 5,
+        "pool_size": 3,
+        "connect_args": {
+            "sslmode": "require",
+            "connect_timeout": 10,
+            "application_name": "cleanbox_test",
+        },
+    }
     WTF_CSRF_ENABLED = False
     # 테스트 환경에서는 데이터베이스 초기화를 수동으로 제어
     INIT_DB = False

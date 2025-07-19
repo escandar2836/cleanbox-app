@@ -16,8 +16,24 @@ from .models import db
 def load_user(user_id):
     """Flask-Login 사용자 로더"""
     from .models import User
+    from sqlalchemy.exc import OperationalError, DisconnectionError
 
-    return User.query.get(user_id)
+    try:
+        return User.query.get(user_id)
+    except (OperationalError, DisconnectionError) as e:
+        # 데이터베이스 연결 오류 시 로그 기록
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.error(f"데이터베이스 연결 오류 (사용자 로딩): {e}")
+        return None
+    except Exception as e:
+        # 기타 예외 처리
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.error(f"사용자 로딩 오류: {e}")
+        return None
 
 
 def create_app(config_class=Config):
