@@ -1,11 +1,12 @@
 from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for
 from flask_login import login_required, current_user
+from datetime import datetime, timedelta
+import traceback
+import os
+
 from ..models import Email, Category, UserAccount, WebhookStatus, db
 from .gmail_service import GmailService
 from .ai_classifier import AIClassifier
-from datetime import datetime
-import traceback
-import os
 
 email_bp = Blueprint("email", __name__)
 
