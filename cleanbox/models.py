@@ -24,6 +24,9 @@ class User(UserMixin, db.Model):
     )
     last_login = db.Column(db.DateTime, default=datetime.utcnow)
     last_activity = db.Column(db.DateTime, default=datetime.utcnow)
+    first_service_access = db.Column(
+        db.DateTime, default=datetime.utcnow
+    )  # 최초 서비스 접속 시간
     is_online = db.Column(db.Boolean, default=False)
     session_id = db.Column(db.String(255))
 

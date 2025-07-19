@@ -1,7 +1,7 @@
 import os
 import logging
 from logging.handlers import RotatingFileHandler
-from flask import Flask, render_template, redirect, url_for
+from flask import Flask, render_template, redirect, url_for, flash
 from flask_login import LoginManager
 from flask_sqlalchemy import SQLAlchemy
 from .config import Config
@@ -94,6 +94,25 @@ def create_app(config_class=Config):
     # home 엔드포인트 추가
     @app.route("/home")
     def home():
+        return redirect(url_for("main.dashboard"))
+
+    # Unauthorized 에러 핸들러
+    @app.errorhandler(401)
+    def unauthorized(error):
+        from flask_login import current_user
+
+        if current_user and current_user.is_authenticated:
+            # 로그인된 사용자지만 권한이 없는 경우
+            flash("해당 기능에 대한 권한이 없습니다.", "error")
+            return redirect(url_for("main.dashboard"))
+        else:
+            # 로그인되지 않은 사용자
+            flash("로그인이 필요합니다.", "error")
+            return redirect(url_for("auth.login"))
+
+    @app.errorhandler(403)
+    def forbidden(error):
+        flash("해당 기능에 대한 접근 권한이 없습니다.", "error")
         return redirect(url_for("main.dashboard"))
 
     # 데이터베이스 초기화 (테스트 환경이 아닌 경우에만)

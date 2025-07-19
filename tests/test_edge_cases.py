@@ -223,7 +223,7 @@ class TestNetworkEdgeCases:
                 with pytest.raises(Exception):
                     service.fetch_recent_emails()
 
-    @patch("cleanbox.email.ai_classifier.openai.ChatCompletion.create")
+    @patch("cleanbox.email.ai_classifier.openai.OpenAI")
     @patch("cleanbox.email.ai_classifier.os.environ.get")
     def test_openai_api_rate_limit(self, mock_environ, mock_openai, app):
         """OpenAI API 속도 제한 테스트"""
@@ -246,19 +246,21 @@ class TestNetworkEdgeCases:
             time.sleep(0.1)  # 짧은 지연
             raise Exception("Rate limit exceeded")
 
-        mock_openai.side_effect = rate_limited_request
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.side_effect = rate_limited_request
+        mock_openai.return_value = mock_client
 
         classifier = AIClassifier()
-        categories = [MagicMock(id=1, name="테스트", description="테스트용")]
+        categories = [{"id": 1, "name": "테스트", "description": "테스트용"}]
 
         # 속도 제한 상황에서의 분류 시도
-        category_id, reasoning = classifier.classify_email(
+        category_id, summary = classifier.classify_and_summarize_email(
             "테스트 이메일", "테스트", "test@example.com", categories
         )
 
         # 속도 제한이 적절히 처리되는지 확인
         assert category_id is None
-        assert "수동" in reasoning  # "수동으로 분류해주세요" 메시지 확인
+        assert "수동" in summary  # "수동으로 확인해주세요" 메시지 확인
 
 
 class TestConcurrencyEdgeCases:

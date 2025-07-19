@@ -210,10 +210,16 @@ class TestFullEmailWorkflow:
             mock_requests.return_value = mock_response
 
             classifier = AIClassifier()
-            categories = [sample_data["category"]]
+            categories = [
+                {
+                    "id": sample_data["category"].id,
+                    "name": sample_data["category"].name,
+                    "description": sample_data["category"].description,
+                }
+            ]
 
-            # 이메일 분류
-            category_id, reasoning = classifier.classify_email(
+            # 이메일 분류 및 요약
+            category_id, summary = classifier.classify_and_summarize_email(
                 new_email.content, new_email.subject, new_email.sender, categories
             )
 
@@ -467,7 +473,7 @@ class TestErrorHandlingIntegration:
                 service.fetch_recent_emails()
             assert "Gmail API 오류" in str(exc_info.value)
 
-    @patch("cleanbox.email.ai_classifier.openai.ChatCompletion.create")
+    @patch("cleanbox.email.ai_classifier.openai.OpenAI")
     @patch("cleanbox.email.ai_classifier.os.environ.get")
     def test_ai_api_error_integration(
         self, mock_environ, mock_openai, app, sample_data
@@ -486,19 +492,27 @@ class TestErrorHandlingIntegration:
         mock_environ.side_effect = mock_environ_get
 
         # AI API 오류 모의
-        mock_openai.side_effect = Exception("AI API 오류")
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.side_effect = Exception("AI API 오류")
+        mock_openai.return_value = mock_client
 
         classifier = AIClassifier()
-        categories = [sample_data["category"]]
+        categories = [
+            {
+                "id": sample_data["category"].id,
+                "name": sample_data["category"].name,
+                "description": sample_data["category"].description,
+            }
+        ]
 
         # 오류 상황에서의 분류 시도
-        category_id, reasoning = classifier.classify_email(
+        category_id, summary = classifier.classify_and_summarize_email(
             "테스트 이메일 내용", "테스트 제목", "test@example.com", categories
         )
 
         # 오류가 적절히 처리되는지 확인
         assert category_id is None
-        assert "수동" in reasoning  # "수동으로 분류해주세요" 메시지 확인
+        assert "수동" in summary  # "수동으로 확인해주세요" 메시지 확인
 
     def test_database_connection_error_integration(self, app):
         """데이터베이스 연결 오류 통합 테스트"""

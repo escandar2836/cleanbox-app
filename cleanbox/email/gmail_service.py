@@ -49,6 +49,43 @@ class GmailService:
         except Exception as e:
             raise Exception(f"Gmail API 서비스 초기화 실패: {str(e)}")
 
+    def fetch_emails_after_date(self, after_date: datetime) -> List[Dict]:
+        """특정 날짜 이후의 이메일 가져오기 (inbox만)"""
+        try:
+            # 날짜를 RFC 3339 형식으로 변환
+            after_date_str = after_date.strftime("%Y/%m/%d")
+
+            # Gmail API로 특정 날짜 이후의 이메일 목록 가져오기 (inbox만)
+            results = (
+                self.service.users()
+                .messages()
+                .list(
+                    userId="me",
+                    maxResults=100,  # 최대 100개
+                    q=f"after:{after_date_str} is:inbox",  # 특정 날짜 이후 + inbox만
+                )
+                .execute()
+            )
+
+            messages = results.get("messages", [])
+
+            emails = []
+            for message in messages:
+                email_data = self._get_email_details(message["id"])
+                if email_data:
+                    # 날짜 필터링 (Gmail API의 after 쿼리는 정확하지 않을 수 있음)
+                    email_date = self._parse_date(email_data.get("date"))
+                    if email_date and email_date >= after_date:
+                        # inbox 라벨이 있는지 확인
+                        labels = email_data.get("labels", [])
+                        if "INBOX" in labels:
+                            emails.append(email_data)
+
+            return emails
+
+        except HttpError as error:
+            raise Exception(f"Gmail API 오류: {error}")
+
     def fetch_recent_emails(self, max_results: int = 20, offset: int = 0) -> List[Dict]:
         """최근 이메일 가져오기 (페이지네이션 지원)"""
         try:

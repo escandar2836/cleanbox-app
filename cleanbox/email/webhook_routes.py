@@ -132,13 +132,15 @@ def process_new_emails_for_account(account):
                 if email_obj:
                     processed_count += 1
 
-                    # AI 분류
+                    # AI 분류 및 요약
                     if categories:
-                        category_id, reasoning = ai_classifier.classify_email(
-                            email_data["body"],
-                            email_data["subject"],
-                            email_data["sender"],
-                            categories,
+                        category_id, summary = (
+                            ai_classifier.classify_and_summarize_email(
+                                email_data["body"],
+                                email_data["subject"],
+                                email_data["sender"],
+                                categories,
+                            )
                         )
 
                         if category_id:
@@ -147,17 +149,14 @@ def process_new_emails_for_account(account):
                             )
                             classified_count += 1
 
-                    # AI 요약
-                    summary = ai_classifier.summarize_email(
-                        email_data["body"], email_data["subject"]
-                    )
-                    if (
-                        summary
-                        and summary
-                        != "AI 요약을 사용할 수 없습니다. 이메일 내용을 직접 확인해주세요."
-                    ):
-                        email_obj.summary = summary
-                        db.session.commit()
+                        # 요약 저장
+                        if (
+                            summary
+                            and summary
+                            != "AI 처리를 사용할 수 없습니다. 수동으로 확인해주세요."
+                        ):
+                            email_obj.summary = summary
+                            db.session.commit()
 
                     # 이메일 아카이브 (PROJECT_DESCRIPTION 요구사항)
                     try:

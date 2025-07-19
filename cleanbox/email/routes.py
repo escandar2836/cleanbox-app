@@ -36,6 +36,11 @@ def list_emails():
             .all()
         )
 
+        # 계정 정보를 이메일에 추가
+        account_dict = {acc.id: acc for acc in accounts}
+        for email in emails:
+            email.account_info = account_dict.get(email.account_id)
+
         # 계정별 이메일 수 계산
         account_stats = {}
         for account in accounts:
@@ -100,6 +105,11 @@ def category_emails(category_id):
             .all()
         )
 
+        # 계정 정보를 이메일에 추가
+        account_dict = {acc.id: acc for acc in accounts}
+        for email in emails:
+            email.account_info = account_dict.get(email.account_id)
+
         # 계정별 이메일 수 계산
         account_stats = {}
         for account in accounts:
@@ -124,14 +134,11 @@ def category_emails(category_id):
         return redirect(url_for("email.list_emails"))
 
 
-@email_bp.route("/sync", methods=["POST"])
+@email_bp.route("/process-new", methods=["POST"])
 @login_required
-def sync_emails():
-    """Gmail에서 이메일 동기화 (모든 계정)"""
+def process_new_emails():
+    """최초 서비스 접속 시간 이후의 새 이메일 처리"""
     try:
-        page = request.form.get("page", 1, type=int)
-        per_page = 20  # 한 번에 20개씩
-
         # 모든 활성 계정 가져오기
         accounts = UserAccount.query.filter_by(
             user_id=current_user.id, is_active=True
@@ -144,21 +151,19 @@ def sync_emails():
         total_classified = 0
         account_results = []
 
-        # 모든 계정에 대해 동기화 수행
+        # 최초 서비스 접속 시간 이후의 이메일만 처리
+        first_access_time = current_user.first_service_access
+
+        # 모든 계정에 대해 새 이메일 처리
         for account in accounts:
             try:
-                print(f"🔍 동기화 - 계정: {account.account_email}")
+                print(f"🔍 새 이메일 처리 - 계정: {account.account_email}")
 
                 gmail_service = GmailService(current_user.id, account.id)
                 ai_classifier = AIClassifier()
 
-                # 페이지네이션을 위한 오프셋 계산
-                offset = (page - 1) * per_page
-
-                # 최근 이메일 가져오기 (페이지네이션 적용)
-                recent_emails = gmail_service.fetch_recent_emails(
-                    max_results=per_page, offset=offset
-                )
+                # 최근 이메일 가져오기 (최초 접속 시간 이후만)
+                recent_emails = gmail_service.fetch_emails_after_date(first_access_time)
 
                 if not recent_emails:
                     account_results.append(
@@ -179,6 +184,16 @@ def sync_emails():
 
                 for email_data in recent_emails:
                     try:
+                        # 이미 처리된 이메일인지 확인
+                        existing_email = Email.query.filter_by(
+                            user_id=current_user.id,
+                            account_id=account.id,
+                            gmail_id=email_data["gmail_id"],
+                        ).first()
+
+                        if existing_email:
+                            continue  # 이미 처리된 이메일은 건너뛰기
+
                         # DB에 저장
                         email_obj = gmail_service.save_email_to_db(email_data)
 
@@ -186,13 +201,15 @@ def sync_emails():
                             account_processed += 1
                             total_processed += 1
 
-                            # AI 분류 시도
+                            # AI 분류 및 요약 시도
                             if categories:
-                                category_id, reasoning = ai_classifier.classify_email(
-                                    email_data["body"],
-                                    email_data["subject"],
-                                    email_data["sender"],
-                                    categories,
+                                category_id, summary = (
+                                    ai_classifier.classify_and_summarize_email(
+                                        email_data["body"],
+                                        email_data["subject"],
+                                        email_data["sender"],
+                                        categories,
+                                    )
                                 )
 
                                 if category_id:
@@ -202,17 +219,14 @@ def sync_emails():
                                     account_classified += 1
                                     total_classified += 1
 
-                            # AI 요약 생성
-                            summary = ai_classifier.summarize_email(
-                                email_data["body"], email_data["subject"]
-                            )
-                            if (
-                                summary
-                                and summary
-                                != "AI 요약을 사용할 수 없습니다. 이메일 내용을 직접 확인해주세요."
-                            ):
-                                email_obj.summary = summary
-                                db.session.commit()
+                                # 요약 저장
+                                if (
+                                    summary
+                                    and summary
+                                    != "AI 처리를 사용할 수 없습니다. 수동으로 확인해주세요."
+                                ):
+                                    email_obj.summary = summary
+                                    db.session.commit()
 
                     except Exception as e:
                         print(f"이메일 처리 실패: {str(e)}")
@@ -228,7 +242,7 @@ def sync_emails():
                 )
 
             except Exception as e:
-                print(f"계정 {account.account_email} 동기화 실패: {str(e)}")
+                print(f"계정 {account.account_email} 처리 실패: {str(e)}")
                 account_results.append(
                     {
                         "account": account.account_email,
@@ -239,18 +253,8 @@ def sync_emails():
                     }
                 )
 
-        # 다음 페이지가 있는지 확인 (첫 번째 계정 기준)
-        if accounts:
-            gmail_service = GmailService(current_user.id, accounts[0].id)
-            next_page_emails = gmail_service.fetch_recent_emails(
-                max_results=per_page, offset=offset + per_page
-            )
-            has_more = len(next_page_emails) > 0
-        else:
-            has_more = False
-
         flash(
-            f"모든 계정 동기화 완료: {total_processed}개 처리, {total_classified}개 AI 분류",
+            f"새 이메일 처리 완료: {total_processed}개 처리, {total_classified}개 AI 분류",
             "success",
         )
 
@@ -259,16 +263,13 @@ def sync_emails():
                 "success": True,
                 "processed": total_processed,
                 "classified": total_classified,
-                "page": page,
-                "has_more": has_more,
-                "next_page": page + 1 if has_more else None,
                 "account_results": account_results,
             }
         )
 
     except Exception as e:
         return jsonify(
-            {"success": False, "message": f"이메일 동기화 중 오류: {str(e)}"}
+            {"success": False, "message": f"새 이메일 처리 중 오류: {str(e)}"}
         )
 
 

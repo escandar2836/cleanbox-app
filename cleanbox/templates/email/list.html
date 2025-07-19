@@ -9,10 +9,9 @@
             <h1><i class="fas fa-envelope"></i> CleanBox 이메일</h1>
             <div>
                 <!-- 기존 동기화 버튼 -->
-                <form method="POST" action="{{ url_for('email.sync_emails') }}" id="syncForm">
-                    <input type="hidden" name="page" id="currentPage" value="1">
-                    <button type="submit" class="btn btn-success" id="syncButton">
-                        <i class="fas fa-sync-alt"></i> Gmail 동기화
+                <form method="POST" action="{{ url_for('email.process_new_emails') }}" id="processForm">
+                    <button type="submit" class="btn btn-success" id="processButton">
+                        <i class="fas fa-robot"></i> 새 이메일 처리
                     </button>
                 </form>
 
@@ -205,13 +204,11 @@
                                             {% if accounts and accounts|length > 1 %}
                                             <small class="text-info">
                                                 <i class="fas fa-envelope"></i> 
-                                                {% set found = false %}
-                                                {% for account in accounts %}
-                                                    {% if account.id == email.account_id and not found %}
-                                                        {{ account.account_email }}
-                                                        {% set found = true %}
-                                                    {% endif %}
-                                                {% endfor %}
+                                                {% if email.account_info %}
+                                                    {{ email.account_info.account_email }}
+                                                {% else %}
+                                                    알 수 없는 계정
+                                                {% endif %}
                                             </small>
                                             {% endif %}
                                         </div>
@@ -252,10 +249,10 @@
                 <div class="text-center py-5">
                     <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
                     <h4 class="text-muted">아직 이메일이 없습니다</h4>
-                    <p class="text-muted">Gmail 동기화를 통해 이메일을 가져와보세요!</p>
-                    <form method="POST" action="{{ url_for('email.sync_emails') }}">
+                    <p class="text-muted">새 이메일 처리를 통해 이메일을 가져와보세요!</p>
+                    <form method="POST" action="{{ url_for('email.process_new_emails') }}">
                         <button type="submit" class="btn btn-success">
-                            <i class="fas fa-sync-alt"></i> Gmail 동기화
+                            <i class="fas fa-robot"></i> 새 이메일 처리
                         </button>
                     </form>
                 </div>
@@ -536,17 +533,17 @@ let currentPage = 1;
 let hasMore = false;
 
 // 동기화 폼 제출 처리
-document.getElementById('syncForm').addEventListener('submit', function(e) {
+document.getElementById('processForm').addEventListener('submit', function(e) {
     e.preventDefault();
     
     const formData = new FormData(this);
-    const button = document.getElementById('syncButton');
+    const button = document.getElementById('processButton');
     const originalText = button.innerHTML;
     
-    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 동기화 중...';
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 처리 중...';
     button.disabled = true;
     
-    fetch('{{ url_for("email.sync_emails") }}', {
+    fetch('{{ url_for("email.process_new_emails") }}', {
         method: 'POST',
         body: formData
     })
@@ -554,7 +551,7 @@ document.getElementById('syncForm').addEventListener('submit', function(e) {
     .then(data => {
         if (data.success) {
             // 계정별 결과 표시
-            let message = `모든 계정 동기화 완료: ${data.processed}개 처리, ${data.classified}개 AI 분류`;
+            let message = `모든 계정 처리 완료: ${data.processed}개 처리, ${data.classified}개 AI 분류`;
             
             if (data.account_results && data.account_results.length > 0) {
                 message += '\n\n계정별 결과:';
@@ -591,7 +588,7 @@ document.getElementById('syncForm').addEventListener('submit', function(e) {
         }
     })
     .catch(error => {
-        showAlert('error', '동기화 중 오류가 발생했습니다.');
+        showAlert('error', '처리 중 오류가 발생했습니다.');
     })
     .finally(() => {
         button.innerHTML = originalText;
@@ -602,7 +599,7 @@ document.getElementById('syncForm').addEventListener('submit', function(e) {
 // 더 보기 버튼 클릭 처리
 document.getElementById('loadMoreButton').addEventListener('click', function() {
     document.getElementById('currentPage').value = currentPage;
-    document.getElementById('syncForm').dispatchEvent(new Event('submit'));
+    document.getElementById('processForm').dispatchEvent(new Event('submit'));
 });
 
 function showAlert(type, message) {

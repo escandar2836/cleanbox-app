@@ -94,19 +94,14 @@ class TestConfig(Config):
 
     TESTING = True
     SQLALCHEMY_DATABASE_URI = os.environ.get(
-        "CLEANBOX_DATABASE_URI",
-        "postgresql://cleanbox_user:cleanbox_password@localhost:5433/cleanbox_test",
+        "CLEANBOX_TEST_DATABASE_URI",
+        "sqlite:///:memory:",  # 메모리 기반 SQLite 사용
     )
+    # SQLite용 설정 (PostgreSQL 옵션 제거)
     SQLALCHEMY_ENGINE_OPTIONS = {
         "pool_pre_ping": True,
-        "pool_recycle": 300,
-        "pool_timeout": 20,
-        "max_overflow": 5,
-        "pool_size": 3,
         "connect_args": {
-            "sslmode": "require",
-            "connect_timeout": 10,
-            "application_name": "cleanbox_test",
+            "timeout": 10,
         },
     }
     WTF_CSRF_ENABLED = False

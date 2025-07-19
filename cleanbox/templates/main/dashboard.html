@@ -11,8 +11,8 @@
                 <a href="{{ url_for('email.list_emails') }}" class="btn btn-success me-2">
                     <i class="fas fa-envelope"></i> 이메일 관리
                 </a>
-                <button onclick="syncAllAccounts()" class="btn btn-primary">
-                    <i class="fas fa-sync-alt"></i> Gmail 동기화
+                <button onclick="processNewEmails()" class="btn btn-primary">
+                    <i class="fas fa-robot"></i> 새 이메일 처리
                 </button>
             </div>
         </div>
@@ -153,18 +153,17 @@
 </div>
 
 <script>
-// Gmail 동기화 함수
-function syncAllAccounts() {
+// 새 이메일 처리 함수
+function processNewEmails() {
     const button = event.target;
     const originalText = button.innerHTML;
     
-    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 동기화 중...';
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 처리 중...';
     button.disabled = true;
     
     const formData = new FormData();
-    formData.append('page', '1');
     
-    fetch('/email/sync', {
+    fetch('/email/process-new', {
         method: 'POST',
         body: formData
     })
@@ -172,7 +171,7 @@ function syncAllAccounts() {
     .then(data => {
         if (data.success) {
             // 계정별 결과 표시
-            let message = `모든 계정 동기화 완료: ${data.processed}개 처리, ${data.classified}개 AI 분류`;
+            let message = `새 이메일 처리 완료: ${data.processed}개 처리, ${data.classified}개 AI 분류`;
             
             if (data.account_results && data.account_results.length > 0) {
                 message += '\n\n계정별 결과:';
@@ -192,11 +191,11 @@ function syncAllAccounts() {
             // 페이지 새로고침
             location.reload();
         } else {
-            alert('동기화 실패: ' + data.message);
+            alert('새 이메일 처리 실패: ' + data.message);
         }
     })
     .catch(error => {
-        alert('동기화 중 오류가 발생했습니다: ' + error);
+        alert('새 이메일 처리 중 오류가 발생했습니다: ' + error);
     })
     .finally(() => {
         button.innerHTML = originalText;
