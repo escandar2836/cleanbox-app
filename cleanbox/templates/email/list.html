@@ -8,14 +8,18 @@
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h1><i class="fas fa-envelope"></i> CleanBox 이메일</h1>
             <div>
-                <form method="POST" action="{{ url_for('email.sync_emails') }}" style="display: inline;">
-                    <button type="submit" class="btn btn-success me-2">
+                <!-- 기존 동기화 버튼 -->
+                <form method="POST" action="{{ url_for('email.sync_emails') }}" id="syncForm">
+                    <input type="hidden" name="page" id="currentPage" value="1">
+                    <button type="submit" class="btn btn-success" id="syncButton">
                         <i class="fas fa-sync-alt"></i> Gmail 동기화
                     </button>
                 </form>
-                <a href="{{ url_for('category.list_categories') }}" class="btn btn-primary">
-                    <i class="fas fa-tags"></i> 카테고리 관리
-                </a>
+
+                <!-- 더 보기 버튼 (처음에는 숨김) -->
+                <button type="button" class="btn btn-outline-primary" id="loadMoreButton" style="display: none;">
+                    <i class="fas fa-plus"></i> 더 보기
+                </button>
             </div>
         </div>
     </div>
@@ -468,5 +472,73 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error('통계 조회 실패:', error);
         });
 });
+
+let currentPage = 1;
+let hasMore = false;
+
+// 동기화 폼 제출 처리
+document.getElementById('syncForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const button = document.getElementById('syncButton');
+    const originalText = button.innerHTML;
+    
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 동기화 중...';
+    button.disabled = true;
+    
+    fetch('{{ url_for("email.sync_emails") }}', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // 성공 메시지 표시
+            showAlert('success', `페이지 ${data.page}: ${data.processed}개의 이메일을 처리했습니다.`);
+            
+            // 더 보기 버튼 표시/숨김
+            hasMore = data.has_more;
+            currentPage = data.next_page || currentPage;
+            
+            if (hasMore) {
+                document.getElementById('loadMoreButton').style.display = 'inline-block';
+                document.getElementById('currentPage').value = currentPage;
+            } else {
+                document.getElementById('loadMoreButton').style.display = 'none';
+            }
+            
+            // 페이지 새로고침
+            setTimeout(() => {
+                location.reload();
+            }, 1000);
+        } else {
+            showAlert('error', data.message);
+        }
+    })
+    .catch(error => {
+        showAlert('error', '동기화 중 오류가 발생했습니다.');
+    })
+    .finally(() => {
+        button.innerHTML = originalText;
+        button.disabled = false;
+    });
+});
+
+// 더 보기 버튼 클릭 처리
+document.getElementById('loadMoreButton').addEventListener('click', function() {
+    document.getElementById('currentPage').value = currentPage;
+    document.getElementById('syncForm').dispatchEvent(new Event('submit'));
+});
+
+function showAlert(type, message) {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type === 'success' ? 'success' : 'danger'} alert-dismissible fade show`;
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    document.querySelector('.container').insertBefore(alertDiv, document.querySelector('.container').firstChild);
+}
 </script>
 {% endblock %} 

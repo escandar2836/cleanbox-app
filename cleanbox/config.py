@@ -40,7 +40,16 @@ class Config:
     ENABLE_AI_FEATURES = os.environ.get("CLEANBOX_ENABLE_AI", "true").lower() == "true"
     USE_OLLAMA = os.environ.get("CLEANBOX_USE_OLLAMA", "true").lower() == "true"
     OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
-    OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama2:7b-chat-q4_0")
+    OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama2:3b")
+
+    # 스케줄러 설정
+    ENABLE_SCHEDULER = (
+        os.environ.get("CLEANBOX_ENABLE_SCHEDULER", "true").lower() == "true"
+    )
+    SYNC_INTERVAL_MINUTES = int(os.environ.get("CLEANBOX_SYNC_INTERVAL", "5"))
+    TOKEN_CHECK_INTERVAL_HOURS = int(
+        os.environ.get("CLEANBOX_TOKEN_CHECK_INTERVAL", "1")
+    )
 
     # 기타 CleanBox 관련 환경설정 추가 가능
 

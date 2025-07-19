@@ -69,6 +69,16 @@ def create_app(config_class=Config):
         with app.app_context():
             db.create_all()
 
+        # 활동 추적 미들웨어 등록
+        from .middleware import activity_tracker
+
+        activity_tracker.init_app(app)
+
+        # 스케줄러 초기화 (테스트 환경이 아닌 경우에만)
+        from .scheduler import scheduler
+
+        scheduler.init_app(app)
+
     return app
 
 

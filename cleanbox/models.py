@@ -22,6 +22,10 @@ class User(UserMixin, db.Model):
     updated_at = db.Column(
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )
+    last_login = db.Column(db.DateTime, default=datetime.utcnow)
+    last_activity = db.Column(db.DateTime, default=datetime.utcnow)
+    is_online = db.Column(db.Boolean, default=False)
+    session_id = db.Column(db.String(255))
 
     # 관계
     accounts = db.relationship(

@@ -146,6 +146,8 @@ def callback():
 
         user_token.set_tokens(credentials)
 
+        # last_login 업데이트
+        user.last_login = datetime.utcnow()
         db.session.commit()
 
         # 세션 state 정리
@@ -307,6 +309,14 @@ def remove_account(account_id):
 @login_required
 def logout():
     """로그아웃"""
+    try:
+        # 사용자 세션 정보 정리
+        current_user.is_online = False
+        current_user.session_id = None
+        db.session.commit()
+    except Exception as e:
+        print(f"로그아웃 시 세션 정리 실패: {str(e)}")
+
     logout_user()
     session.clear()
     flash("CleanBox에서 로그아웃되었습니다.", "info")

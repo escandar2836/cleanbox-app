@@ -32,6 +32,16 @@ services:
       - cleanbox_network
     restart: unless-stopped
 
+  # Redis (스케줄러 작업 큐용)
+  redis:
+    image: redis:7-alpine
+    container_name: cleanbox_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - cleanbox_network
+    restart: unless-stopped
+
   # CleanBox 웹 애플리케이션
   cleanbox:
     build: .

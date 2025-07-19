@@ -72,16 +72,27 @@ def category_emails(category_id):
 @email_bp.route("/sync", methods=["POST"])
 @login_required
 def sync_emails():
-    """Gmail에서 이메일 동기화"""
+    """Gmail에서 이메일 동기화 (페이지네이션 지원)"""
     try:
+        page = request.form.get("page", 1, type=int)
+        per_page = 20  # 한 번에 20개씩
+
         gmail_service = GmailService(current_user.id)
         ai_classifier = AIClassifier()
 
-        # 최근 이메일 가져오기
-        recent_emails = gmail_service.fetch_recent_emails(max_results=20)
+        # 페이지네이션을 위한 오프셋 계산
+        offset = (page - 1) * per_page
+
+        # 최근 이메일 가져오기 (페이지네이션 적용)
+        recent_emails = gmail_service.fetch_recent_emails(
+            max_results=per_page, offset=offset
+        )
 
         if not recent_emails:
-            flash("동기화할 새 이메일이 없습니다.", "info")
+            if page == 1:
+                flash("동기화할 새 이메일이 없습니다.", "info")
+            else:
+                flash("더 이상 가져올 이메일이 없습니다.", "info")
             return redirect(url_for("email.list_emails"))
 
         # 사용자 카테고리 가져오기
@@ -117,7 +128,11 @@ def sync_emails():
                     summary = ai_classifier.summarize_email(
                         email_data["body"], email_data["subject"]
                     )
-                    if summary and summary != "AI API 키가 설정되지 않았습니다.":
+                    if (
+                        summary
+                        and summary
+                        != "AI 요약을 사용할 수 없습니다. 이메일 내용을 직접 확인해주세요."
+                    ):
                         email_obj.summary = summary
                         db.session.commit()
 
@@ -125,15 +140,33 @@ def sync_emails():
                 print(f"이메일 처리 실패: {str(e)}")
                 continue
 
+        # 다음 페이지가 있는지 확인
+        next_page_emails = gmail_service.fetch_recent_emails(
+            max_results=per_page, offset=offset + per_page
+        )
+
+        has_more = len(next_page_emails) > 0
+
         flash(
-            f"{processed_count}개의 이메일을 처리했습니다. (AI 분류: {classified_count}개)",
+            f"페이지 {page}: {processed_count}개의 이메일을 처리했습니다. (AI 분류: {classified_count}개)",
             "success",
         )
-        return redirect(url_for("email.list_emails"))
+
+        return jsonify(
+            {
+                "success": True,
+                "processed": processed_count,
+                "classified": classified_count,
+                "page": page,
+                "has_more": has_more,
+                "next_page": page + 1 if has_more else None,
+            }
+        )
 
     except Exception as e:
-        flash(f"이메일 동기화 중 오류가 발생했습니다: {str(e)}", "error")
-        return redirect(url_for("email.list_emails"))
+        return jsonify(
+            {"success": False, "message": f"이메일 동기화 중 오류: {str(e)}"}
+        )
 
 
 @email_bp.route("/<int:email_id>/read")
@@ -266,10 +299,17 @@ def view_email(email_id):
             flash("이메일을 찾을 수 없습니다.", "error")
             return redirect(url_for("email.list_emails"))
 
-        # 카테고리 정보
+        # 카테고리 정보 (미분류 및 카테고리 없음 케이스 커버)
         category = None
         if email_obj.category_id:
-            category = Category.query.get(email_obj.category_id)
+            # 사용자 권한 확인하여 카테고리 조회
+            category = Category.query.filter_by(
+                id=email_obj.category_id, user_id=current_user.id
+            ).first()
+            # 카테고리가 없거나 삭제된 경우 category_id를 None으로 설정
+            if not category:
+                email_obj.category_id = None
+                db.session.commit()
 
         # 사용자 카테고리 목록 (분류 변경용)
         user_categories = Category.query.filter_by(

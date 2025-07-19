@@ -45,8 +45,8 @@ class GmailService:
         except Exception as e:
             raise Exception(f"Gmail API 서비스 초기화 실패: {str(e)}")
 
-    def fetch_recent_emails(self, max_results: int = 50) -> List[Dict]:
-        """최근 이메일 가져오기"""
+    def fetch_recent_emails(self, max_results: int = 20, offset: int = 0) -> List[Dict]:
+        """최근 이메일 가져오기 (페이지네이션 지원)"""
         try:
             # Gmail API로 이메일 목록 가져오기
             results = (
@@ -61,8 +61,27 @@ class GmailService:
             )
 
             messages = results.get("messages", [])
-            emails = []
 
+            # 오프셋 적용 (Gmail API는 페이지네이션을 자체적으로 처리)
+            if offset > 0 and "nextPageToken" in results:
+                # 다음 페이지 토큰을 사용하여 오프셋 처리
+                for _ in range(offset // max_results):
+                    if "nextPageToken" not in results:
+                        break
+                    results = (
+                        self.service.users()
+                        .messages()
+                        .list(
+                            userId="me",
+                            maxResults=max_results,
+                            pageToken=results["nextPageToken"],
+                            q="is:unread OR is:inbox",
+                        )
+                        .execute()
+                    )
+                    messages = results.get("messages", [])
+
+            emails = []
             for message in messages:
                 email_data = self._get_email_details(message["id"])
                 if email_data:
