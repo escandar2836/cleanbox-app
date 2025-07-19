@@ -36,8 +36,8 @@ GOOGLE_CLIENT_CONFIG = {
 }
 
 
-def grant_pubsub_permissions_to_user(user_email: str) -> bool:
-    """사용자에게 Pub/Sub 권한을 부여합니다."""
+def check_and_grant_pubsub_permissions(user_email: str) -> bool:
+    """사용자의 Pub/Sub 권한을 확인하고 없으면 부여합니다."""
     try:
         # 서비스 계정 키 파일 경로
         service_account_key_path = os.getenv(
@@ -59,23 +59,33 @@ def grant_pubsub_permissions_to_user(user_email: str) -> bool:
         client = resourcemanager_v3.ProjectsClient(credentials=credentials)
         project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "cleanbox-466314")
 
-        # 사용자에게 Pub/Sub 편집자 역할 부여
+        # 사용자에게 Pub/Sub Admin 역할 부여 (더 강력한 권한)
         project_name = f"projects/{project_id}"
         policy = client.get_iam_policy(request={"resource": project_name})
 
-        # 사용자에게 Pub/Sub 편집자 역할 추가
+        # 사용자에게 Pub/Sub Admin 역할 추가
         member = f"user:{user_email}"
-        role = "roles/pubsub.editor"
+        role = "roles/pubsub.admin"  # 👈 Admin 권한으로 변경
 
-        # 이미 권한이 있는지 확인
+        # 이미 권한이 있는지 확인 (여러 권한 레벨 체크)
+        has_permission = False
         for binding in policy.bindings:
-            if binding.role == role and member in binding.members:
+            if member in binding.members and (
+                binding.role == "roles/pubsub.admin"
+                or binding.role == "roles/pubsub.editor"
+                or binding.role == "roles/pubsub.publisher"
+                or binding.role == "roles/pubsub.subscriber"
+            ):
+                has_permission = True
                 print(
-                    f"✅ 사용자 {user_email}에게 이미 Pub/Sub 권한이 부여되어 있습니다."
+                    f"✅ 사용자 {user_email}에게 이미 Pub/Sub 권한이 부여되어 있습니다. (역할: {binding.role})"
                 )
-                return True
+                break
 
-        # 권한 추가
+        if has_permission:
+            return True
+
+        # 권한이 없으면 부여
         from google.cloud.resourcemanager_v3.types import Policy, Binding
 
         new_binding = Binding()
@@ -86,12 +96,17 @@ def grant_pubsub_permissions_to_user(user_email: str) -> bool:
         # 정책 업데이트
         client.set_iam_policy(request={"resource": project_name, "policy": policy})
 
-        print(f"✅ 사용자 {user_email}에게 Pub/Sub 권한을 부여했습니다.")
+        print(f"✅ 사용자 {user_email}에게 Pub/Sub Admin 권한을 부여했습니다.")
         return True
 
     except Exception as e:
         print(f"❌ 사용자 {user_email}에게 Pub/Sub 권한 부여 실패: {str(e)}")
         return False
+
+
+def grant_pubsub_permissions_to_user(user_email: str) -> bool:
+    """사용자에게 Pub/Sub 권한을 부여합니다. (기존 함수 - 호환성 유지)"""
+    return check_and_grant_pubsub_permissions(user_email)
 
 
 @auth_bp.route("/login")
@@ -235,6 +250,18 @@ def _handle_login_callback(credentials, id_info):
         user.last_login = datetime.utcnow()
         db.session.commit()
 
+        # 모든 사용자에게 Pub/Sub 권한 확인 및 부여
+        try:
+            print(f"🔍 사용자 {user.email}의 Pub/Sub 권한 확인 중...")
+            permission_granted = check_and_grant_pubsub_permissions(user.email)
+
+            if permission_granted:
+                print(f"✅ 사용자 {user.email}의 Pub/Sub 권한 설정 완료")
+            else:
+                print(f"⚠️ 사용자 {user.email}의 Pub/Sub 권한 설정 실패")
+        except Exception as e:
+            print(f"❌ 사용자 {user.email}의 Pub/Sub 권한 확인 중 오류: {str(e)}")
+
         # 새 사용자인 경우 자동 웹훅 설정
         if is_new_user:
             try:
@@ -244,10 +271,6 @@ def _handle_login_callback(credentials, id_info):
                 print(f"🔄 새 사용자 웹훅 자동 설정: {user.email}")
                 setup_webhook_for_account(user.id, account.id)
                 print(f"✅ 웹훅 자동 설정 완료: {user.email}")
-
-                # 새 사용자에게 Pub/Sub 권한 부여
-                grant_pubsub_permissions_to_user(user.email)
-                print(f"✅ 새 사용자 {user.email}에게 Pub/Sub 권한 부여 완료")
             except Exception as e:
                 print(f"⚠️ 웹훅 자동 설정 실패: {user.email}, 오류: {str(e)}")
 
@@ -308,6 +331,22 @@ def _handle_add_account_callback(credentials, id_info):
 
         db.session.commit()
 
+        # 추가 계정에 Pub/Sub 권한 확인 및 부여
+        try:
+            print(f"🔍 추가 계정 {account.account_email}의 Pub/Sub 권한 확인 중...")
+            permission_granted = check_and_grant_pubsub_permissions(
+                account.account_email
+            )
+
+            if permission_granted:
+                print(f"✅ 추가 계정 {account.account_email}의 Pub/Sub 권한 설정 완료")
+            else:
+                print(f"⚠️ 추가 계정 {account.account_email}의 Pub/Sub 권한 설정 실패")
+        except Exception as e:
+            print(
+                f"❌ 추가 계정 {account.account_email}의 Pub/Sub 권한 확인 중 오류: {str(e)}"
+            )
+
         # Gmail 웹훅 자동 설정 (선택사항)
         try:
             from ..email.gmail_service import GmailService
@@ -319,12 +358,6 @@ def _handle_add_account_callback(credentials, id_info):
             if topic_name:
                 gmail_service.setup_gmail_watch(topic_name)
                 print(f"✅ Gmail 웹훅 자동 설정 완료: {account.account_email}")
-
-                # 추가 계정에 Pub/Sub 권한 부여
-                grant_pubsub_permissions_to_user(account.account_email)
-                print(
-                    f"✅ 추가 계정 {account.account_email}에게 Pub/Sub 권한 부여 완료"
-                )
         except Exception as e:
             print(f"⚠️ Gmail 웹훅 자동 설정 실패: {e}")
             # 웹훅 설정 실패는 치명적이지 않으므로 계속 진행
