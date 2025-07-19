@@ -17,7 +17,7 @@ cp env.example .env
 
 ```bash
 # 보안 키 설정 (실제 값으로 변경하세요)
-CLEANBOX_SECRET_KEY=your-secret-key-here
+SECRET_KEY=your-secret-key-here
 CLEANBOX_ENCRYPTION_KEY=NZnrraDcMdcD7vmY0Gd5YXqkCbm-28MgyZfcaJCAYgc=
 
 # Google OAuth 설정
@@ -91,7 +91,7 @@ python app.py
    FLASK_APP=app.py
    FLASK_ENV=development
    FLASK_PORT=5001
-   CLEANBOX_SECRET_KEY=your-secret-key-here
+   SECRET_KEY=your-secret-key-here
    CLEANBOX_ENCRYPTION_KEY=your-encryption-key-here
    ```
 

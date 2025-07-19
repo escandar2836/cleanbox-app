@@ -788,9 +788,9 @@ def setup_webhook_for_account(user_id: str, account_id: int) -> bool:
             print(f"📅 누락된 이메일 기간 확인: {missed_period_start} ~ 현재")
 
         # 환경 변수 확인
-        project_id = os.environ.get("GOOGLE_CLOUD_PROJECT_ID")
+        project_id = os.environ.get("GOOGLE_CLOUD_PROJECT")
         if not project_id:
-            print("❌ GOOGLE_CLOUD_PROJECT_ID 환경 변수가 설정되지 않음")
+            print("❌ GOOGLE_CLOUD_PROJECT 환경 변수가 설정되지 않음")
             return False
 
         # 토픽 이름 설정
@@ -1530,7 +1530,7 @@ def debug_webhook_setup():
 
         debug_info = {
             "environment": {
-                "project_id": os.environ.get("GOOGLE_CLOUD_PROJECT_ID"),
+                "project_id": os.environ.get("GOOGLE_CLOUD_PROJECT"),
                 "topic_name": os.environ.get("GMAIL_WEBHOOK_TOPIC"),
                 "webhook_url": "https://cleanbox-app.onrender.com/webhook/gmail",
             },

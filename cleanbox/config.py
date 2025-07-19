@@ -35,7 +35,7 @@ class Config:
     GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
 
     # Google Cloud 설정
-    GOOGLE_CLOUD_PROJECT_ID = os.environ.get("GOOGLE_CLOUD_PROJECT_ID")
+    GOOGLE_CLOUD_PROJECT = os.environ.get("GOOGLE_CLOUD_PROJECT")
     GMAIL_WEBHOOK_TOPIC = os.environ.get("GMAIL_WEBHOOK_TOPIC")
 
     # OpenAI 설정

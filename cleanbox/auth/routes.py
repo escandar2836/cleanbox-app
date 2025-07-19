@@ -14,6 +14,8 @@ from google_auth_oauthlib.flow import Flow
 from google.oauth2 import id_token
 from google.auth.transport import requests
 from googleapiclient.discovery import build
+from google.cloud import resourcemanager_v3
+from google.oauth2 import service_account
 
 from ..models import User, UserToken, UserAccount, db
 
@@ -32,6 +34,64 @@ GOOGLE_CLIENT_CONFIG = {
         ],
     }
 }
+
+
+def grant_pubsub_permissions_to_user(user_email: str) -> bool:
+    """사용자에게 Pub/Sub 권한을 부여합니다."""
+    try:
+        # 서비스 계정 키 파일 경로
+        service_account_key_path = os.getenv(
+            "GOOGLE_APPLICATION_CREDENTIALS", "cleanbox-webhook-key.json"
+        )
+
+        if not os.path.exists(service_account_key_path):
+            print(
+                f"⚠️ 서비스 계정 키 파일을 찾을 수 없습니다: {service_account_key_path}"
+            )
+            return False
+
+        # 서비스 계정 자격 증명으로 Resource Manager 클라이언트 생성
+        credentials = service_account.Credentials.from_service_account_file(
+            service_account_key_path,
+            scopes=["https://www.googleapis.com/auth/cloud-platform"],
+        )
+
+        client = resourcemanager_v3.ProjectsClient(credentials=credentials)
+        project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "cleanbox-466314")
+
+        # 사용자에게 Pub/Sub 편집자 역할 부여
+        project_name = f"projects/{project_id}"
+        policy = client.get_iam_policy(request={"resource": project_name})
+
+        # 사용자에게 Pub/Sub 편집자 역할 추가
+        member = f"user:{user_email}"
+        role = "roles/pubsub.editor"
+
+        # 이미 권한이 있는지 확인
+        for binding in policy.bindings:
+            if binding.role == role and member in binding.members:
+                print(
+                    f"✅ 사용자 {user_email}에게 이미 Pub/Sub 권한이 부여되어 있습니다."
+                )
+                return True
+
+        # 권한 추가
+        from google.cloud.resourcemanager_v3.types import Policy, Binding
+
+        new_binding = Binding()
+        new_binding.role = role
+        new_binding.members.append(member)
+        policy.bindings.append(new_binding)
+
+        # 정책 업데이트
+        client.set_iam_policy(request={"resource": project_name, "policy": policy})
+
+        print(f"✅ 사용자 {user_email}에게 Pub/Sub 권한을 부여했습니다.")
+        return True
+
+    except Exception as e:
+        print(f"❌ 사용자 {user_email}에게 Pub/Sub 권한 부여 실패: {str(e)}")
+        return False
 
 
 @auth_bp.route("/login")
@@ -184,6 +244,10 @@ def _handle_login_callback(credentials, id_info):
                 print(f"🔄 새 사용자 웹훅 자동 설정: {user.email}")
                 setup_webhook_for_account(user.id, account.id)
                 print(f"✅ 웹훅 자동 설정 완료: {user.email}")
+
+                # 새 사용자에게 Pub/Sub 권한 부여
+                grant_pubsub_permissions_to_user(user.email)
+                print(f"✅ 새 사용자 {user.email}에게 Pub/Sub 권한 부여 완료")
             except Exception as e:
                 print(f"⚠️ 웹훅 자동 설정 실패: {user.email}, 오류: {str(e)}")
 
@@ -251,16 +315,16 @@ def _handle_add_account_callback(credentials, id_info):
             gmail_service = GmailService(current_user.id, account.id)
 
             # 환경변수에서 토픽 이름 가져오기
-            topic_name = os.environ.get(
-                "GOOGLE_CLOUD_TOPIC_NAME", "gmail-notifications"
-            )
+            topic_name = os.environ.get("GMAIL_WEBHOOK_TOPIC")
             if topic_name:
-                # 프로젝트 ID와 함께 전체 토픽 이름 생성
-                project_id = os.environ.get("GOOGLE_CLOUD_PROJECT_ID")
-                if project_id:
-                    full_topic_name = f"projects/{project_id}/topics/{topic_name}"
-                    gmail_service.setup_gmail_watch(full_topic_name)
-                    print(f"✅ Gmail 웹훅 자동 설정 완료: {account.account_email}")
+                gmail_service.setup_gmail_watch(topic_name)
+                print(f"✅ Gmail 웹훅 자동 설정 완료: {account.account_email}")
+
+                # 추가 계정에 Pub/Sub 권한 부여
+                grant_pubsub_permissions_to_user(account.account_email)
+                print(
+                    f"✅ 추가 계정 {account.account_email}에게 Pub/Sub 권한 부여 완료"
+                )
         except Exception as e:
             print(f"⚠️ Gmail 웹훅 자동 설정 실패: {e}")
             # 웹훅 설정 실패는 치명적이지 않으므로 계속 진행
