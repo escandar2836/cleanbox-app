@@ -56,8 +56,8 @@
                             <i class="fas fa-user"></i> {{ current_user.name or current_user.email }}
                         </a>
                         <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="{{ url_for('auth.profile') }}">
-                                <i class="fas fa-user-circle"></i> 프로필
+                            <li><a class="dropdown-item" href="{{ url_for('auth.manage_accounts') }}">
+                                <i class="fas fa-user-circle"></i> 계정 관리
                             </a></li>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}">
