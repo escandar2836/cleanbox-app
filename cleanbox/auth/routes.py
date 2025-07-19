@@ -36,77 +36,266 @@ GOOGLE_CLIENT_CONFIG = {
 }
 
 
-def check_and_grant_pubsub_permissions(user_email: str) -> bool:
-    """사용자의 Pub/Sub 권한을 확인하고 없으면 부여합니다."""
+def debug_account_info():
+    """현재 사용 중인 계정 정보를 디버깅 출력합니다."""
+    print("\n" + "=" * 60)
+    print("🔍 현재 사용 중인 계정 정보 디버깅")
+    print("=" * 60)
+
     try:
-        # 서비스 계정 키 파일 경로
-        service_account_key_path = os.getenv(
-            "GOOGLE_APPLICATION_CREDENTIALS", "cleanbox-webhook-key.json"
+        import subprocess
+        import json
+
+        # 1. gcloud auth list - 현재 인증된 계정들
+        print("\n📋 1. gcloud 인증된 계정 목록:")
+        try:
+            result = subprocess.run(
+                ["gcloud", "auth", "list", "--format=json"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if result.returncode == 0:
+                auth_data = json.loads(result.stdout)
+                for account in auth_data:
+                    print(f"   - 계정: {account.get('account', 'N/A')}")
+                    print(f"     상태: {account.get('status', 'N/A')}")
+                    print(
+                        f"     활성: {'✅' if account.get('active', False) else '❌'}"
+                    )
+            else:
+                print(f"   ❌ gcloud auth list 실패: {result.stderr}")
+        except Exception as e:
+            print(f"   ❌ gcloud auth list 오류: {str(e)}")
+
+        # 2. 환경변수 확인
+        print("\n📋 2. 환경변수 정보:")
+        print(
+            f"   GOOGLE_CLOUD_PROJECT: {os.getenv('GOOGLE_CLOUD_PROJECT', '설정되지 않음')}"
+        )
+        print(
+            f"   GOOGLE_APPLICATION_CREDENTIALS: {os.getenv('GOOGLE_APPLICATION_CREDENTIALS', '설정되지 않음')}"
+        )
+        print(
+            f"   GOOGLE_CLIENT_ID: {os.getenv('GOOGLE_CLIENT_ID', '설정되지 않음')[:20]}..."
         )
 
-        if not os.path.exists(service_account_key_path):
-            print(
-                f"⚠️ 서비스 계정 키 파일을 찾을 수 없습니다: {service_account_key_path}"
+        # 3. 서비스 계정 키 파일 확인
+        print("\n📋 3. 서비스 계정 키 파일:")
+        creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+        if creds_path:
+            if os.path.exists(creds_path):
+                print(f"   ✅ 파일 존재: {creds_path}")
+                try:
+                    with open(creds_path, "r") as f:
+                        creds_data = json.load(f)
+                    print(
+                        f"   📧 서비스 계정 이메일: {creds_data.get('client_email', 'N/A')}"
+                    )
+                    print(f"   🆔 프로젝트 ID: {creds_data.get('project_id', 'N/A')}")
+                except Exception as e:
+                    print(f"   ❌ 파일 읽기 오류: {str(e)}")
+            else:
+                print(f"   ❌ 파일 없음: {creds_path}")
+        else:
+            print("   ⚠️ GOOGLE_APPLICATION_CREDENTIALS 환경변수 없음")
+
+        # 4. 현재 프로젝트 확인
+        print("\n📋 4. 현재 gcloud 프로젝트:")
+        try:
+            result = subprocess.run(
+                ["gcloud", "config", "get-value", "project"],
+                capture_output=True,
+                text=True,
+                timeout=10,
             )
+            if result.returncode == 0:
+                print(f"   프로젝트: {result.stdout.strip()}")
+            else:
+                print(f"   ❌ 프로젝트 확인 실패: {result.stderr}")
+        except Exception as e:
+            print(f"   ❌ 프로젝트 확인 오류: {str(e)}")
+
+        # 5. 환경변수에서 서비스 계정 키 확인
+        print("\n📋 5. 환경변수 서비스 계정 키:")
+        service_account_key = os.getenv("GOOGLE_SERVICE_ACCOUNT_KEY")
+        if service_account_key:
+            try:
+                key_data = json.loads(service_account_key)
+                print(
+                    f"   📧 서비스 계정 이메일: {key_data.get('client_email', 'N/A')}"
+                )
+                print(f"   🆔 프로젝트 ID: {key_data.get('project_id', 'N/A')}")
+            except Exception as e:
+                print(f"   ❌ JSON 파싱 오류: {str(e)}")
+        else:
+            print("   ⚠️ GOOGLE_SERVICE_ACCOUNT_KEY 환경변수 없음")
+
+        print("=" * 60)
+        print()
+
+    except Exception as e:
+        print(f"❌ 디버깅 정보 출력 중 오류: {str(e)}")
+
+
+def check_user_pubsub_permissions(
+    user_email: str, project_id: str
+) -> tuple[bool, list]:
+    """사용자의 Pub/Sub 권한을 확인합니다."""
+    try:
+        import subprocess
+        import json
+
+        # 전체 IAM 정책 가져오기 (필터링 없이)
+        result = subprocess.run(
+            [
+                "gcloud",
+                "projects",
+                "get-iam-policy",
+                project_id,
+                "--format=json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+        if result.returncode == 0:
+            # JSON 파싱
+            policy_data = json.loads(result.stdout)
+            bindings = policy_data.get("bindings", [])
+
+            # Pub/Sub 관련 권한 확인
+            pubsub_roles = [
+                "roles/pubsub.admin",
+                "roles/pubsub.editor",
+                "roles/pubsub.publisher",
+                "roles/pubsub.subscriber",
+            ]
+
+            user_roles = []
+            for binding in bindings:
+                members = binding.get("members", [])
+                role = binding.get("role", "")
+
+                # 사용자가 이 바인딩에 포함되어 있는지 확인
+                if f"user:{user_email}" in members:
+                    user_roles.append(role)
+                    print(f"   📋 발견된 역할: {role}")
+
+            # Pub/Sub 권한이 있는지 확인
+            has_pubsub_permission = any(role in pubsub_roles for role in user_roles)
+
+            if has_pubsub_permission:
+                print(
+                    f"✅ 사용자 {user_email}에게 Pub/Sub 권한이 있습니다. (역할: {user_roles})"
+                )
+                return True, user_roles
+            else:
+                print(
+                    f"⚠️ 사용자 {user_email}에게 Pub/Sub 권한이 없습니다. (현재 역할: {user_roles})"
+                )
+                return False, user_roles
+        else:
+            print(f"ℹ️ 사용자 {user_email}의 권한 정보를 찾을 수 없습니다.")
+            return False, []
+
+    except Exception as e:
+        print(f"⚠️ 권한 확인 중 오류: {str(e)}")
+        return False, []
+
+
+def grant_pubsub_permissions_to_user(user_email: str, project_id: str) -> bool:
+    """사용자에게 Pub/Sub Admin 권한을 부여합니다."""
+    try:
+        import subprocess
+
+        print(f"🔧 사용자 {user_email}에게 Pub/Sub Admin 권한 부여 중...")
+
+        result = subprocess.run(
+            [
+                "gcloud",
+                "projects",
+                "add-iam-policy-binding",
+                project_id,
+                "--member=user:" + user_email,
+                "--role=roles/pubsub.admin",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+        if result.returncode == 0:
+            print(f"✅ gcloud 명령어 실행 성공")
+            print(f"📋 명령어 출력: {result.stdout.strip()}")
+            return True
+        else:
+            print(f"❌ gcloud 명령어 실행 실패")
+            print(f"📋 에러 출력: {result.stderr.strip()}")
             return False
 
-        # 서비스 계정 자격 증명으로 Resource Manager 클라이언트 생성
-        credentials = service_account.Credentials.from_service_account_file(
-            service_account_key_path,
-            scopes=["https://www.googleapis.com/auth/cloud-platform"],
-        )
+    except Exception as e:
+        print(f"❌ 권한 부여 중 오류: {str(e)}")
+        return False
 
-        client = resourcemanager_v3.ProjectsClient(credentials=credentials)
+
+def check_and_grant_pubsub_permissions(user_email: str) -> bool:
+    """사용자의 Pub/Sub 권한을 확인하고 없으면 부여합니다. (gcloud CLI 사용)"""
+    try:
+        import subprocess
+        import json
+
+        # 디버깅 정보 출력
+        debug_account_info()
+
         project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "cleanbox-466314")
 
-        # 사용자에게 Pub/Sub Admin 역할 부여 (더 강력한 권한)
-        project_name = f"projects/{project_id}"
-        policy = client.get_iam_policy(request={"resource": project_name})
-
-        # 사용자에게 Pub/Sub Admin 역할 추가
-        member = f"user:{user_email}"
-        role = "roles/pubsub.admin"  # 👈 Admin 권한으로 변경
-
-        # 이미 권한이 있는지 확인 (여러 권한 레벨 체크)
-        has_permission = False
-        for binding in policy.bindings:
-            if member in binding.members and (
-                binding.role == "roles/pubsub.admin"
-                or binding.role == "roles/pubsub.editor"
-                or binding.role == "roles/pubsub.publisher"
-                or binding.role == "roles/pubsub.subscriber"
-            ):
-                has_permission = True
-                print(
-                    f"✅ 사용자 {user_email}에게 이미 Pub/Sub 권한이 부여되어 있습니다. (역할: {binding.role})"
-                )
-                break
+        # 1단계: 현재 권한 확인
+        print(f"🔍 사용자 {user_email}의 현재 권한 확인 중...")
+        has_permission, current_roles = check_user_pubsub_permissions(
+            user_email, project_id
+        )
 
         if has_permission:
+            print(f"✅ 사용자 {user_email}에게 이미 Pub/Sub 권한이 부여되어 있습니다.")
             return True
 
-        # 권한이 없으면 부여
-        from google.cloud.resourcemanager_v3.types import Policy, Binding
+        # 2단계: 권한 부여
+        print(f"🔧 사용자 {user_email}에게 Pub/Sub Admin 권한 부여 중...")
+        grant_success = grant_pubsub_permissions_to_user(user_email, project_id)
 
-        new_binding = Binding()
-        new_binding.role = role
-        new_binding.members.append(member)
-        policy.bindings.append(new_binding)
+        if not grant_success:
+            print(f"❌ 권한 부여 명령어 실행 실패")
+            return False
 
-        # 정책 업데이트
-        client.set_iam_policy(request={"resource": project_name, "policy": policy})
+        # 3단계: 권한 부여 후 재확인 (5초 대기)
+        print(f"⏳ 권한 부여 후 재확인을 위해 5초 대기 중...")
+        import time
 
-        print(f"✅ 사용자 {user_email}에게 Pub/Sub Admin 권한을 부여했습니다.")
-        return True
+        time.sleep(5)
+
+        print(f"🔍 권한 부여 후 재확인 중...")
+        has_permission_after, new_roles = check_user_pubsub_permissions(
+            user_email, project_id
+        )
+
+        if has_permission_after:
+            print(
+                f"✅ 권한 부여 성공! 사용자 {user_email}에게 Pub/Sub 권한이 부여되었습니다."
+            )
+            print(f"📋 새로운 역할: {new_roles}")
+            return True
+        else:
+            print(
+                f"❌ 권한 부여 실패! 사용자 {user_email}에게 여전히 Pub/Sub 권한이 없습니다."
+            )
+            print(f"📋 현재 역할: {new_roles}")
+            return False
 
     except Exception as e:
         print(f"❌ 사용자 {user_email}에게 Pub/Sub 권한 부여 실패: {str(e)}")
         return False
-
-
-def grant_pubsub_permissions_to_user(user_email: str) -> bool:
-    """사용자에게 Pub/Sub 권한을 부여합니다. (기존 함수 - 호환성 유지)"""
-    return check_and_grant_pubsub_permissions(user_email)
 
 
 @auth_bp.route("/login")
