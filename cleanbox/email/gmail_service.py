@@ -27,8 +27,21 @@ class GmailService:
             if not credentials_data:
                 raise Exception("사용자 인증 정보를 찾을 수 없습니다.")
 
+            # 딕셔너리를 Google OAuth credentials 객체로 변환
+            from google.oauth2.credentials import Credentials
+
+            credentials = Credentials(
+                token=credentials_data.get("token"),
+                refresh_token=credentials_data.get("refresh_token"),
+                token_uri=credentials_data.get("token_uri"),
+                client_id=credentials_data.get("client_id"),
+                client_secret=credentials_data.get("client_secret"),
+                scopes=credentials_data.get("scopes", []),
+                expiry=credentials_data.get("expiry"),
+            )
+
             # Google API 클라이언트 빌드
-            self.service = build("gmail", "v1", credentials=credentials_data)
+            self.service = build("gmail", "v1", credentials=credentials)
         except Exception as e:
             raise Exception(f"Gmail API 서비스 초기화 실패: {str(e)}")
 
@@ -53,6 +66,8 @@ class GmailService:
             for message in messages:
                 email_data = self._get_email_details(message["id"])
                 if email_data:
+                    # 이메일을 데이터베이스에 저장
+                    email_obj = self.save_email_to_db(email_data)
                     emails.append(email_data)
 
             return emails
@@ -137,15 +152,15 @@ class GmailService:
             if existing_email:
                 return existing_email
 
-            # 새 이메일 생성
+            # 새 이메일 생성 (기본값 처리)
             email_obj = Email(
                 user_id=self.user_id,
                 account_id=self.account_id,
                 gmail_id=email_data["gmail_id"],
                 thread_id=email_data.get("thread_id"),
-                subject=email_data["subject"],
-                sender=email_data["sender"],
-                content=email_data["body"],
+                subject=email_data.get("subject") or "제목 없음",
+                sender=email_data.get("sender") or "알 수 없는 발신자",
+                content=email_data.get("body") or "본문 없음",
                 summary=email_data.get("snippet", ""),
                 received_at=self._parse_date(email_data.get("date")),
                 is_read=False,

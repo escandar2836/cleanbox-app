@@ -322,10 +322,10 @@ class AdvancedUnsubscribeService:
             if link and link.get("href"):
                 return link["href"]
 
-            # 텍스트가 포함된 버튼 찾기
+            # 텍스트가 포함된 버튼 찾기 (onclick은 제외)
             button = soup.find("button", string=re.compile(text, re.IGNORECASE))
-            if button and button.get("onclick"):
-                return button["onclick"]
+            if button and button.get("href"):  # href 속성이 있는 경우만
+                return button["href"]
 
         return None
 

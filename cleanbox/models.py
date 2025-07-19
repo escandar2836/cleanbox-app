@@ -90,35 +90,67 @@ class UserToken(db.Model):
 
     def set_tokens(self, credentials):
         """토큰을 암호화하여 저장"""
-        key = os.environ.get("CLEANBOX_ENCRYPTION_KEY", Fernet.generate_key())
+        from flask import current_app
+
+        if current_app.config.get("TESTING", False):
+            # 테스트 환경에서는 설정에서 키를 가져옴
+            key = current_app.config.get(
+                "CLEANBOX_ENCRYPTION_KEY", Fernet.generate_key()
+            )
+        else:
+            # 프로덕션 환경에서는 환경변수에서 키를 가져옴
+            key = os.environ.get("CLEANBOX_ENCRYPTION_KEY", Fernet.generate_key())
         cipher = Fernet(key)
 
-        self.access_token = cipher.encrypt(credentials.token.encode()).decode()
+        # None 값 처리
+        if credentials.token:
+            self.access_token = cipher.encrypt(credentials.token.encode()).decode()
+        else:
+            self.access_token = None
+
         if credentials.refresh_token:
             self.refresh_token = cipher.encrypt(
                 credentials.refresh_token.encode()
             ).decode()
+        else:
+            self.refresh_token = None
 
         self.token_uri = credentials.token_uri
         self.client_id = credentials.client_id
         self.client_secret = credentials.client_secret
-        self.scopes = json.dumps(credentials.scopes)
+        self.scopes = (
+            json.dumps(credentials.scopes) if credentials.scopes else json.dumps([])
+        )
 
         if credentials.expiry:
             self.expires_at = credentials.expiry
 
     def get_tokens(self):
         """암호화된 토큰을 복호화하여 반환"""
-        key = os.environ.get("CLEANBOX_ENCRYPTION_KEY", Fernet.generate_key())
+        from flask import current_app
+
+        if current_app.config.get("TESTING", False):
+            # 테스트 환경에서는 설정에서 키를 가져옴
+            key = current_app.config.get(
+                "CLEANBOX_ENCRYPTION_KEY", Fernet.generate_key()
+            )
+        else:
+            # 프로덕션 환경에서는 환경변수에서 키를 가져옴
+            key = os.environ.get("CLEANBOX_ENCRYPTION_KEY", Fernet.generate_key())
         cipher = Fernet(key)
 
         tokens = {
-            "token": cipher.decrypt(self.access_token.encode()).decode(),
             "token_uri": self.token_uri,
             "client_id": self.client_id,
             "client_secret": self.client_secret,
             "scopes": json.loads(self.scopes) if self.scopes else [],
         }
+
+        # None 값 처리
+        if self.access_token:
+            tokens["token"] = cipher.decrypt(self.access_token.encode()).decode()
+        else:
+            tokens["token"] = None
 
         if self.refresh_token:
             tokens["refresh_token"] = cipher.decrypt(

@@ -1,6 +1,16 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash
-from flask_login import login_required, current_user
-from ..models import Category, db
+import os
+from flask import (
+    Blueprint,
+    request,
+    redirect,
+    url_for,
+    session,
+    flash,
+    render_template,
+    jsonify,
+)
+from flask_login import login_user, logout_user, login_required, current_user
+from ..models import User, UserToken, UserAccount, Category, db
 
 category_bp = Blueprint("category", __name__)
 
@@ -8,24 +18,22 @@ category_bp = Blueprint("category", __name__)
 @category_bp.route("/")
 @login_required
 def list_categories():
-    """메인 대시보드 - 3개 섹션 페이지"""
-    try:
-        # 사용자별 카테고리만 조회
-        categories = Category.query.filter_by(
-            user_id=current_user.id, is_active=True
-        ).all()
+    """카테고리 목록 페이지"""
+    # 인증 상태 재확인
+    if not current_user.is_authenticated:
+        flash("로그인이 필요합니다.", "error")
+        return redirect(url_for("auth.login"))
 
-        # 각 카테고리의 이메일 수 계산
-        for category in categories:
-            category.emails = category.emails  # SQLAlchemy relationship 사용
+    # 사용자의 활성 계정 확인
+    accounts = UserAccount.query.filter_by(
+        user_id=current_user.id, is_active=True
+    ).all()
 
-        return render_template(
-            "category/list.html", user=current_user, categories=categories
-        )
+    if not accounts:
+        flash("연결된 Gmail 계정이 없습니다.", "warning")
+        return redirect(url_for("auth.manage_accounts"))
 
-    except Exception as e:
-        flash(f"카테고리를 불러오는 중 오류가 발생했습니다: {str(e)}", "error")
-        return render_template("category/list.html", user=current_user, categories=[])
+    return render_template("category/list.html", user=current_user, accounts=accounts)
 
 
 @category_bp.route("/add", methods=["GET", "POST"])

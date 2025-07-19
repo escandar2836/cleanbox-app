@@ -16,6 +16,7 @@ from google.auth.transport import requests
 from googleapiclient.discovery import build
 from ..models import User, UserToken, UserAccount, db
 
+
 auth_bp = Blueprint("auth", __name__)
 
 # OAuth 2.0 클라이언트 설정
@@ -26,7 +27,7 @@ GOOGLE_CLIENT_CONFIG = {
         "auth_uri": "https://accounts.google.com/o/oauth2/auth",
         "token_uri": "https://oauth2.googleapis.com/token",
         "redirect_uris": [
-            os.environ.get("GOOGLE_REDIRECT_URI", "http://localhost:5000/auth/callback")
+            os.environ.get("GOOGLE_REDIRECT_URI", "http://localhost:5001/auth/callback")
         ],
     }
 }
@@ -38,31 +39,49 @@ def login():
     if current_user.is_authenticated:
         return redirect(url_for("category.list_categories"))
 
-    flow = Flow.from_client_config(
-        GOOGLE_CLIENT_CONFIG,
-        scopes=[
-            "https://mail.google.com/",
-            "https://www.googleapis.com/auth/userinfo.email",
-            "https://www.googleapis.com/auth/userinfo.profile",
-        ],
-    )
-    flow.redirect_uri = GOOGLE_CLIENT_CONFIG["web"]["redirect_uris"][0]
+    # 이미 진행 중인 OAuth 요청이 있는지 확인
+    if "state" in session:
+        # 세션 정리 후 다시 시작
+        session.pop("state", None)
+        session.pop("adding_account", None)
 
-    authorization_url, state = flow.authorization_url(
-        access_type="offline", include_granted_scopes="true", prompt="consent"
-    )
+    # 무한 리다이렉트 방지: 이미 로그인 페이지에 있다면 Google OAuth로 바로 이동
+    if request.endpoint == "auth.login":
+        flow = Flow.from_client_config(
+            GOOGLE_CLIENT_CONFIG,
+            scopes=[
+                "openid",
+                "https://mail.google.com/",
+                "https://www.googleapis.com/auth/userinfo.email",
+                "https://www.googleapis.com/auth/userinfo.profile",
+            ],
+        )
+        flow.redirect_uri = GOOGLE_CLIENT_CONFIG["web"]["redirect_uris"][0]
 
-    session["state"] = state
-    return redirect(authorization_url)
+        authorization_url, state = flow.authorization_url(
+            access_type="offline", include_granted_scopes="true", prompt="consent"
+        )
+
+        session["state"] = state
+        return redirect(authorization_url)
+
+    # 일반적인 로그인 페이지 렌더링 (필요시)
+    return render_template("auth/login.html")
 
 
 @auth_bp.route("/callback")
 def callback():
     """Google OAuth 콜백 처리"""
     try:
+        # 세션 state 검증
+        if "state" not in session:
+            flash("OAuth 세션이 만료되었습니다. 다시 로그인해주세요.", "error")
+            return redirect(url_for("auth.login"))
+
         flow = Flow.from_client_config(
             GOOGLE_CLIENT_CONFIG,
             scopes=[
+                "openid",
                 "https://mail.google.com/",
                 "https://www.googleapis.com/auth/userinfo.email",
                 "https://www.googleapis.com/auth/userinfo.profile",
@@ -129,11 +148,16 @@ def callback():
 
         db.session.commit()
 
+        # 세션 state 정리
+        session.pop("state", None)
+
         login_user(user)
         flash("CleanBox에 성공적으로 로그인했습니다!", "success")
         return redirect(url_for("category.list_categories"))
 
     except Exception as e:
+        # 더 자세한 에러 로깅
+        print(f"OAuth 콜백 에러: {str(e)}")
         flash(f"로그인 중 오류가 발생했습니다: {str(e)}", "error")
         return redirect(url_for("auth.login"))
 
@@ -145,6 +169,7 @@ def add_account():
     flow = Flow.from_client_config(
         GOOGLE_CLIENT_CONFIG,
         scopes=[
+            "openid",
             "https://mail.google.com/",
             "https://www.googleapis.com/auth/userinfo.email",
             "https://www.googleapis.com/auth/userinfo.profile",
@@ -168,6 +193,7 @@ def callback_add():
         flow = Flow.from_client_config(
             GOOGLE_CLIENT_CONFIG,
             scopes=[
+                "openid",
                 "https://mail.google.com/",
                 "https://www.googleapis.com/auth/userinfo.email",
                 "https://www.googleapis.com/auth/userinfo.profile",
@@ -321,6 +347,10 @@ def get_current_account_id():
     """현재 활성 계정 ID 가져오기"""
     if "current_account_id" in session:
         return session["current_account_id"]
+
+    # 로그인되지 않은 경우 None 반환
+    if not current_user.is_authenticated:
+        return None
 
     # 기본 계정 ID 반환
     primary_account = UserAccount.query.filter_by(

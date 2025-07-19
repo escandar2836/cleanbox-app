@@ -34,4 +34,20 @@ class Config:
     SESSION_COOKIE_SAMESITE = "Lax"
     PERMANENT_SESSION_LIFETIME = 3600  # 1시간
 
+    # AI 기능 설정
+    ENABLE_AI_FEATURES = os.environ.get("CLEANBOX_ENABLE_AI", "true").lower() == "true"
+    OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+
     # 기타 CleanBox 관련 환경설정 추가 가능
+
+
+class TestConfig(Config):
+    """테스트용 설정"""
+
+    TESTING = True
+    SQLALCHEMY_DATABASE_URI = "sqlite:///test_cleanbox.db"
+    WTF_CSRF_ENABLED = False
+    # 테스트 환경에서는 데이터베이스 초기화를 수동으로 제어
+    INIT_DB = False
+    # 테스트용 Fernet 키 (32바이트 base64 인코딩)
+    CLEANBOX_ENCRYPTION_KEY = "bx0fuVNGhldioocf5SO2E1pefdu6m3lr_ccJEo_pqrI="

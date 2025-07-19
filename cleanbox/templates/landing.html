@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+
+{% block title %}CleanBox - AI 이메일 정리 앱{% endblock %}
+
+{% block content %}
+<!-- 히어로 섹션 -->
+<div class="row align-items-center min-vh-75">
+    <div class="col-lg-6">
+        <h1 class="display-4 fw-bold text-primary mb-4">
+            <i class="fas fa-inbox"></i> CleanBox
+        </h1>
+        <h2 class="h3 mb-4">AI가 당신의 이메일을 정리해드립니다</h2>
+        <p class="lead mb-4">
+            CleanBox는 인공지능을 활용하여 받은 이메일을 자동으로 분류하고 요약해주는 
+            스마트한 이메일 관리 앱입니다. 더 이상 이메일 정리에 시간을 낭비하지 마세요!
+        </p>
+        <div class="d-grid gap-2 d-md-flex justify-content-md-start">
+            <a href="{{ url_for('auth.login') }}" class="btn btn-primary btn-lg px-4 me-md-2">
+                <i class="fab fa-google"></i> Google로 시작하기
+            </a>
+            <a href="#features" class="btn btn-outline-secondary btn-lg px-4">
+                <i class="fas fa-info-circle"></i> 자세히 보기
+            </a>
+        </div>
+    </div>
+    <div class="col-lg-6 text-center">
+        <div class="cleanbox-card p-4 bg-light">
+            <i class="fas fa-robot text-primary" style="font-size: 8rem;"></i>
+            <h3 class="mt-3">AI 이메일 어시스턴트</h3>
+            <p class="text-muted">당신의 개인 이메일 관리자</p>
+        </div>
+    </div>
+</div>
+
+<!-- 주요 기능 섹션 -->
+<div id="features" class="py-5">
+    <div class="row">
+        <div class="col-12 text-center mb-5">
+            <h2 class="display-5 fw-bold">주요 기능</h2>
+            <p class="lead text-muted">CleanBox가 제공하는 강력한 기능들을 확인해보세요</p>
+        </div>
+    </div>
+    
+    <div class="row g-4">
+        <div class="col-md-6 col-lg-3">
+            <div class="cleanbox-card h-100 p-4 text-center">
+                <div class="mb-3">
+                    <i class="fas fa-brain text-primary" style="font-size: 3rem;"></i>
+                </div>
+                <h4>AI 자동 분류</h4>
+                <p class="text-muted">
+                    인공지능이 이메일 내용을 분석하여 
+                    사용자가 정의한 카테고리에 자동으로 분류합니다
+                </p>
+            </div>
+        </div>
+        
+        <div class="col-md-6 col-lg-3">
+            <div class="cleanbox-card h-100 p-4 text-center">
+                <div class="mb-3">
+                    <i class="fas fa-envelope-open text-success" style="font-size: 3rem;"></i>
+                </div>
+                <h4>스마트 요약</h4>
+                <p class="text-muted">
+                    긴 이메일도 AI가 핵심 내용만 
+                    간단명료하게 요약해드립니다
+                </p>
+            </div>
+        </div>
+        
+        <div class="col-md-6 col-lg-3">
+            <div class="cleanbox-card h-100 p-4 text-center">
+                <div class="mb-3">
+                    <i class="fas fa-link text-warning" style="font-size: 3rem;"></i>
+                </div>
+                <h4>Gmail 연동</h4>
+                <p class="text-muted">
+                    Google 계정과 연동하여 
+                    기존 Gmail을 그대로 활용할 수 있습니다
+                </p>
+            </div>
+        </div>
+        
+        <div class="col-md-6 col-lg-3">
+            <div class="cleanbox-card h-100 p-4 text-center">
+                <div class="mb-3">
+                    <i class="fas fa-unlink text-danger" style="font-size: 3rem;"></i>
+                </div>
+                <h4>일괄 구독 해지</h4>
+                <p class="text-muted">
+                    원하지 않는 이메일을 선택하여 
+                    한 번에 구독을 해지할 수 있습니다
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 사용 방법 섹션 -->
+<div class="py-5 bg-light">
+    <div class="row">
+        <div class="col-12 text-center mb-5">
+            <h2 class="display-5 fw-bold">사용 방법</h2>
+            <p class="lead text-muted">3단계로 간단하게 시작하세요</p>
+        </div>
+    </div>
+    
+    <div class="row g-4">
+        <div class="col-md-4">
+            <div class="text-center">
+                <div class="bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px;">
+                    <span class="fw-bold">1</span>
+                </div>
+                <h4>Google 로그인</h4>
+                <p class="text-muted">Google 계정으로 간편하게 로그인하세요</p>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="text-center">
+                <div class="bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px;">
+                    <span class="fw-bold">2</span>
+                </div>
+                <h4>카테고리 설정</h4>
+                <p class="text-muted">원하는 이메일 카테고리를 생성하고 설명을 추가하세요</p>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="text-center">
+                <div class="bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px;">
+                    <span class="fw-bold">3</span>
+                </div>
+                <h4>자동 정리 시작</h4>
+                <p class="text-muted">AI가 새로운 이메일을 자동으로 분류하고 정리해드립니다</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- CTA 섹션 -->
+<div class="py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-8 text-center">
+            <h2 class="display-6 fw-bold mb-4">지금 바로 시작하세요</h2>
+            <p class="lead mb-4">
+                이메일 정리로 인한 스트레스에서 벗어나세요. 
+                CleanBox가 당신의 이메일 생산성을 높여드립니다.
+            </p>
+            <a href="{{ url_for('auth.login') }}" class="btn btn-primary btn-lg px-5">
+                <i class="fab fa-google"></i> 무료로 시작하기
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %} 

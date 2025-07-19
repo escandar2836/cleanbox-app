@@ -56,15 +56,19 @@ pip install -r requirements.txt
 ### 4. 환경 변수 설정
 `.env` 파일을 생성하고 다음 내용을 추가:
 ```env
+# Flask 설정
 FLASK_APP=run.py
 FLASK_ENV=development
+FLASK_PORT=5001
 SECRET_KEY=your-secret-key-here
+
+# 데이터베이스 설정
 DATABASE_URL=sqlite:///cleanbox.db
 
 # Google OAuth 설정
 GOOGLE_CLIENT_ID=your-google-client-id
 GOOGLE_CLIENT_SECRET=your-google-client-secret
-GOOGLE_REDIRECT_URI=http://localhost:5000/auth/callback
+GOOGLE_REDIRECT_URI=http://localhost:5001/auth/callback
 
 # OpenAI API 설정
 OPENAI_API_KEY=your-openai-api-key
@@ -85,7 +89,7 @@ flask db upgrade
 python run.py
 ```
 
-브라우저에서 `http://localhost:5000`으로 접속하세요.
+브라우저에서 `http://localhost:5001`으로 접속하세요.
 
 ## 🔧 Google OAuth 설정
 

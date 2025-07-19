@@ -18,7 +18,7 @@ class AIClassifier:
         """이메일을 AI로 분류"""
         try:
             if not self.api_key:
-                return None, "AI API 키가 설정되지 않았습니다."
+                return None, "AI 기능을 사용하려면 OpenAI API 키를 설정해주세요."
 
             # 카테고리 정보 구성
             category_info = []
@@ -46,7 +46,7 @@ class AIClassifier:
                 )
                 return category_id, reasoning
 
-            return None, "AI 분류에 실패했습니다."
+            return None, "AI 분류를 사용할 수 없습니다. 수동으로 분류해주세요."
 
         except Exception as e:
             return None, f"AI 분류 오류: {str(e)}"
@@ -55,7 +55,7 @@ class AIClassifier:
         """이메일 요약"""
         try:
             if not self.api_key:
-                return "AI API 키가 설정되지 않았습니다."
+                return "AI 요약을 사용하려면 OpenAI API 키를 설정해주세요."
 
             # 요약 프롬프트 구성
             prompt = self._build_summary_prompt(email_content, subject)
@@ -66,7 +66,7 @@ class AIClassifier:
             if response:
                 return response.strip()
 
-            return "요약을 생성할 수 없습니다."
+            return "AI 요약을 사용할 수 없습니다. 이메일 내용을 직접 확인해주세요."
 
         except Exception as e:
             return f"요약 오류: {str(e)}"
@@ -130,6 +130,10 @@ class AIClassifier:
     def _call_openai_api(self, prompt: str) -> Optional[str]:
         """OpenAI API 호출"""
         try:
+            if not self.api_key:
+                print("OpenAI API 키가 설정되지 않았습니다.")
+                return None
+
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json",
@@ -155,6 +159,14 @@ class AIClassifier:
             if response.status_code == 200:
                 result = response.json()
                 return result["choices"][0]["message"]["content"]
+            elif response.status_code == 429:
+                print(
+                    "OpenAI API 사용량 한도를 초과했습니다. 잠시 후 다시 시도해주세요."
+                )
+                return None
+            elif response.status_code == 401:
+                print("OpenAI API 키가 유효하지 않습니다.")
+                return None
             else:
                 print(f"OpenAI API 오류: {response.status_code} - {response.text}")
                 return None
