@@ -14,4 +14,4 @@ webdriver-manager
 pytest
 pytest-flask
 pytest-cov
-psycopg2-binary 
+psycopg2-binary==2.9.10 

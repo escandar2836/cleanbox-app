@@ -412,7 +412,7 @@ class TestEdgeCases:
 
     def test_user_with_very_long_name(self, app):
         """매우 긴 이름을 가진 사용자 테스트"""
-        long_name = "A" * 1000  # 1000자 이름
+        long_name = "A" * 255  # PostgreSQL varchar(255) 제한에 맞춤
         user = User(id="test_123", email="test@example.com", name=long_name)
         db.session.add(user)
         db.session.commit()

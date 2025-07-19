@@ -167,9 +167,24 @@ pytest -m edge_cases
 pytest -m security
 ```
 
-### 커버리지 포함 테스트
+### 🧪 테스트 환경 설정
+
+#### 1. 테스트용 Docker 서비스 실행
 ```bash
-# 커버리지 리포트와 함께 테스트 실행
+# 테스트용 PostgreSQL과 Ollama 실행
+docker-compose -f docker-compose.test.yml up -d
+
+# 테스트 환경변수 설정
+export CLEANBOX_DATABASE_URI=postgresql://cleanbox_user:cleanbox_password@localhost:5433/cleanbox_test
+export OLLAMA_URL=http://localhost:11435
+```
+
+#### 2. 테스트 실행
+```bash
+# 전체 테스트 실행
+pytest
+
+# 커버리지 포함 테스트
 pytest --cov=cleanbox --cov-report=html
 
 # HTML 리포트 생성 (htmlcov/index.html에서 확인)

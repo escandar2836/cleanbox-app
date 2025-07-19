@@ -383,6 +383,12 @@ class TestGmailService:
                 "headers": {},
             }
 
+            # 사용자와 계정을 먼저 생성
+            user = User(id="test_user", email="test@example.com")
+            account = UserAccount(user_id=user.id, account_email="test@example.com")
+            db.session.add_all([user, account])
+            db.session.commit()
+
             # 이메일 저장 테스트
             email_obj = service.save_email_to_db(malformed_email_data)
             assert email_obj.subject == "제목 없음"  # 기본값
@@ -395,21 +401,28 @@ class TestAIClassifier:
     @patch("cleanbox.email.ai_classifier.requests.post")
     @patch("cleanbox.email.ai_classifier.os.environ.get")
     def test_email_classification(self, mock_environ, mock_requests, app):
-        """이메일 분류 테스트"""
-        # 환경변수 모킹
-        mock_environ.return_value = "test_api_key"
+        """이메일 분류 테스트 (Ollama 사용)"""
 
-        # 모의 응답 설정
+        # Ollama 환경변수 모킹
+        def mock_environ_get(key, default=None):
+            if key == "CLEANBOX_USE_OLLAMA":
+                return "true"
+            elif key == "OLLAMA_URL":
+                return "http://localhost:11434"
+            elif key == "OLLAMA_MODEL":
+                return "llama2"
+            elif key == "OPENAI_API_KEY":
+                return "test_api_key"  # OpenAI API 키도 설정
+            else:
+                return default
+
+        mock_environ.side_effect = mock_environ_get
+
+        # Ollama 모의 응답 설정
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
-            "choices": [
-                {
-                    "message": {
-                        "content": "카테고리ID: 1\n신뢰도: 85\n이유: 업무 관련 이메일"
-                    }
-                }
-            ]
+            "response": "카테고리ID: 1\n신뢰도: 85\n이유: 업무 관련 이메일"
         }
         mock_requests.return_value = mock_response
 
@@ -426,16 +439,27 @@ class TestAIClassifier:
     @patch("cleanbox.email.ai_classifier.requests.post")
     @patch("cleanbox.email.ai_classifier.os.environ.get")
     def test_email_summarization(self, mock_environ, mock_requests, app):
-        """이메일 요약 테스트"""
-        # 환경변수 모킹
-        mock_environ.return_value = "test_api_key"
+        """이메일 요약 테스트 (Ollama 사용)"""
 
-        # 모의 응답 설정
+        # Ollama 환경변수 모킹
+        def mock_environ_get(key, default=None):
+            if key == "CLEANBOX_USE_OLLAMA":
+                return "true"
+            elif key == "OLLAMA_URL":
+                return "http://localhost:11434"
+            elif key == "OLLAMA_MODEL":
+                return "llama2"
+            elif key == "OPENAI_API_KEY":
+                return "test_api_key"  # OpenAI API 키도 설정
+            else:
+                return default
+
+        mock_environ.side_effect = mock_environ_get
+
+        # Ollama 모의 응답 설정
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "choices": [{"message": {"content": "회의 일정 안내 이메일입니다."}}]
-        }
+        mock_response.json.return_value = {"response": "회의 일정 안내 이메일입니다."}
         mock_requests.return_value = mock_response
 
         classifier = AIClassifier()
@@ -448,12 +472,25 @@ class TestAIClassifier:
     @patch("cleanbox.email.ai_classifier.requests.post")
     @patch("cleanbox.email.ai_classifier.os.environ.get")
     def test_ai_api_error_handling(self, mock_environ, mock_requests, app):
-        """AI API 오류 처리 테스트"""
-        # 환경변수 모킹
-        mock_environ.return_value = "test_api_key"
+        """AI API 오류 처리 테스트 (Ollama 사용)"""
+
+        # Ollama 환경변수 모킹
+        def mock_environ_get(key, default=None):
+            if key == "CLEANBOX_USE_OLLAMA":
+                return "true"
+            elif key == "OLLAMA_URL":
+                return "http://localhost:11434"
+            elif key == "OLLAMA_MODEL":
+                return "llama2"
+            elif key == "OPENAI_API_KEY":
+                return "test_api_key"  # OpenAI API 키도 설정
+            else:
+                return default
+
+        mock_environ.side_effect = mock_environ_get
 
         # API 오류 모의
-        mock_requests.side_effect = Exception("API 오류")
+        mock_requests.side_effect = Exception("AI API 오류")
 
         classifier = AIClassifier()
         result = classifier.classify_email(
@@ -461,20 +498,33 @@ class TestAIClassifier:
         )
 
         assert result[0] is None
-        assert "오류" in result[1]
+        assert "수동" in result[1]  # "수동으로 분류해주세요" 메시지 확인
 
     @patch("cleanbox.email.ai_classifier.requests.post")
     @patch("cleanbox.email.ai_classifier.os.environ.get")
     def test_ai_api_timeout(self, mock_environ, mock_requests, app):
-        """AI API 타임아웃 테스트"""
-        # 환경변수 모킹
-        mock_environ.return_value = "test_api_key"
+        """AI API 타임아웃 테스트 (Ollama 사용)"""
+
+        # Ollama 환경변수 모킹
+        def mock_environ_get(key, default=None):
+            if key == "CLEANBOX_USE_OLLAMA":
+                return "true"
+            elif key == "OLLAMA_URL":
+                return "http://localhost:11434"
+            elif key == "OLLAMA_MODEL":
+                return "llama2"
+            elif key == "OPENAI_API_KEY":
+                return "test_api_key"  # OpenAI API 키도 설정
+            else:
+                return default
+
+        mock_environ.side_effect = mock_environ_get
 
         import time
 
         # 타임아웃 모의
         def timeout_request(*args, **kwargs):
-            time.sleep(2)
+            time.sleep(0.1)  # 빠른 테스트를 위해 시간 단축
             raise requests.exceptions.Timeout("요청 시간 초과")
 
         mock_requests.side_effect = timeout_request
@@ -485,13 +535,26 @@ class TestAIClassifier:
         )
 
         assert result[0] is None
-        assert "오류" in result[1]
+        assert "수동" in result[1]  # "수동으로 분류해주세요" 메시지 확인
 
     @patch("cleanbox.email.ai_classifier.os.environ.get")
     def test_ai_with_empty_content(self, mock_environ, app):
-        """빈 내용으로 AI 테스트"""
-        # 환경변수 모킹
-        mock_environ.return_value = "test_api_key"
+        """빈 내용으로 AI 테스트 (Ollama 사용)"""
+
+        # Ollama 환경변수 모킹
+        def mock_environ_get(key, default=None):
+            if key == "CLEANBOX_USE_OLLAMA":
+                return "true"
+            elif key == "OLLAMA_URL":
+                return "http://localhost:11434"
+            elif key == "OLLAMA_MODEL":
+                return "llama2"
+            elif key == "OPENAI_API_KEY":
+                return "test_api_key"  # OpenAI API 키도 설정
+            else:
+                return default
+
+        mock_environ.side_effect = mock_environ_get
 
         classifier = AIClassifier()
         result = classifier.classify_email("", "", "", [])
@@ -501,21 +564,28 @@ class TestAIClassifier:
     @patch("cleanbox.email.ai_classifier.requests.post")
     @patch("cleanbox.email.ai_classifier.os.environ.get")
     def test_ai_with_very_long_content(self, mock_environ, mock_requests, app):
-        """매우 긴 내용으로 AI 테스트"""
-        # 환경변수 모킹
-        mock_environ.return_value = "test_api_key"
+        """매우 긴 내용으로 AI 테스트 (Ollama 사용)"""
 
-        # 모의 응답 설정
+        # Ollama 환경변수 모킹
+        def mock_environ_get(key, default=None):
+            if key == "CLEANBOX_USE_OLLAMA":
+                return "true"
+            elif key == "OLLAMA_URL":
+                return "http://localhost:11434"
+            elif key == "OLLAMA_MODEL":
+                return "llama2"
+            elif key == "OPENAI_API_KEY":
+                return "test_api_key"  # OpenAI API 키도 설정
+            else:
+                return default
+
+        mock_environ.side_effect = mock_environ_get
+
+        # Ollama 모의 응답 설정
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
-            "choices": [
-                {
-                    "message": {
-                        "content": "카테고리ID: 1\n신뢰도: 80\n이유: 긴 내용 분석 완료"
-                    }
-                }
-            ]
+            "response": "카테고리ID: 1\n신뢰도: 80\n이유: 긴 내용 분석 완료"
         }
         mock_requests.return_value = mock_response
 
@@ -740,9 +810,6 @@ class TestEdgeCases:
         assert email.sender == ""
         assert email.content == ""
 
-    @pytest.mark.skip(
-        reason="동시성 테스트는 SQLite 환경에서 segmentation fault가 발생할 수 있으므로 임시 비활성화"
-    )
     def test_concurrent_email_operations(self, app):
         """동시 이메일 작업 테스트"""
         import threading

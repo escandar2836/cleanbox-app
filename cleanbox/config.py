@@ -8,6 +8,7 @@ class Config:
         "CLEANBOX_DATABASE_URI",
         "postgresql://cleanbox_user:cleanbox_password@localhost:5432/cleanbox",
     )
+    SQLALCHEMY_ENGINE_OPTIONS = {"connect_args": {"connect_timeout": 10}}
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # Google OAuth 설정
@@ -49,9 +50,17 @@ class TestConfig(Config):
     """테스트용 설정"""
 
     TESTING = True
-    SQLALCHEMY_DATABASE_URI = "sqlite:///test_cleanbox.db"
+    SQLALCHEMY_DATABASE_URI = os.environ.get(
+        "CLEANBOX_DATABASE_URI",
+        "postgresql://cleanbox_user:cleanbox_password@localhost:5433/cleanbox_test",
+    )
+    SQLALCHEMY_ENGINE_OPTIONS = {"connect_args": {"connect_timeout": 10}}
     WTF_CSRF_ENABLED = False
     # 테스트 환경에서는 데이터베이스 초기화를 수동으로 제어
     INIT_DB = False
     # 테스트용 Fernet 키 (32바이트 base64 인코딩)
     CLEANBOX_ENCRYPTION_KEY = "bx0fuVNGhldioocf5SO2E1pefdu6m3lr_ccJEo_pqrI="
+    # 테스트용 AI 설정
+    USE_OLLAMA = True
+    OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11435")
+    OLLAMA_MODEL = "llama2"
