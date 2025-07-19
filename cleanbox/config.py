@@ -1,5 +1,39 @@
 import os
 from cryptography.fernet import Fernet
+from dotenv import load_dotenv
+
+# .env 파일 로드 (Docker 환경에서도 작동하도록)
+load_dotenv()
+
+
+def validate_fernet_key(key):
+    """Fernet 키가 유효한지 검증"""
+    try:
+        if isinstance(key, str):
+            # 문자열인 경우 bytes로 변환
+            key_bytes = key.encode() if isinstance(key, str) else key
+        else:
+            key_bytes = key
+
+        # Fernet 키 검증
+        Fernet(key_bytes)
+        return True
+    except Exception as e:
+        print(f"Invalid Fernet key: {e}")
+        return False
+
+
+def get_encryption_key():
+    """환경변수에서 암호화 키를 안전하게 가져옴"""
+    key = os.environ.get("CLEANBOX_ENCRYPTION_KEY")
+
+    if key and validate_fernet_key(key):
+        return key
+
+    # 키가 없거나 유효하지 않으면 새로 생성
+    new_key = Fernet.generate_key()
+    print("Warning: Invalid or missing encryption key, generated new key")
+    return new_key
 
 
 class Config:
@@ -25,10 +59,8 @@ class Config:
         "https://www.googleapis.com/auth/userinfo.profile",
     ]
 
-    # 보안 설정
-    CLEANBOX_ENCRYPTION_KEY = os.environ.get(
-        "CLEANBOX_ENCRYPTION_KEY", Fernet.generate_key()
-    )
+    # 보안 설정 - 개선된 키 로딩
+    CLEANBOX_ENCRYPTION_KEY = get_encryption_key()
     SESSION_COOKIE_SECURE = (
         os.environ.get("CLEANBOX_SESSION_SECURE", "False").lower() == "true"
     )

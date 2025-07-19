@@ -7,6 +7,10 @@ set -e
 
 echo "🔍 서비스 준비 상태 확인 중..."
 
+# 환경변수 검증
+echo "🔍 환경변수 검증 중..."
+python scripts/validate-env.py
+
 # PostgreSQL 대기
 echo "⏳ PostgreSQL 연결 확인 중..."
 until pg_isready -h postgres -U $POSTGRES_USER -d $POSTGRES_DB; do

@@ -96,14 +96,8 @@ class UserToken(db.Model):
         """토큰을 암호화하여 저장"""
         from flask import current_app
 
-        if current_app.config.get("TESTING", False):
-            # 테스트 환경에서는 설정에서 키를 가져옴
-            key = current_app.config.get(
-                "CLEANBOX_ENCRYPTION_KEY", Fernet.generate_key()
-            )
-        else:
-            # 프로덕션 환경에서는 환경변수에서 키를 가져옴
-            key = os.environ.get("CLEANBOX_ENCRYPTION_KEY", Fernet.generate_key())
+        # 설정에서 키를 가져옴 (config.py에서 이미 검증됨)
+        key = current_app.config.get("CLEANBOX_ENCRYPTION_KEY")
         cipher = Fernet(key)
 
         # None 값 처리
@@ -133,14 +127,8 @@ class UserToken(db.Model):
         """암호화된 토큰을 복호화하여 반환"""
         from flask import current_app
 
-        if current_app.config.get("TESTING", False):
-            # 테스트 환경에서는 설정에서 키를 가져옴
-            key = current_app.config.get(
-                "CLEANBOX_ENCRYPTION_KEY", Fernet.generate_key()
-            )
-        else:
-            # 프로덕션 환경에서는 환경변수에서 키를 가져옴
-            key = os.environ.get("CLEANBOX_ENCRYPTION_KEY", Fernet.generate_key())
+        # 설정에서 키를 가져옴 (config.py에서 이미 검증됨)
+        key = current_app.config.get("CLEANBOX_ENCRYPTION_KEY")
         cipher = Fernet(key)
 
         tokens = {
