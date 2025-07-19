@@ -86,18 +86,30 @@ class GmailService:
         except HttpError as error:
             raise Exception(f"Gmail API 오류: {error}")
 
-    def fetch_recent_emails(self, max_results: int = 20, offset: int = 0) -> List[Dict]:
-        """최근 이메일 가져오기 (페이지네이션 지원)"""
+    def fetch_recent_emails(
+        self,
+        max_results: int = 20,
+        offset: int = 0,
+        after_date: Optional[datetime] = None,
+    ) -> List[Dict]:
+        """가입 날짜 이후의 이메일 가져오기 (페이지네이션 지원)"""
         try:
-            # 최근 24시간 내의 이메일을 가져오기 위한 쿼리
-            from datetime import datetime, timedelta
+            # 가입 날짜 이후의 이메일을 가져오기 위한 쿼리
+            if after_date:
+                # 가입 날짜 이후의 이메일만 가져오기
+                after_date_str = after_date.strftime("%Y/%m/%d")
+                query = f"after:{after_date_str} is:inbox"
+                print(f"🔍 Gmail API 호출 - 계정: {self.account_id}, 쿼리: {query}")
+            else:
+                # 기본값: 최근 24시간 (하위 호환성)
+                from datetime import datetime, timedelta
 
-            yesterday = datetime.utcnow() - timedelta(hours=24)
-            after_date = yesterday.strftime("%Y/%m/%d")
-
-            print(
-                f"🔍 Gmail API 호출 - 계정: {self.account_id}, 쿼리: after:{after_date} is:inbox"
-            )
+                yesterday = datetime.utcnow() - timedelta(hours=24)
+                after_date_str = yesterday.strftime("%Y/%m/%d")
+                query = f"after:{after_date_str} is:inbox"
+                print(
+                    f"🔍 Gmail API 호출 - 계정: {self.account_id}, 쿼리: {query} (기본값)"
+                )
 
             # Gmail API로 이메일 목록 가져오기
             results = (
@@ -106,7 +118,7 @@ class GmailService:
                 .list(
                     userId="me",
                     maxResults=max_results,
-                    q=f"after:{after_date} is:inbox",  # 최근 24시간 내 받은 편지함 이메일
+                    q=query,  # 가입 날짜 이후 받은 편지함 이메일
                 )
                 .execute()
             )
@@ -129,7 +141,7 @@ class GmailService:
                             userId="me",
                             maxResults=max_results,
                             pageToken=results["nextPageToken"],
-                            q=f"after:{after_date} is:inbox",
+                            q=query,
                         )
                         .execute()
                     )
@@ -142,11 +154,9 @@ class GmailService:
                 )
                 email_data = self._get_email_details(message["id"])
                 if email_data:
-                    # 이메일을 데이터베이스에 저장
-                    email_obj = self.save_email_to_db(email_data)
                     emails.append(email_data)
                     print(
-                        f"✅ 이메일 저장 완료 - 제목: {email_data.get('subject', '제목 없음')}"
+                        f"✅ 이메일 데이터 추출 완료 - 제목: {email_data.get('subject', '제목 없음')}"
                     )
                 else:
                     print(f"❌ 이메일 상세 정보 가져오기 실패 - ID: {message['id']}")

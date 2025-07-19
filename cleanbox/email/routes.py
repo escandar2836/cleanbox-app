@@ -110,7 +110,7 @@ def list_emails():
         )
 
 
-@email_bp.route("/<int:category_id>")
+@email_bp.route("/category/<int:category_id>")
 @login_required
 def category_emails(category_id):
     """카테고리별 이메일 목록 (모든 계정 통합)"""
@@ -171,7 +171,7 @@ def category_emails(category_id):
 @email_bp.route("/process-new", methods=["POST"])
 @login_required
 def process_new_emails():
-    """최근 24시간 이내의 새 이메일 처리"""
+    """가입 날짜 이후의 새 이메일 처리"""
     try:
         # 모든 활성 계정 가져오기
         accounts = UserAccount.query.filter_by(
@@ -186,21 +186,23 @@ def process_new_emails():
         account_results = []
         all_accounts_no_emails = True  # 모든 계정에서 새 이메일이 없는지 확인
 
-        # 최근 24시간 이내의 이메일만 처리 (first_service_access 대신)
-        from datetime import datetime, timedelta
-
-        after_date = datetime.utcnow() - timedelta(hours=24)
+        # 사용자의 가입 날짜 이후의 이메일만 처리
+        after_date = current_user.first_service_access
 
         # 모든 계정에 대해 새 이메일 처리
         for account in accounts:
             try:
-                print(f"🔍 새 이메일 처리 - 계정: {account.account_email}")
+                print(
+                    f"🔍 새 이메일 처리 - 계정: {account.account_email}, 가입일: {after_date}"
+                )
 
                 gmail_service = GmailService(current_user.id, account.id)
                 ai_classifier = AIClassifier()
 
-                # 최근 이메일 가져오기 (최근 24시간 이내)
-                recent_emails = gmail_service.fetch_recent_emails(max_results=50)
+                # 가입 날짜 이후의 이메일 가져오기
+                recent_emails = gmail_service.fetch_recent_emails(
+                    max_results=50, after_date=after_date
+                )
 
                 if not recent_emails:
                     account_results.append(
@@ -660,6 +662,73 @@ def unsubscribe_email(email_id):
         return redirect(url_for("email.list_emails"))
 
 
+def setup_webhook_for_account(user_id: str, account_id: int) -> bool:
+    """계정별 웹훅 자동 설정"""
+    try:
+        from .models import User, UserAccount, WebhookStatus
+        from .gmail_service import GmailService
+        import os
+        from datetime import datetime, timedelta
+
+        # 사용자 및 계정 정보 가져오기
+        user = User.query.get(user_id)
+        account = UserAccount.query.get(account_id)
+
+        if not user or not account:
+            print(
+                f"❌ 사용자 또는 계정을 찾을 수 없음: user_id={user_id}, account_id={account_id}"
+            )
+            return False
+
+        # 환경 변수 확인
+        project_id = os.environ.get("GOOGLE_CLOUD_PROJECT_ID")
+        if not project_id:
+            print("❌ GOOGLE_CLOUD_PROJECT_ID 환경 변수가 설정되지 않음")
+            return False
+
+        # 토픽 이름 설정
+        topic_name = f"projects/{project_id}/topics/gmail-notifications"
+
+        # Gmail 서비스 초기화
+        gmail_service = GmailService(user_id, account_id)
+
+        # 웹훅 설정
+        success = gmail_service.setup_gmail_watch(topic_name)
+
+        if success:
+            # 웹훅 상태 DB에 저장
+            webhook_status = WebhookStatus.query.filter_by(
+                user_id=user_id, account_id=account_id, is_active=True
+            ).first()
+
+            if not webhook_status:
+                webhook_status = WebhookStatus(
+                    user_id=user_id,
+                    account_id=account_id,
+                    topic_name=topic_name,
+                    is_active=True,
+                    expires_at=datetime.utcnow()
+                    + timedelta(days=7),  # Gmail 웹훅은 7일 후 만료
+                )
+                db.session.add(webhook_status)
+            else:
+                webhook_status.topic_name = topic_name
+                webhook_status.is_active = True
+                webhook_status.expires_at = datetime.utcnow() + timedelta(days=7)
+                webhook_status.setup_at = datetime.utcnow()
+
+            db.session.commit()
+            print(f"✅ 웹훅 설정 완료: {account.account_email}")
+            return True
+        else:
+            print(f"❌ 웹훅 설정 실패: {account.account_email}")
+            return False
+
+    except Exception as e:
+        print(f"❌ 웹훅 설정 중 오류: {str(e)}")
+        return False
+
+
 @email_bp.route("/setup-webhook", methods=["POST"])
 @login_required
 def setup_webhook():
@@ -785,7 +854,7 @@ def webhook_status():
 @email_bp.route("/auto-renew-webhook", methods=["POST"])
 @login_required
 def auto_renew_webhook():
-    """웹훅 자동 재설정"""
+    """웹훅 자동 재설정 (만료된 웹훅 자동 갱신)"""
     try:
         # 모든 활성 계정 가져오기
         accounts = UserAccount.query.filter_by(
@@ -796,50 +865,163 @@ def auto_renew_webhook():
             return jsonify({"success": False, "message": "연결된 계정이 없습니다."})
 
         renewed_count = 0
-        failed_accounts = []
-        topic_name = os.environ.get(
-            "GMAIL_WEBHOOK_TOPIC",
-            "projects/cleanbox-466314/topics/gmail-notifications",
-        )
+        failed_count = 0
+        account_results = []
 
         for account in accounts:
             try:
-                gmail_service = GmailService(current_user.id, account.id)
+                print(f"🔄 웹훅 자동 재설정 - 계정: {account.account_email}")
 
-                # 웹훅 상태 확인 후 필요시 재설정
-                if gmail_service.check_and_renew_webhook(topic_name):
-                    renewed_count += 1
+                # 웹훅 상태 확인
+                webhook_status = WebhookStatus.query.filter_by(
+                    user_id=current_user.id, account_id=account.id, is_active=True
+                ).first()
+
+                # 웹훅이 없거나 만료된 경우 재설정
+                if not webhook_status or webhook_status.is_expired:
+                    success = setup_webhook_for_account(current_user.id, account.id)
+
+                    if success:
+                        renewed_count += 1
+                        account_results.append(
+                            {
+                                "account": account.account_email,
+                                "status": "renewed",
+                                "message": "웹훅 재설정 완료",
+                            }
+                        )
+                    else:
+                        failed_count += 1
+                        account_results.append(
+                            {
+                                "account": account.account_email,
+                                "status": "failed",
+                                "message": "웹훅 재설정 실패",
+                            }
+                        )
                 else:
-                    failed_accounts.append(account.account_email)
+                    account_results.append(
+                        {
+                            "account": account.account_email,
+                            "status": "healthy",
+                            "message": "웹훅 정상 상태",
+                        }
+                    )
 
             except Exception as e:
-                print(f"웹훅 자동 재설정 실패 - 계정 {account.account_email}: {str(e)}")
-                failed_accounts.append(account.account_email)
+                print(f"계정 {account.account_email} 웹훅 재설정 실패: {str(e)}")
+                failed_count += 1
+                account_results.append(
+                    {
+                        "account": account.account_email,
+                        "status": "error",
+                        "message": str(e),
+                    }
+                )
 
+        # 결과 메시지 생성
         if renewed_count > 0:
-            message = f"웹훅 자동 재설정 완료: {renewed_count}개 계정"
-            if failed_accounts:
-                message += f", 실패: {', '.join(failed_accounts)}"
-
-            return jsonify(
-                {
-                    "success": True,
-                    "message": message,
-                    "renewed_count": renewed_count,
-                    "failed_accounts": failed_accounts,
-                }
-            )
+            message = f"{renewed_count}개 계정의 웹훅을 재설정했습니다."
+            if failed_count > 0:
+                message += f" {failed_count}개 계정에서 실패했습니다."
+        elif failed_count > 0:
+            message = f"{failed_count}개 계정에서 웹훅 재설정에 실패했습니다."
         else:
-            return jsonify(
-                {
-                    "success": False,
-                    "message": f"모든 계정에서 웹훅 재설정 실패: {', '.join(failed_accounts)}",
-                }
-            )
+            message = "모든 웹훅이 정상 상태입니다."
+
+        return jsonify(
+            {
+                "success": True,
+                "message": message,
+                "renewed_count": renewed_count,
+                "failed_count": failed_count,
+                "account_results": account_results,
+            }
+        )
 
     except Exception as e:
         return jsonify(
             {"success": False, "message": f"웹훅 자동 재설정 중 오류: {str(e)}"}
+        )
+
+
+def monitor_and_renew_webhooks():
+    """모든 사용자의 웹훅 상태를 모니터링하고 만료된 웹훅을 자동 재설정"""
+    try:
+        from datetime import datetime, timedelta
+
+        print("🔄 웹훅 모니터링 시작...")
+
+        # 만료 예정인 웹훅들 조회 (24시간 이내 만료)
+        expiry_threshold = datetime.utcnow() + timedelta(hours=24)
+
+        expiring_webhooks = WebhookStatus.query.filter(
+            WebhookStatus.is_active == True,
+            WebhookStatus.expires_at <= expiry_threshold,
+        ).all()
+
+        renewed_count = 0
+        failed_count = 0
+
+        for webhook in expiring_webhooks:
+            try:
+                print(
+                    f"🔄 웹훅 자동 갱신 - 사용자: {webhook.user_id}, 계정: {webhook.account_id}"
+                )
+
+                success = setup_webhook_for_account(webhook.user_id, webhook.account_id)
+
+                if success:
+                    renewed_count += 1
+                    print(
+                        f"✅ 웹훅 갱신 성공 - 사용자: {webhook.user_id}, 계정: {webhook.account_id}"
+                    )
+                else:
+                    failed_count += 1
+                    print(
+                        f"❌ 웹훅 갱신 실패 - 사용자: {webhook.user_id}, 계정: {webhook.account_id}"
+                    )
+
+            except Exception as e:
+                failed_count += 1
+                print(
+                    f"❌ 웹훅 갱신 중 오류 - 사용자: {webhook.user_id}, 계정: {webhook.account_id}, 오류: {str(e)}"
+                )
+
+        print(
+            f"🎉 웹훅 모니터링 완료 - 갱신: {renewed_count}개, 실패: {failed_count}개"
+        )
+
+        return {
+            "success": True,
+            "renewed_count": renewed_count,
+            "failed_count": failed_count,
+            "total_checked": len(expiring_webhooks),
+        }
+
+    except Exception as e:
+        print(f"❌ 웹훅 모니터링 중 오류: {str(e)}")
+        return {"success": False, "error": str(e)}
+
+
+@email_bp.route("/monitor-webhooks", methods=["POST"])
+@login_required
+def trigger_webhook_monitoring():
+    """웹훅 모니터링 수동 트리거 (관리자용)"""
+    try:
+        result = monitor_and_renew_webhooks()
+
+        if result["success"]:
+            message = f"웹훅 모니터링 완료 - 갱신: {result['renewed_count']}개, 실패: {result['failed_count']}개"
+            return jsonify({"success": True, "message": message, "result": result})
+        else:
+            return jsonify(
+                {"success": False, "message": f"웹훅 모니터링 실패: {result['error']}"}
+            )
+
+    except Exception as e:
+        return jsonify(
+            {"success": False, "message": f"웹훅 모니터링 중 오류: {str(e)}"}
         )
 
 

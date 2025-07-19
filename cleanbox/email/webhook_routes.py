@@ -140,13 +140,27 @@ def _verify_webhook(request):
 
 
 def process_new_emails_for_account(account):
-    """계정의 새 이메일 처리"""
+    """계정의 새 이메일 처리 (가입 날짜 이후만)"""
     try:
         gmail_service = GmailService(account.user_id, account.id)
         ai_classifier = AIClassifier()
 
-        # 새 이메일 가져오기 (최근 5개만)
-        recent_emails = gmail_service.fetch_recent_emails(max_results=5)
+        # 사용자 정보 가져오기
+        user = User.query.get(account.user_id)
+        if not user:
+            logger.error(f"사용자 정보를 찾을 수 없음: {account.user_id}")
+            return
+
+        # 가입 날짜 이후의 이메일만 가져오기
+        after_date = user.first_service_access
+        logger.info(
+            f"웹훅 이메일 처리 - 계정: {account.account_email}, 가입일: {after_date}"
+        )
+
+        # 새 이메일 가져오기 (가입 날짜 이후만)
+        recent_emails = gmail_service.fetch_recent_emails(
+            max_results=10, after_date=after_date
+        )
 
         if not recent_emails:
             logger.info(f"새 이메일 없음: {account.account_email}")
@@ -157,7 +171,6 @@ def process_new_emails_for_account(account):
 
         processed_count = 0
         classified_count = 0
-        archived_count = 0
 
         for email_data in recent_emails:
             try:
@@ -203,21 +216,17 @@ def process_new_emails_for_account(account):
                             email_obj.summary = summary
                             db.session.commit()
 
-                    # 이메일 아카이브 (PROJECT_DESCRIPTION 요구사항)
-                    try:
-                        gmail_service.archive_email(email_data["gmail_id"])
-                        archived_count += 1
-                    except Exception as e:
-                        logger.error(f"이메일 아카이브 실패: {e}")
+                logger.info(
+                    f"웹훅 이메일 처리 완료 - 제목: {email_data.get('subject', '제목 없음')}"
+                )
 
             except Exception as e:
-                logger.error(f"이메일 처리 오류: {e}")
+                logger.error(f"웹훅 이메일 처리 실패: {str(e)}")
                 continue
 
-        if processed_count > 0:
-            logger.info(
-                f"웹훅 처리 완료: {account.account_email} - {processed_count}개 처리, {classified_count}개 분류, {archived_count}개 아카이브"
-            )
+        logger.info(
+            f"웹훅 처리 완료 - 계정: {account.account_email}, 처리: {processed_count}개, 분류: {classified_count}개"
+        )
 
     except Exception as e:
-        logger.error(f"계정 처리 오류: {account.account_email} - {e}")
+        logger.error(f"웹훅 이메일 처리 중 오류: {str(e)}")

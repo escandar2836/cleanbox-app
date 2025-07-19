@@ -124,6 +124,8 @@ def _handle_login_callback(credentials, id_info):
     try:
         # 사용자 조회 또는 생성
         user = User.query.get(id_info["sub"])
+        is_new_user = False
+
         if not user:
             user = User(
                 id=id_info["sub"],
@@ -132,6 +134,7 @@ def _handle_login_callback(credentials, id_info):
                 picture=id_info.get("picture"),
             )
             db.session.add(user)
+            is_new_user = True
         else:
             # 기존 사용자 정보 업데이트
             user.name = id_info.get("name", user.name)
@@ -170,6 +173,18 @@ def _handle_login_callback(credentials, id_info):
         # last_login 업데이트
         user.last_login = datetime.utcnow()
         db.session.commit()
+
+        # 새 사용자인 경우 자동 웹훅 설정
+        if is_new_user:
+            try:
+                from ..email.gmail_service import GmailService
+                from ..email.routes import setup_webhook_for_account
+
+                print(f"🔄 새 사용자 웹훅 자동 설정: {user.email}")
+                setup_webhook_for_account(user.id, account.id)
+                print(f"✅ 웹훅 자동 설정 완료: {user.email}")
+            except Exception as e:
+                print(f"⚠️ 웹훅 자동 설정 실패: {user.email}, 오류: {str(e)}")
 
         # 세션 정리
         session.pop("state", None)

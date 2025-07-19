@@ -225,9 +225,9 @@
                                             <span class="badge bg-warning me-2">새</span>
                                             {% endif %}
                                             {% if email.category %}
-                                            <span class="badge me-2" style="background-color: {{ email.category.color }};">
+                                            <a href="{{ url_for('email.category_emails', category_id=email.category.id) }}" class="badge me-2 text-decoration-none" style="background-color: {{ email.category.color }};">
                                                 <i class="{{ email.category.icon }}"></i> {{ email.category.name }}
-                                            </span>
+                                            </a>
                                             {% else %}
                                             <span class="badge bg-secondary me-2">미분류</span>
                                             {% endif %}
