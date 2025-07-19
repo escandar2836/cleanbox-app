@@ -762,6 +762,30 @@ def process_missed_emails_for_account(
         }
 
 
+def setup_gmail_webhook(
+    account_id: int, topic_name: str, label_ids: list = None
+) -> dict:
+    """Gmail 웹훅을 설정합니다."""
+    try:
+        account = UserAccount.query.get(account_id)
+        if not account:
+            return {"success": False, "error": f"계정 {account_id}를 찾을 수 없습니다."}
+        gmail_service = GmailService(account.user_id, account_id)
+        success = gmail_service.setup_gmail_watch(topic_name)
+        if success:
+            return {
+                "success": True,
+                "message": f"계정 {account.account_email}의 웹훅 설정 완료",
+            }
+        else:
+            return {
+                "success": False,
+                "error": f"계정 {account.account_email}의 웹훅 설정 실패",
+            }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
 def setup_gmail_webhook_with_permissions(
     account_id: int, topic_name: str, label_ids: list = None
 ) -> dict:

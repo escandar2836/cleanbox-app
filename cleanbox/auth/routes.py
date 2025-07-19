@@ -429,43 +429,50 @@ def check_user_gmail_and_pubsub_permissions_service_account(
 def grant_service_account_pubsub_permissions(project_id: str) -> bool:
     """서비스 계정에 Pub/Sub 권한을 부여합니다."""
     try:
-        print(f"🔧 서비스 계정에 Pub/Sub 권한 부여 중...")
+        from google.cloud import resourcemanager_v3
+        from google.oauth2 import service_account
 
-        # 서비스 계정 이메일
+        print(f"🔧 서비스 계정에 Pub/Sub 권한 부여 중...")
+        creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+        if not creds_path or not os.path.exists(creds_path):
+            print(f"❌ 서비스 계정 키 파일을 찾을 수 없습니다: {creds_path}")
+            return False
+        credentials = service_account.Credentials.from_service_account_file(
+            creds_path, scopes=["https://www.googleapis.com/auth/cloud-platform"]
+        )
+        client = resourcemanager_v3.ProjectsClient(credentials=credentials)
+        project_name = f"projects/{project_id}"
+        policy = client.get_iam_policy(request={"resource": project_name})
         service_account_email = (
             "cleanbox-webhook@cleanbox-466314.iam.gserviceaccount.com"
         )
-
-        # 필요한 권한들
         required_roles = ["roles/pubsub.publisher", "roles/pubsub.subscriber"]
-
-        # 각 권한에 대해 gcloud 명령어 실행
         for role in required_roles:
-            print(f"🔧 서비스 계정에 {role} 권한 부여 중...")
-
-            result = subprocess.run(
-                [
-                    "gcloud",
-                    "projects",
-                    "add-iam-policy-binding",
-                    project_id,
-                    f"--member=serviceAccount:{service_account_email}",
-                    f"--role={role}",
-                ],
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-
-            if result.returncode == 0:
-                print(f"✅ 서비스 계정에 {role} 권한 부여 성공")
+            existing_binding = None
+            for binding in policy.bindings:
+                if binding.role == role:
+                    existing_binding = binding
+                    break
+            if existing_binding:
+                if (
+                    f"serviceAccount:{service_account_email}"
+                    not in existing_binding.members
+                ):
+                    existing_binding.members.append(
+                        f"serviceAccount:{service_account_email}"
+                    )
+                    print(f"✅ 기존 {role} 바인딩에 서비스 계정 추가")
             else:
-                print(f"❌ 서비스 계정에 {role} 권한 부여 실패: {result.stderr}")
-                continue
+                from google.cloud.resourcemanager_v3.types import Policy
 
+                new_binding = Policy.Binding(
+                    role=role, members=[f"serviceAccount:{service_account_email}"]
+                )
+                policy.bindings.append(new_binding)
+                print(f"✅ 새로운 {role} 바인딩 생성")
+        client.set_iam_policy(request={"resource": project_name, "policy": policy})
         print(f"✅ 서비스 계정 Pub/Sub 권한 부여 완료")
         return True
-
     except Exception as e:
         print(f"❌ 서비스 계정 권한 부여 중 오류: {str(e)}")
         return False
