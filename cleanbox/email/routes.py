@@ -180,9 +180,6 @@ def process_new_emails():
         # 모든 계정에 대해 새 이메일 처리
         for account in accounts:
             try:
-                print(
-                    f"🔍 새 이메일 처리 - 계정: {account.account_email}, 가입일: {after_date}"
-                )
 
                 gmail_service = GmailService(current_user.id, account.id)
                 ai_classifier = AIClassifier()
@@ -206,8 +203,16 @@ def process_new_emails():
                 # 이메일이 있으면 all_accounts_no_emails를 False로 설정
                 all_accounts_no_emails = False
 
-                # 사용자 카테고리 가져오기
-                categories = gmail_service.get_user_categories()
+                # 사용자 카테고리 가져오기 (AI 분류용 딕셔너리 형태로 변환)
+                category_objects = gmail_service.get_user_categories()
+                categories = [
+                    {
+                        "id": cat.id,
+                        "name": cat.name,
+                        "description": cat.description or "",
+                    }
+                    for cat in category_objects
+                ]
 
                 account_processed = 0
                 account_classified = 0
@@ -259,7 +264,6 @@ def process_new_emails():
                                     db.session.commit()
 
                     except Exception as e:
-                        print(f"이메일 처리 실패: {str(e)}")
                         continue
 
                 account_results.append(
@@ -272,7 +276,6 @@ def process_new_emails():
                 )
 
             except Exception as e:
-                print(f"계정 {account.account_email} 처리 실패: {str(e)}")
                 account_results.append(
                     {
                         "account": account.account_email,
@@ -296,11 +299,6 @@ def process_new_emails():
                 }
             )
 
-        flash(
-            f"새 이메일 처리 완료: {total_processed}개 처리, {total_classified}개 AI 분류",
-            "success",
-        )
-
         return jsonify(
             {
                 "success": True,
@@ -308,6 +306,7 @@ def process_new_emails():
                 "classified": total_classified,
                 "account_results": account_results,
                 "no_new_emails": False,
+                "message": f"새 이메일 처리 완료: {total_processed}개 처리, {total_classified}개 AI 분류",
             }
         )
 
@@ -676,8 +675,12 @@ def process_missed_emails_for_account(
 
         print(f"📥 누락된 이메일 {len(missed_emails)}개 발견 - 계정: {account_id}")
 
-        # 사용자 카테고리 가져오기
-        categories = gmail_service.get_user_categories()
+        # 사용자 카테고리 가져오기 (AI 분류용 딕셔너리 형태로 변환)
+        category_objects = gmail_service.get_user_categories()
+        categories = [
+            {"id": cat.id, "name": cat.name, "description": cat.description or ""}
+            for cat in category_objects
+        ]
 
         processed_count = 0
         classified_count = 0

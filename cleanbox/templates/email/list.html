@@ -509,6 +509,24 @@ function displayAnalysis(analysis) {
     `;
 }
 
+// 통계 업데이트 함수
+function updateStatistics(data) {
+    // AI 분류된 이메일 수 업데이트
+    if (data.classified !== undefined) {
+        const currentClassified = parseInt(document.getElementById('aiClassified').textContent) || 0;
+        document.getElementById('aiClassified').textContent = currentClassified + data.classified;
+    }
+    
+    // 전체 이메일 수 업데이트
+    if (data.processed !== undefined) {
+        const totalElement = document.querySelector('.card-title');
+        if (totalElement) {
+            const currentTotal = parseInt(totalElement.textContent) || 0;
+            totalElement.textContent = currentTotal + data.processed;
+        }
+    }
+}
+
 // 페이지 로드 시 통계 업데이트
 document.addEventListener('DOMContentLoaded', function() {
     fetch('/email/statistics')
@@ -568,22 +586,25 @@ document.getElementById('processForm').addEventListener('submit', function(e) {
                 showAlert('success', message);
             }
             
-            // 더 보기 버튼 표시/숨김
-            hasMore = data.has_more;
+            // 더 보기 버튼 표시/숨김 (현재는 사용하지 않음)
+            hasMore = data.has_more || false;
             currentPage = data.next_page || currentPage;
             
             if (hasMore) {
                 document.getElementById('loadMoreButton').style.display = 'inline-block';
-                document.getElementById('currentPage').value = currentPage;
             } else {
                 document.getElementById('loadMoreButton').style.display = 'none';
             }
             
-            // 페이지 새로고침 (새 이메일이 있을 때만)
-            if (!data.no_new_emails) {
+            // 새 이메일이 있을 때만 리스트 업데이트
+            if (!data.no_new_emails && data.processed > 0) {
+                // 통계 업데이트
+                updateStatistics(data);
+                
+                // 잠시 후 페이지 새로고침 (새 이메일 반영)
                 setTimeout(() => {
                     location.reload();
-                }, 1000);
+                }, 1500);
             }
         } else {
             showAlert('error', data.message);
@@ -600,7 +621,6 @@ document.getElementById('processForm').addEventListener('submit', function(e) {
 
 // 더 보기 버튼 클릭 처리
 document.getElementById('loadMoreButton').addEventListener('click', function() {
-    document.getElementById('currentPage').value = currentPage;
     document.getElementById('processForm').dispatchEvent(new Event('submit'));
 });
 

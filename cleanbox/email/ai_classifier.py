@@ -99,7 +99,7 @@ class AIClassifier:
 
         except Exception as e:
             print(f"AI 분류 및 요약 실패: {str(e)}")
-            return None, f"AI 처리 오류: {str(e)}"
+            return None, "AI 처리를 사용할 수 없습니다. 수동으로 확인해주세요."
 
     def _build_unified_prompt(
         self, content: str, subject: str, sender: str, categories: List[Dict]

@@ -168,8 +168,12 @@ def process_new_emails_for_account(account):
             logger.info(f"새 이메일 없음: {account.account_email}")
             return
 
-        # 사용자 카테고리 가져오기
-        categories = gmail_service.get_user_categories()
+        # 사용자 카테고리 가져오기 (AI 분류용 딕셔너리 형태로 변환)
+        category_objects = gmail_service.get_user_categories()
+        categories = [
+            {"id": cat.id, "name": cat.name, "description": cat.description or ""}
+            for cat in category_objects
+        ]
 
         processed_count = 0
         classified_count = 0
