@@ -382,7 +382,7 @@ def classify_email(email_id):
 @email_bp.route("/<int:email_id>/analyze")
 @login_required
 def analyze_email(email_id):
-    """이메일 AI 분석 (경량화)"""
+    """이메일 AI 분석 - 분류 및 요약"""
     try:
         email_obj = Email.query.filter_by(id=email_id, user_id=current_user.id).first()
         if not email_obj:
@@ -390,13 +390,47 @@ def analyze_email(email_id):
 
         ai_classifier = AIClassifier()
 
-        # 구독해지 링크 추출
-        unsubscribe_links = ai_classifier.extract_unsubscribe_links(email_obj.content)
+        # 사용자 카테고리 가져오기
+        categories = ai_classifier.get_user_categories_for_ai(current_user.id)
+
+        if not categories:
+            return jsonify(
+                {"success": False, "message": "사용 가능한 카테고리가 없습니다."}
+            )
+
+        # AI 분류 및 요약 수행
+        category_id, summary = ai_classifier.classify_and_summarize_email(
+            email_obj.body, email_obj.subject, email_obj.sender, categories
+        )
+
+        # 결과 업데이트
+        if category_id:
+            email_obj.category_id = category_id
+        else:
+            email_obj.category_id = None
+
+        if (
+            summary
+            and summary != "AI 처리를 사용할 수 없습니다. 수동으로 확인해주세요."
+        ):
+            email_obj.summary = summary
+
+        db.session.commit()
+
+        # 카테고리 정보 가져오기
+        category_name = "미분류"
+        if category_id:
+            category = Category.query.filter_by(
+                id=category_id, user_id=current_user.id
+            ).first()
+            if category:
+                category_name = category.name
 
         analysis = {
-            "summary": email_obj.summary or "요약 없음",
-            "unsubscribe_links": unsubscribe_links,
-            "has_unsubscribe": len(unsubscribe_links) > 0,
+            "category_id": category_id,
+            "category_name": category_name,
+            "summary": summary,
+            "success": True,
         }
 
         return jsonify({"success": True, "analysis": analysis})
@@ -568,45 +602,8 @@ def bulk_actions():
             flash(f"{processed_count}개의 이메일을 읽음으로 표시했습니다.", "success")
 
         elif action == "unsubscribe":
-            # 대량 구독해지 (경량화)
-            ai_classifier = AIClassifier()
-
-            for email_id in email_ids:
-                try:
-                    email_obj = Email.query.filter_by(
-                        id=int(email_id), user_id=current_user.id
-                    ).first()
-                    if email_obj:
-                        # 구독해지 링크 추출
-                        unsubscribe_links = ai_classifier.extract_unsubscribe_links(
-                            email_obj.content
-                        )
-
-                        if unsubscribe_links:
-                            # 첫 번째 링크로 구독해지 시도
-                            page_analysis = ai_classifier.analyze_unsubscribe_page(
-                                unsubscribe_links[0]
-                            )
-
-                            if page_analysis["success"]:
-                                processed_count += 1
-                                print(
-                                    f"구독해지 성공 (ID: {email_id}): {unsubscribe_links[0]}"
-                                )
-                            else:
-                                print(
-                                    f"구독해지 페이지 분석 실패 (ID: {email_id}): {page_analysis['message']}"
-                                )
-                        else:
-                            print(f"구독해지 링크 없음 (ID: {email_id})")
-
-                except Exception as e:
-                    print(f"구독해지 실패 (ID: {email_id}): {str(e)}")
-                    continue
-
-            flash(
-                f"{processed_count}개의 이메일에서 구독해지를 처리했습니다.", "success"
-            )
+            # 구독해지 기능은 현재 지원하지 않습니다
+            flash("구독해지 기능은 현재 지원하지 않습니다.", "warning")
 
         else:
             flash("지원하지 않는 작업입니다.", "error")
@@ -621,26 +618,9 @@ def bulk_actions():
 @email_bp.route("/<int:email_id>/unsubscribe")
 @login_required
 def unsubscribe_email(email_id):
-    """개별 이메일 구독해지"""
-    try:
-        email_obj = Email.query.filter_by(id=email_id, user_id=current_user.id).first()
-        if not email_obj:
-            flash("이메일을 찾을 수 없습니다.", "error")
-            return redirect(url_for("email.list_emails"))
-
-        gmail_service = GmailService(current_user.id)
-        result = gmail_service.process_unsubscribe(email_obj)
-
-        if result["success"]:
-            flash("구독해지가 처리되었습니다.", "success")
-        else:
-            flash(f"구독해지 처리 실패: {result['message']}", "warning")
-
-        return redirect(url_for("email.list_emails"))
-
-    except Exception as e:
-        flash(f"구독해지 처리 중 오류가 발생했습니다: {str(e)}", "error")
-        return redirect(url_for("email.list_emails"))
+    """개별 이메일 구독해지 (현재 지원하지 않음)"""
+    flash("구독해지 기능은 현재 지원하지 않습니다.", "warning")
+    return redirect(url_for("email.list_emails"))
 
 
 def process_missed_emails_for_account(
