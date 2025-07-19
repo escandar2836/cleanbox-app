@@ -646,7 +646,6 @@ def process_missed_emails_for_account(
     try:
         from .gmail_service import GmailService
         from .ai_classifier import AIClassifier
-        from datetime import datetime
 
         print(f"📧 누락된 이메일 처리 시작 - 계정: {account_id}, 시작일: {from_date}")
 
@@ -762,7 +761,7 @@ def process_missed_emails_for_account(
 def setup_webhook_for_account(user_id: str, account_id: int) -> bool:
     """계정별 웹훅 자동 설정 (누락된 이메일 처리 포함)"""
     try:
-        from .models import User, UserAccount
+        from ..models import User, UserAccount
         from .gmail_service import GmailService
         import os
         from datetime import datetime, timedelta

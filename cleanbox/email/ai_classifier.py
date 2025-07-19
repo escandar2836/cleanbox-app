@@ -14,7 +14,7 @@ class AIClassifier:
     def get_user_categories_for_ai(self, user_id: str) -> List[Dict]:
         """AI 분류용 사용자 카테고리 정보 가져오기"""
         try:
-            from cleanbox.models import Category
+            from ..models import Category
 
             categories = Category.query.filter_by(user_id=user_id, is_active=True).all()
             return [
