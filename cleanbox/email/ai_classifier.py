@@ -12,6 +12,13 @@ class AIClassifier:
         self.api_key = os.environ.get("OPENAI_API_KEY")
         self.base_url = "https://api.openai.com/v1/chat/completions"
 
+        # Ollama 설정
+        self.use_ollama = (
+            os.environ.get("CLEANBOX_USE_OLLAMA", "true").lower() == "true"
+        )
+        self.ollama_url = os.environ.get("OLLAMA_URL", "http://localhost:11434")
+        self.ollama_model = os.environ.get("OLLAMA_MODEL", "llama2")
+
     def classify_email(
         self, email_content: str, subject: str, sender: str, categories: List[Dict]
     ) -> Tuple[Optional[int], str]:
@@ -36,8 +43,11 @@ class AIClassifier:
                 email_content, subject, sender, category_info
             )
 
-            # OpenAI API 호출
-            response = self._call_openai_api(prompt)
+            # AI API 호출 (Ollama 또는 OpenAI)
+            if self.use_ollama:
+                response = self._call_ollama_api(prompt)
+            else:
+                response = self._call_openai_api(prompt)
 
             if response:
                 # 응답 파싱
@@ -60,8 +70,11 @@ class AIClassifier:
             # 요약 프롬프트 구성
             prompt = self._build_summary_prompt(email_content, subject)
 
-            # OpenAI API 호출
-            response = self._call_openai_api(prompt)
+            # AI API 호출 (Ollama 또는 OpenAI)
+            if self.use_ollama:
+                response = self._call_ollama_api(prompt)
+            else:
+                response = self._call_openai_api(prompt)
 
             if response:
                 return response.strip()
@@ -173,6 +186,30 @@ class AIClassifier:
 
         except Exception as e:
             print(f"OpenAI API 호출 실패: {str(e)}")
+            return None
+
+    def _call_ollama_api(self, prompt: str) -> Optional[str]:
+        """Ollama API 호출"""
+        try:
+            if not self.use_ollama:
+                print("Ollama가 비활성화되어 있습니다.")
+                return None
+
+            data = {"model": self.ollama_model, "prompt": prompt, "stream": False}
+
+            response = requests.post(
+                f"{self.ollama_url}/api/generate", json=data, timeout=60
+            )
+
+            if response.status_code == 200:
+                result = response.json()
+                return result.get("response", "")
+            else:
+                print(f"Ollama API 오류: {response.status_code} - {response.text}")
+                return None
+
+        except Exception as e:
+            print(f"Ollama API 호출 실패: {str(e)}")
             return None
 
     def _parse_classification_response(

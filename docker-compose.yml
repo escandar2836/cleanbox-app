@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  # PostgreSQL 데이터베이스
+  postgres:
+    image: postgres:15
+    container_name: cleanbox_postgres
+    environment:
+      POSTGRES_DB: cleanbox
+      POSTGRES_USER: cleanbox_user
+      POSTGRES_PASSWORD: cleanbox_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - cleanbox_network
+
+  # Ollama AI 서비스
+  ollama:
+    image: ollama/ollama:latest
+    container_name: cleanbox_ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - cleanbox_network
+    command: >
+      sh -c "
+        ollama serve &
+        sleep 10 &&
+        ollama pull llama2 &&
+        wait
+      "
+
+  # CleanBox 웹 애플리케이션
+  cleanbox:
+    build: .
+    container_name: cleanbox_app
+    environment:
+      - FLASK_APP=run.py
+      - FLASK_ENV=development
+      - FLASK_PORT=5001
+      - CLEANBOX_USE_OLLAMA=true
+      - OLLAMA_URL=http://ollama:11434
+      - OLLAMA_MODEL=llama2
+      - CLEANBOX_DATABASE_URI=postgresql://cleanbox_user:cleanbox_password@postgres:5432/cleanbox
+      - CLEANBOX_SECRET_KEY=your-secret-key-here
+      - CLEANBOX_ENCRYPTION_KEY=your-encryption-key-here
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_REDIRECT_URI=http://localhost:5001/auth/callback
+    ports:
+      - "5001:5001"
+    depends_on:
+      - postgres
+      - ollama
+    networks:
+      - cleanbox_network
+    volumes:
+      - ./instance:/app/instance
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  ollama_data:
+
+networks:
+  cleanbox_network:
+    driver: bridge 

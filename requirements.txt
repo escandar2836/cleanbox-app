@@ -8,10 +8,10 @@ google-auth-httplib2
 google-api-python-client
 cryptography
 requests
-openai
 beautifulsoup4
 selenium
 webdriver-manager
 pytest
 pytest-flask
-pytest-cov 
+pytest-cov
+psycopg2-binary 

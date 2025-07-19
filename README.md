@@ -36,55 +36,86 @@
 
 ## 📦 설치 및 실행
 
-### 1. 저장소 클론
+### 🐳 Docker Compose로 실행 (권장)
+
+#### 1. 저장소 클론
 ```bash
 git clone https://github.com/your-username/cleanbox-app.git
 cd cleanbox-app
 ```
 
-### 2. 가상환경 생성 및 활성화
+#### 2. 환경변수 설정
+```bash
+cp env.example .env
+# .env 파일을 편집하여 실제 값으로 수정
+```
+
+#### 3. Docker Compose로 실행
+```bash
+docker-compose up -d
+```
+
+#### 4. 브라우저에서 접속
+`http://localhost:5001`으로 접속하세요.
+
+### 🔧 로컬 개발 환경
+
+#### 1. 가상환경 생성 및 활성화
 ```bash
 python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 ```
 
-### 3. 의존성 설치
+#### 2. 의존성 설치
 ```bash
 pip install -r requirements.txt
 ```
 
-### 4. 환경 변수 설정
+#### 3. PostgreSQL 설치 및 설정
+```bash
+# macOS
+brew install postgresql
+brew services start postgresql
+
+# Ubuntu
+sudo apt-get install postgresql postgresql-contrib
+```
+
+#### 4. Ollama 설치
+```bash
+# macOS
+brew install ollama
+ollama pull llama2
+ollama serve
+```
+
+#### 5. 환경 변수 설정
 `.env` 파일을 생성하고 다음 내용을 추가:
 ```env
-# Flask 설정
 FLASK_APP=run.py
 FLASK_ENV=development
 FLASK_PORT=5001
-SECRET_KEY=your-secret-key-here
-
-# 데이터베이스 설정
-DATABASE_URL=sqlite:///cleanbox.db
+CLEANBOX_DATABASE_URI=postgresql://cleanbox_user:cleanbox_password@localhost:5432/cleanbox
+CLEANBOX_SECRET_KEY=your-secret-key-here
+CLEANBOX_ENCRYPTION_KEY=your-encryption-key-here
 
 # Google OAuth 설정
 GOOGLE_CLIENT_ID=your-google-client-id
 GOOGLE_CLIENT_SECRET=your-google-client-secret
 GOOGLE_REDIRECT_URI=http://localhost:5001/auth/callback
 
-# OpenAI API 설정
-OPENAI_API_KEY=your-openai-api-key
-
-# 암호화 키
-CLEANBOX_ENCRYPTION_KEY=your-encryption-key-here
+# AI 설정 (Ollama 사용)
+CLEANBOX_USE_OLLAMA=true
+OLLAMA_URL=http://localhost:11434
+OLLAMA_MODEL=llama2
 ```
 
-### 5. 데이터베이스 초기화
+#### 6. 데이터베이스 초기화
 ```bash
-flask db init
-flask db migrate
-flask db upgrade
+python run.py
 ```
 
-### 6. 애플리케이션 실행
+#### 7. 애플리케이션 실행
 ```bash
 python run.py
 ```

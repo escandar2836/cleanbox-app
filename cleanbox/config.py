@@ -5,7 +5,8 @@ from cryptography.fernet import Fernet
 class Config:
     SECRET_KEY = os.environ.get("CLEANBOX_SECRET_KEY", "dev")
     SQLALCHEMY_DATABASE_URI = os.environ.get(
-        "CLEANBOX_DATABASE_URI", "sqlite:///cleanbox.db"
+        "CLEANBOX_DATABASE_URI",
+        "postgresql://cleanbox_user:cleanbox_password@localhost:5432/cleanbox",
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
@@ -36,7 +37,10 @@ class Config:
 
     # AI 기능 설정
     ENABLE_AI_FEATURES = os.environ.get("CLEANBOX_ENABLE_AI", "true").lower() == "true"
-    OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+    USE_OLLAMA = os.environ.get("CLEANBOX_USE_OLLAMA", "true").lower() == "true"
+    OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
+    OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama2")
+    OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")  # 백업용
 
     # 기타 CleanBox 관련 환경설정 추가 가능
 
