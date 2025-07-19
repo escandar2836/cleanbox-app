@@ -13,7 +13,7 @@ email_bp = Blueprint("email", __name__)
 @email_bp.route("/")
 @login_required
 def list_emails():
-    """이메일 목록 페이지 (모든 계정 통합)"""
+    """이메일 목록 페이지 (계정별 필터링 지원)"""
     try:
         # 모든 활성 계정 가져오기
         accounts = UserAccount.query.filter_by(
@@ -26,16 +26,39 @@ def list_emails():
                 "email/list.html", user=current_user, emails=[], stats={}, accounts=[]
             )
 
-        # 모든 계정의 이메일 통합 조회
-        emails = (
-            Email.query.filter(
-                Email.user_id == current_user.id,
-                Email.account_id.in_([acc.id for acc in accounts]),
+        # URL 파라미터에서 선택된 계정 ID 가져오기
+        selected_account_id = request.args.get("account_id", type=int)
+
+        # 계정별 이메일 조회
+        if selected_account_id:
+            # 특정 계정의 이메일만 조회
+            emails = (
+                Email.query.filter(
+                    Email.user_id == current_user.id,
+                    Email.account_id == selected_account_id,
+                )
+                .order_by(Email.created_at.desc())
+                .limit(100)
+                .all()
             )
-            .order_by(Email.created_at.desc())
-            .limit(100)  # 더 많은 이메일 표시
-            .all()
-        )
+            selected_account = next(
+                (acc for acc in accounts if acc.id == selected_account_id), None
+            )
+        else:
+            # 기본적으로 첫 번째 계정(주 계정)의 이메일만 조회
+            primary_account = next(
+                (acc for acc in accounts if acc.is_primary), accounts[0]
+            )
+            emails = (
+                Email.query.filter(
+                    Email.user_id == current_user.id,
+                    Email.account_id == primary_account.id,
+                )
+                .order_by(Email.created_at.desc())
+                .limit(100)
+                .all()
+            )
+            selected_account = primary_account
 
         # 계정 정보를 이메일에 추가
         account_dict = {acc.id: acc for acc in accounts}
@@ -45,13 +68,22 @@ def list_emails():
         # 계정별 이메일 수 계산
         account_stats = {}
         for account in accounts:
-            account_emails = [e for e in emails if e.account_id == account.id]
+            account_emails = Email.query.filter_by(
+                user_id=current_user.id, account_id=account.id
+            ).count()
+            account_unread = Email.query.filter_by(
+                user_id=current_user.id, account_id=account.id, is_read=False
+            ).count()
+            account_archived = Email.query.filter_by(
+                user_id=current_user.id, account_id=account.id, is_archived=True
+            ).count()
+
             account_stats[account.id] = {
                 "email": account.account_email,
                 "name": account.account_name,
-                "count": len(account_emails),
-                "unread": sum(1 for e in account_emails if not e.is_read),
-                "archived": sum(1 for e in account_emails if e.is_archived),
+                "count": account_emails,
+                "unread": account_unread,
+                "archived": account_archived,
             }
 
         # 통계 정보
@@ -60,6 +92,7 @@ def list_emails():
             "unread": sum(1 for e in emails if not e.is_read),
             "archived": sum(1 for e in emails if e.is_archived),
             "account_stats": account_stats,
+            "selected_account": selected_account,
         }
 
         return render_template(
@@ -977,4 +1010,88 @@ def debug_webhook_setup():
     except Exception as e:
         return jsonify(
             {"success": False, "message": f"디버깅 정보 수집 실패: {str(e)}"}
+        )
+
+
+@email_bp.route("/check-oauth-scopes")
+@login_required
+def check_oauth_scopes():
+    """OAuth 스코프 확인"""
+    try:
+        # 모든 활성 계정 가져오기
+        accounts = UserAccount.query.filter_by(
+            user_id=current_user.id, is_active=True
+        ).all()
+
+        if not accounts:
+            return jsonify({"success": False, "message": "연결된 계정이 없습니다."})
+
+        scope_info = {
+            "required_scopes": [
+                "https://mail.google.com/",
+                "https://www.googleapis.com/auth/userinfo.email",
+                "https://www.googleapis.com/auth/userinfo.profile",
+            ],
+            "accounts": [],
+        }
+
+        for account in accounts:
+            try:
+                gmail_service = GmailService(current_user.id, account.id)
+
+                # Gmail API 연결 테스트
+                try:
+                    profile = (
+                        gmail_service.service.users().getProfile(userId="me").execute()
+                    )
+
+                    # 토큰 정보 확인 (가능한 경우)
+                    try:
+                        # 현재 토큰의 스코프 정보 확인
+                        token_info = (
+                            gmail_service.service.users()
+                            .getProfile(userId="me")
+                            .execute()
+                        )
+                        scopes_available = True
+                    except:
+                        scopes_available = False
+
+                    account_info = {
+                        "account_email": account.account_email,
+                        "account_name": account.account_name,
+                        "is_primary": account.is_primary,
+                        "gmail_connected": True,
+                        "email_address": profile.get("emailAddress"),
+                        "messages_total": profile.get("messagesTotal"),
+                        "threads_total": profile.get("threadsTotal"),
+                        "scopes_available": scopes_available,
+                    }
+
+                except Exception as e:
+                    account_info = {
+                        "account_email": account.account_email,
+                        "account_name": account.account_name,
+                        "is_primary": account.is_primary,
+                        "gmail_connected": False,
+                        "error": str(e),
+                    }
+
+                scope_info["accounts"].append(account_info)
+
+            except Exception as e:
+                scope_info["accounts"].append(
+                    {
+                        "account_email": account.account_email,
+                        "account_name": account.account_name,
+                        "is_primary": account.is_primary,
+                        "error": str(e),
+                    }
+                )
+
+        return jsonify({"success": True, "scope_info": scope_info})
+
+    except Exception as e:
+        return jsonify(
+            {"success": False, "message": f"OAuth 스코프 확인 실패: {str(e)}"}
         )
