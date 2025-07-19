@@ -146,62 +146,61 @@ def check_user_pubsub_permissions(
 ) -> tuple[bool, list]:
     """사용자의 Pub/Sub 권한을 확인합니다."""
     try:
-        # 전체 IAM 정책 가져오기 (필터링 없이)
-        result = subprocess.run(
-            [
-                "gcloud",
-                "projects",
-                "get-iam-policy",
-                project_id,
-                "--format=json",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=30,
+        from google.cloud import resourcemanager_v3
+        from google.oauth2 import service_account
+
+        # 서비스 계정 키 파일 경로
+        creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+        if not creds_path or not os.path.exists(creds_path):
+            print(f"❌ 서비스 계정 키 파일을 찾을 수 없습니다: {creds_path}")
+            return False, []
+
+        # 서비스 계정 자격 증명 생성
+        credentials = service_account.Credentials.from_service_account_file(
+            creds_path, scopes=["https://www.googleapis.com/auth/cloud-platform"]
         )
 
-        if result.returncode == 0:
-            # JSON 파싱
-            policy_data = json.loads(result.stdout)
-            bindings = policy_data.get("bindings", [])
+        # Resource Manager 클라이언트 생성
+        client = resourcemanager_v3.ProjectsClient(credentials=credentials)
 
-            # Pub/Sub 관련 권한 확인
-            pubsub_roles = [
-                "roles/pubsub.admin",
-                "roles/pubsub.editor",
-                "roles/pubsub.publisher",
-                "roles/pubsub.subscriber",
-            ]
+        # 프로젝트 리소스 이름
+        project_name = f"projects/{project_id}"
 
-            user_roles = []
-            for binding in bindings:
-                members = binding.get("members", [])
-                role = binding.get("role", "")
+        # IAM 정책 가져오기
+        policy = client.get_iam_policy(request={"resource": project_name})
 
-                # 사용자가 이 바인딩에 포함되어 있는지 확인
-                if f"user:{user_email}" in members:
+        # Pub/Sub 관련 권한 확인
+        pubsub_roles = [
+            "roles/pubsub.admin",
+            "roles/pubsub.editor",
+            "roles/pubsub.publisher",
+            "roles/pubsub.subscriber",
+        ]
+
+        user_roles = []
+        for binding in policy.bindings:
+            role = binding.role
+            for member in binding.members:
+                if member == f"user:{user_email}":
                     user_roles.append(role)
                     print(f"   📋 발견된 역할: {role}")
 
-            # Pub/Sub 권한이 있는지 확인
-            has_pubsub_permission = any(role in pubsub_roles for role in user_roles)
+        # Pub/Sub 권한이 있는지 확인
+        has_pubsub_permission = any(role in pubsub_roles for role in user_roles)
 
-            if has_pubsub_permission:
-                print(
-                    f"✅ 사용자 {user_email}에게 Pub/Sub 권한이 있습니다. (역할: {user_roles})"
-                )
-                return True, user_roles
-            else:
-                print(
-                    f"⚠️ 사용자 {user_email}에게 Pub/Sub 권한이 없습니다. (현재 역할: {user_roles})"
-                )
-                return False, user_roles
+        if has_pubsub_permission:
+            print(
+                f"✅ 사용자 {user_email}에게 Pub/Sub 권한이 있습니다. (역할: {user_roles})"
+            )
+            return True, user_roles
         else:
-            print(f"ℹ️ 사용자 {user_email}의 권한 정보를 찾을 수 없습니다.")
-            return False, []
+            print(
+                f"⚠️ 사용자 {user_email}에게 Pub/Sub 권한이 없습니다. (현재 역할: {user_roles})"
+            )
+            return False, user_roles
 
     except Exception as e:
-        print(f"⚠️ 권한 확인 중 오류: {str(e)}")
+        print(f"❌ 사용자 Pub/Sub 권한 확인 중 오류: {str(e)}")
         return False, []
 
 
@@ -322,50 +321,60 @@ def grant_gmail_and_pubsub_permissions_service_account(
             print(f"❌ 서비스 계정 키 파일을 찾을 수 없습니다: {creds_path}")
             return False
 
-        # 서비스 계정 키를 환경변수로 설정
-        with open(creds_path, "r") as f:
-            service_account_key = json.load(f)
+        # Google Cloud IAM API 클라이언트 생성
+        from google.cloud import resourcemanager_v3
+        from google.oauth2 import service_account
+
+        credentials = service_account.Credentials.from_service_account_file(
+            creds_path, scopes=["https://www.googleapis.com/auth/cloud-platform"]
+        )
+
+        client = resourcemanager_v3.ProjectsClient(credentials=credentials)
+        project_name = f"projects/{project_id}"
+
+        # 현재 IAM 정책 가져오기
+        policy = client.get_iam_policy(request={"resource": project_name})
 
         # 필요한 권한들
         required_roles = [
             "roles/pubsub.admin",
-            "roles/gmail.readonly",
-            "roles/gmail.modify",
             "roles/serviceusage.serviceUsageAdmin",
         ]
 
-        # 각 권한에 대해 gcloud 명령어 실행
+        # 각 권한에 대해 IAM 바인딩 추가
         for role in required_roles:
             print(f"🔧 {role} 권한 부여 중...")
 
-            # gcloud 명령어 실행 (서비스 계정 키 환경변수 설정)
-            result = subprocess.run(
-                [
-                    "gcloud",
-                    "projects",
-                    "add-iam-policy-binding",
-                    project_id,
-                    "--member=user:" + user_email,
-                    "--role=" + role,
-                ],
-                capture_output=True,
-                text=True,
-                timeout=30,
-                env={**os.environ, "GOOGLE_APPLICATION_CREDENTIALS": creds_path},
-            )
+            # 기존 바인딩 찾기
+            existing_binding = None
+            for binding in policy.bindings:
+                if binding.role == role:
+                    existing_binding = binding
+                    break
 
-            if result.returncode == 0:
-                print(f"✅ {role} 권한 부여 성공")
+            if existing_binding:
+                # 기존 바인딩에 멤버 추가
+                if f"user:{user_email}" not in existing_binding.members:
+                    existing_binding.members.append(f"user:{user_email}")
+                    print(f"✅ {role} 권한에 사용자 추가됨")
             else:
-                print(f"❌ {role} 권한 부여 실패: {result.stderr}")
-                # 일부 권한이 실패해도 계속 진행
-                continue
+                # 새 바인딩 생성
+                from google.iam.v1 import policy_pb2
 
-        print(f"✅ 서비스 계정을 사용해서 Gmail API 및 Pub/Sub 권한 부여 완료")
+                new_binding = policy_pb2.Binding(
+                    role=role, members=[f"user:{user_email}"]
+                )
+                policy.bindings.append(new_binding)
+                print(f"✅ {role} 권한 새로 생성됨")
+
+        # 업데이트된 정책 적용
+        client.set_iam_policy(request={"resource": project_name, "policy": policy})
+        print(f"✅ IAM 정책 업데이트 완료")
+
         return True
 
     except Exception as e:
-        print(f"❌ 서비스 계정 권한 부여 중 오류: {str(e)}")
+        print(f"❌ 권한 부여 중 오류: {str(e)}")
         return False
 
 
@@ -409,20 +418,15 @@ def check_user_gmail_and_pubsub_permissions_service_account(
         has_all_permissions = all(role in user_roles for role in required_roles)
 
         if has_all_permissions:
-            print(
-                f"✅ 사용자 {user_email}에게 Gmail API 및 Pub/Sub 권한이 모두 있습니다. (역할: {user_roles})"
-            )
+            print(f"✅ 사용자 {user_email}에게 필요한 모든 권한이 있습니다.")
             return True, user_roles
         else:
             missing_roles = [role for role in required_roles if role not in user_roles]
-            print(
-                f"⚠️ 사용자 {user_email}에게 일부 권한이 없습니다. (현재 역할: {user_roles})"
-            )
-            print(f"   ❌ 누락된 권한: {missing_roles}")
+            print(f"⚠️ 사용자 {user_email}에게 누락된 권한: {missing_roles}")
             return False, user_roles
 
     except Exception as e:
-        print(f"⚠️ 서비스 계정 권한 확인 중 오류: {str(e)}")
+        print(f"❌ 사용자 권한 확인 중 오류: {str(e)}")
         return False, []
 
 
@@ -447,13 +451,20 @@ def grant_service_account_pubsub_permissions(project_id: str) -> bool:
             "cleanbox-webhook@cleanbox-466314.iam.gserviceaccount.com"
         )
         required_roles = ["roles/pubsub.publisher", "roles/pubsub.subscriber"]
+
+        # 각 권한에 대해 IAM 바인딩 추가
         for role in required_roles:
+            print(f"🔧 {role} 권한 부여 중...")
+
+            # 기존 바인딩 찾기
             existing_binding = None
             for binding in policy.bindings:
                 if binding.role == role:
                     existing_binding = binding
                     break
+
             if existing_binding:
+                # 기존 바인딩에 서비스 계정 추가
                 if (
                     f"serviceAccount:{service_account_email}"
                     not in existing_binding.members
@@ -461,18 +472,22 @@ def grant_service_account_pubsub_permissions(project_id: str) -> bool:
                     existing_binding.members.append(
                         f"serviceAccount:{service_account_email}"
                     )
-                    print(f"✅ 기존 {role} 바인딩에 서비스 계정 추가")
+                    print(f"✅ {role} 권한에 서비스 계정 추가됨")
             else:
-                from google.cloud.resourcemanager_v3.types import Policy
+                # 새 바인딩 생성
+                from google.iam.v1 import policy_pb2
 
-                new_binding = Policy.Binding(
+                new_binding = policy_pb2.Binding(
                     role=role, members=[f"serviceAccount:{service_account_email}"]
                 )
                 policy.bindings.append(new_binding)
-                print(f"✅ 새로운 {role} 바인딩 생성")
+                print(f"✅ {role} 권한 새로 생성됨")
+
+        # 업데이트된 정책 적용
         client.set_iam_policy(request={"resource": project_name, "policy": policy})
         print(f"✅ 서비스 계정 Pub/Sub 권한 부여 완료")
         return True
+
     except Exception as e:
         print(f"❌ 서비스 계정 권한 부여 중 오류: {str(e)}")
         return False
@@ -497,7 +512,7 @@ def check_and_grant_pubsub_permissions(user_email: str) -> bool:
                 )
             )
         else:
-            print("🏠 로컬 환경 감지 - gcloud CLI 사용")
+            print("🏠 로컬 환경 감지 - Google Cloud API 사용")
             has_permission, current_roles = check_user_pubsub_permissions(
                 user_email, project_id
             )
@@ -520,40 +535,34 @@ def check_and_grant_pubsub_permissions(user_email: str) -> bool:
         )
 
         if not grant_success:
-            print(f"❌ 권한 부여 명령어 실행 실패")
+            print(f"❌ 권한 부여 실패")
             return False
 
         # 4단계: 권한 부여 후 재확인
         print(f"⏳ 권한 부여 후 재확인을 위해 5초 대기 중...")
         time.sleep(5)
 
-        print(f"🔍 권한 부여 후 재확인 중...")
+        # 5단계: 최종 권한 확인
         if is_render_environment():
-            has_permission_after, new_roles = (
+            final_check, final_roles = (
                 check_user_gmail_and_pubsub_permissions_service_account(
                     user_email, project_id
                 )
             )
         else:
-            has_permission_after, new_roles = check_user_pubsub_permissions(
+            final_check, final_roles = check_user_pubsub_permissions(
                 user_email, project_id
             )
 
-        if has_permission_after:
-            print(
-                f"✅ 권한 부여 성공! 사용자 {user_email}에게 Pub/Sub 권한이 부여되었습니다."
-            )
-            print(f"📋 새로운 역할: {new_roles}")
+        if final_check:
+            print(f"✅ 사용자 {user_email}의 Pub/Sub 권한 설정 완료")
             return True
         else:
-            print(
-                f"❌ 권한 부여 실패! 사용자 {user_email}에게 여전히 Pub/Sub 권한이 없습니다."
-            )
-            print(f"📋 현재 역할: {new_roles}")
+            print(f"⚠️ 사용자 {user_email}의 Pub/Sub 권한 설정 실패")
             return False
 
     except Exception as e:
-        print(f"❌ 권한 확인 및 부여 중 오류: {str(e)}")
+        print(f"❌ 사용자 {user_email}의 Pub/Sub 권한 확인 중 오류: {str(e)}")
         return False
 
 
