@@ -1,9 +1,13 @@
+# Standard library imports
+import os
+import traceback
+from datetime import datetime, timedelta
+
+# Third-party imports
 from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for
 from flask_login import login_required, current_user
-from datetime import datetime, timedelta
-import traceback
-import os
 
+# Local imports
 from ..models import Email, Category, UserAccount, WebhookStatus, db
 from .gmail_service import GmailService
 from .ai_classifier import AIClassifier
@@ -758,90 +762,66 @@ def process_missed_emails_for_account(
         }
 
 
-def setup_webhook_for_account(user_id: str, account_id: int) -> bool:
-    """계정별 웹훅 자동 설정 (누락된 이메일 처리 포함)"""
+def setup_gmail_webhook_with_permissions(
+    account_id: int, topic_name: str, label_ids: list = None
+) -> dict:
+    """Gmail 웹훅을 설정합니다. (권한 확인 포함)"""
     try:
-        from ..models import User, UserAccount
-        from .gmail_service import GmailService
+        from ..auth.routes import grant_service_account_pubsub_permissions
         import os
-        from datetime import datetime, timedelta
 
-        # 사용자 및 계정 정보 가져오기
-        user = User.query.get(user_id)
-        account = UserAccount.query.get(account_id)
-
-        if not user or not account:
-            print(
-                f"❌ 사용자 또는 계정을 찾을 수 없음: user_id={user_id}, account_id={account_id}"
+        # 1단계: 서비스 계정 권한 확인 및 부여
+        project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
+        if project_id:
+            print(f"🔧 Gmail 웹훅 설정 전 서비스 계정 권한 확인 중...")
+            service_account_success = grant_service_account_pubsub_permissions(
+                project_id
             )
-            return False
+            if not service_account_success:
+                print(f"⚠️ 서비스 계정 권한 부여 실패, 웹훅 설정을 계속 진행합니다.")
 
-        # 기존 웹훅 상태 확인 (누락된 이메일 처리용)
-        existing_webhook = WebhookStatus.query.filter_by(
-            user_id=user_id, account_id=account_id, is_active=True
-        ).first()
+        # 2단계: 기존 웹훅 설정 로직
+        return setup_gmail_webhook(account_id, topic_name, label_ids)
 
-        missed_period_start = None
-        if existing_webhook and existing_webhook.is_expired:
-            # 만료된 웹훅의 만료 시간을 누락 기간 시작점으로 사용
-            missed_period_start = existing_webhook.expires_at
-            print(f"📅 누락된 이메일 기간 확인: {missed_period_start} ~ 현재")
+    except Exception as e:
+        print(f"❌ Gmail 웹훅 설정 중 오류: {str(e)}")
+        return {"success": False, "error": str(e)}
 
-        # 환경 변수 확인
-        project_id = os.environ.get("GOOGLE_CLOUD_PROJECT")
-        if not project_id:
-            print("❌ GOOGLE_CLOUD_PROJECT 환경 변수가 설정되지 않음")
+
+def setup_webhook_for_account(user_id: str, account_id: int) -> bool:
+    """계정에 대한 웹훅을 설정합니다."""
+    try:
+        # 계정 정보 가져오기
+        account = UserAccount.query.filter_by(id=account_id, user_id=user_id).first()
+        if not account:
+            print(f"❌ 계정 {account_id}를 찾을 수 없습니다.")
             return False
 
         # 토픽 이름 설정
-        topic_name = f"projects/{project_id}/topics/gmail-notifications"
+        topic_name = os.getenv("GMAIL_WEBHOOK_TOPIC", "gmail-notifications")
+        full_topic_name = (
+            f"projects/{os.getenv('GOOGLE_CLOUD_PROJECT')}/topics/{topic_name}"
+        )
 
-        # Gmail 서비스 초기화
-        gmail_service = GmailService(user_id, account_id)
+        print(f"🔧 웹훅 설정 시작 - 계정: {account_id}, 토픽: {full_topic_name}")
 
-        # 웹훅 설정
-        success = gmail_service.setup_gmail_watch(topic_name)
+        # Gmail API 요청
+        print(f"📤 Gmail API 요청 - 계정: {account_id}")
+        print(f"   토픽: {full_topic_name}")
+        print(f"   라벨: {['INBOX']}")
 
-        if success:
-            # 웹훅 상태 DB에 저장
-            webhook_status = WebhookStatus.query.filter_by(
-                user_id=user_id, account_id=account_id, is_active=True
-            ).first()
+        # 권한 확인을 포함한 웹훅 설정
+        result = setup_gmail_webhook_with_permissions(
+            account_id, full_topic_name, ["INBOX"]
+        )
 
-            if not webhook_status:
-                webhook_status = WebhookStatus(
-                    user_id=user_id,
-                    account_id=account_id,
-                    topic_name=topic_name,
-                    is_active=True,
-                    expires_at=datetime.utcnow()
-                    + timedelta(days=7),  # Gmail 웹훅은 7일 후 만료
-                )
-                db.session.add(webhook_status)
-            else:
-                webhook_status.topic_name = topic_name
-                webhook_status.is_active = True
-                webhook_status.expires_at = datetime.utcnow() + timedelta(days=7)
-                webhook_status.setup_at = datetime.utcnow()
-
-            db.session.commit()
-            print(f"✅ 웹훅 설정 완료: {account.account_email}")
-
-            # 누락된 이메일 처리
-            if missed_period_start:
-                print(f"📧 누락된 이메일 처리 시작: {account.account_email}")
-                missed_result = process_missed_emails_for_account(
-                    user_id, account_id, missed_period_start
-                )
-
-                if missed_result["success"]:
-                    print(f"✅ 누락된 이메일 처리 완료: {missed_result['message']}")
-                else:
-                    print(f"⚠️ 누락된 이메일 처리 실패: {missed_result['message']}")
-
+        if result.get("success"):
+            print(f"✅ 계정 {account_id}의 웹훅 설정 완료")
             return True
         else:
-            print(f"❌ 웹훅 설정 실패: {account.account_email}")
+            print(f"❌ Gmail 웹훅 설정 실패: {account_id}")
+            print(f"   오류 타입: {type(result.get('error')).__name__}")
+            print(f"   오류 메시지: {result.get('error')}")
             return False
 
     except Exception as e:

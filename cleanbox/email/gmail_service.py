@@ -1,10 +1,15 @@
-import os
+# Standard library imports
 import base64
 import email
+import os
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
+
+# Third-party imports
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+
+# Local imports
 from ..models import Email, Category, UserAccount, db
 from ..auth.routes import get_user_credentials, get_current_account_id
 from .advanced_unsubscribe import AdvancedUnsubscribeService
@@ -102,8 +107,6 @@ class GmailService:
                 print(f"🔍 Gmail API 호출 - 계정: {self.account_id}, 쿼리: {query}")
             else:
                 # 기본값: 최근 24시간 (하위 호환성)
-                from datetime import datetime, timedelta
-
                 yesterday = datetime.utcnow() - timedelta(hours=24)
                 after_date_str = yesterday.strftime("%Y/%m/%d")
                 query = f"after:{after_date_str} is:inbox"

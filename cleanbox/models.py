@@ -1,10 +1,13 @@
+# Standard library imports
+import json
+import os
+from datetime import datetime, timedelta
+
+# Third-party imports
 from flask_login import UserMixin
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
-import json
 from cryptography.fernet import Fernet
-import os
 
 db = SQLAlchemy()
 

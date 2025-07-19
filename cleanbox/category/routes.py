@@ -1,4 +1,7 @@
+# Standard library imports
 import os
+
+# Third-party imports
 from flask import (
     Blueprint,
     request,
@@ -10,6 +13,8 @@ from flask import (
     jsonify,
 )
 from flask_login import login_user, logout_user, login_required, current_user
+
+# Local imports
 from ..models import User, UserToken, UserAccount, Category, db
 
 category_bp = Blueprint("category", __name__)

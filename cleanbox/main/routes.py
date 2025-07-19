@@ -1,5 +1,8 @@
+# Third-party imports
 from flask import Blueprint, render_template
 from flask_login import login_required, current_user
+
+# Local imports
 from ..models import Category, UserAccount
 
 main_bp = Blueprint("main", __name__)

@@ -1,6 +1,12 @@
+# Standard library imports
 import os
-import openai
 from typing import Dict, List, Optional, Tuple
+
+# Third-party imports
+import openai
+
+# Local imports
+from ..models import Category
 
 
 class AIClassifier:
@@ -14,8 +20,6 @@ class AIClassifier:
     def get_user_categories_for_ai(self, user_id: str) -> List[Dict]:
         """AI 분류용 사용자 카테고리 정보 가져오기"""
         try:
-            from ..models import Category
-
             categories = Category.query.filter_by(user_id=user_id, is_active=True).all()
             return [
                 {"id": cat.id, "name": cat.name, "description": cat.description or ""}

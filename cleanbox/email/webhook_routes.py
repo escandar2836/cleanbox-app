@@ -1,11 +1,17 @@
-from flask import Blueprint, request, jsonify
-from ..models import User, UserAccount, Email, db
-from .gmail_service import GmailService
-from .ai_classifier import AIClassifier
+# Standard library imports
 import base64
 import json
 import logging
+import os
 from datetime import datetime
+
+# Third-party imports
+from flask import Blueprint, request, jsonify
+
+# Local imports
+from ..models import User, UserAccount, Email, WebhookStatus, db
+from .gmail_service import GmailService
+from .ai_classifier import AIClassifier
 
 logger = logging.getLogger(__name__)
 
@@ -55,8 +61,6 @@ def gmail_webhook():
 
         # 웹훅 수신 시간 업데이트
         try:
-            from ..models import WebhookStatus
-
             webhook_status = WebhookStatus.query.filter_by(
                 user_id=account.user_id, account_id=account.id, is_active=True
             ).first()
@@ -119,8 +123,6 @@ def _verify_webhook(request):
         if not user_agent or "Google" not in user_agent:
             logger.warning(f"의심스러운 User-Agent: {user_agent}")
             # 개발 환경에서는 더 관대하게 처리
-            import os
-
             if os.environ.get("FLASK_ENV") == "development":
                 logger.info("개발 환경에서 User-Agent 검증 건너뜀")
             else:

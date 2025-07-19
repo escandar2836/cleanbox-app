@@ -1,7 +1,10 @@
+# Standard library imports
 import os
+from datetime import timedelta
+
+# Third-party imports
 from cryptography.fernet import Fernet
 from dotenv import load_dotenv
-from datetime import timedelta
 
 # .env 파일 로드
 load_dotenv()

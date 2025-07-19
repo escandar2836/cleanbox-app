@@ -1,16 +1,21 @@
-import os
+# Standard library imports
 import logging
+import os
 from logging.handlers import RotatingFileHandler
+
+# Third-party imports
 from flask import Flask, render_template, redirect, url_for, flash
-from flask_login import LoginManager
+from flask_login import LoginManager, current_user
 from flask_sqlalchemy import SQLAlchemy
 from flask_apscheduler import APScheduler
+from sqlalchemy.exc import OperationalError, DisconnectionError
+
+# Local imports
 from .config import Config
+from .models import db, User
 
 # 확장 초기화
 login_manager = LoginManager()
-# models.py에서 db 인스턴스를 import
-from .models import db
 
 # 스케줄러 초기화
 scheduler = APScheduler()
@@ -19,22 +24,15 @@ scheduler = APScheduler()
 @login_manager.user_loader
 def load_user(user_id):
     """Flask-Login 사용자 로더"""
-    from .models import User
-    from sqlalchemy.exc import OperationalError, DisconnectionError
-
     try:
         return User.query.get(user_id)
     except (OperationalError, DisconnectionError) as e:
         # 데이터베이스 연결 오류 시 로그 기록
-        import logging
-
         logger = logging.getLogger(__name__)
         logger.error(f"데이터베이스 연결 오류 (사용자 로딩): {e}")
         return None
     except Exception as e:
         # 기타 예외 처리
-        import logging
-
         logger = logging.getLogger(__name__)
         logger.error(f"사용자 로딩 오류: {e}")
         return None
@@ -113,8 +111,6 @@ def create_app(config_class=Config):
     # 메인 라우트 (루트 URL)
     @app.route("/")
     def index():
-        from flask_login import current_user
-
         # 로그인된 사용자는 대시보드로 리다이렉트
         if current_user and current_user.is_authenticated:
             return redirect(url_for("main.dashboard"))
@@ -130,8 +126,6 @@ def create_app(config_class=Config):
     # Unauthorized 에러 핸들러
     @app.errorhandler(401)
     def unauthorized(error):
-        from flask_login import current_user
-
         if current_user and current_user.is_authenticated:
             # 로그인된 사용자지만 권한이 없는 경우
             flash("해당 기능에 대한 권한이 없습니다.", "error")

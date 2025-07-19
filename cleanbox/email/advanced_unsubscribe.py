@@ -1,8 +1,11 @@
+# Standard library imports
+import logging
 import re
 import time
-import logging
 from typing import List, Dict, Optional, Tuple
 from urllib.parse import urlparse, urljoin
+
+# Third-party imports
 import requests
 from bs4 import BeautifulSoup
 from selenium import webdriver
