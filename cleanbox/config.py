@@ -58,9 +58,8 @@ class Config:
 
     # AI 기능 설정
     ENABLE_AI_FEATURES = os.environ.get("CLEANBOX_ENABLE_AI", "true").lower() == "true"
-    USE_OLLAMA = os.environ.get("CLEANBOX_USE_OLLAMA", "true").lower() == "true"
-    OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
-    OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama2:3b")
+    OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+    OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4.1-nano")
 
     # 스케줄러 설정 제거 - PROJECT_DESCRIPTION 기준으로 불필요한 기능
     # ENABLE_SCHEDULER = (
@@ -91,6 +90,5 @@ class TestConfig(Config):
     # 테스트용 Fernet 키 (32바이트 base64 인코딩)
     CLEANBOX_ENCRYPTION_KEY = "bx0fuVNGhldioocf5SO2E1pefdu6m3lr_ccJEo_pqrI="
     # 테스트용 AI 설정
-    USE_OLLAMA = True
-    OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11435")
-    OLLAMA_MODEL = "llama2"
+    OPENAI_API_KEY = "test-openai-api-key"
+    OPENAI_MODEL = "gpt-4.1-nano"

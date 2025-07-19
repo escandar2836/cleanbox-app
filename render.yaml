@@ -22,8 +22,10 @@ services:
         fromDatabase:
           name: cleanbox-db
           property: connectionString
-      - key: CLEANBOX_USE_OLLAMA
-        value: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-4.1-nano
       - key: CLEANBOX_ENABLE_EMAIL_CHECKER
         value: false
       - key: CLEANBOX_EMAIL_CHECK_INTERVAL

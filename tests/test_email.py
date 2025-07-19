@@ -398,33 +398,29 @@ class TestGmailService:
 class TestAIClassifier:
     """AI 분류기 테스트"""
 
-    @patch("cleanbox.email.ai_classifier.requests.post")
+    @patch("cleanbox.email.ai_classifier.openai.ChatCompletion.create")
     @patch("cleanbox.email.ai_classifier.os.environ.get")
-    def test_email_classification(self, mock_environ, mock_requests, app):
-        """이메일 분류 테스트 (Ollama 사용)"""
+    def test_email_classification(self, mock_environ, mock_openai, app):
+        """이메일 분류 테스트 (OpenAI 사용)"""
 
-        # Ollama 환경변수 모킹
+        # OpenAI 환경변수 모킹
         def mock_environ_get(key, default=None):
-            if key == "CLEANBOX_USE_OLLAMA":
-                return "true"
-            elif key == "OLLAMA_URL":
-                return "http://localhost:11434"
-            elif key == "OLLAMA_MODEL":
-                return "llama2"
-            elif key == "OPENAI_API_KEY":
-                return "test_api_key"  # OpenAI API 키도 설정
+            if key == "OPENAI_API_KEY":
+                return "test_api_key"
+            elif key == "OPENAI_MODEL":
+                return "gpt-4.1-nano"
             else:
                 return default
 
         mock_environ.side_effect = mock_environ_get
 
-        # Ollama 모의 응답 설정
+        # OpenAI 모의 응답 설정
         mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "response": "카테고리ID: 1\n신뢰도: 85\n이유: 업무 관련 이메일"
-        }
-        mock_requests.return_value = mock_response
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = (
+            "카테고리ID: 1\n신뢰도: 85\n이유: 업무 관련 이메일"
+        )
+        mock_openai.return_value = mock_response
 
         classifier = AIClassifier()
         categories = [MagicMock(id=1, name="업무", description="업무 관련")]
@@ -436,31 +432,27 @@ class TestAIClassifier:
         assert result[0] == 1  # 카테고리 ID
         assert "업무" in result[1]  # 이유
 
-    @patch("cleanbox.email.ai_classifier.requests.post")
+    @patch("cleanbox.email.ai_classifier.openai.ChatCompletion.create")
     @patch("cleanbox.email.ai_classifier.os.environ.get")
-    def test_email_summarization(self, mock_environ, mock_requests, app):
-        """이메일 요약 테스트 (Ollama 사용)"""
+    def test_email_summarization(self, mock_environ, mock_openai, app):
+        """이메일 요약 테스트 (OpenAI 사용)"""
 
-        # Ollama 환경변수 모킹
+        # OpenAI 환경변수 모킹
         def mock_environ_get(key, default=None):
-            if key == "CLEANBOX_USE_OLLAMA":
-                return "true"
-            elif key == "OLLAMA_URL":
-                return "http://localhost:11434"
-            elif key == "OLLAMA_MODEL":
-                return "llama2"
-            elif key == "OPENAI_API_KEY":
-                return "test_api_key"  # OpenAI API 키도 설정
+            if key == "OPENAI_API_KEY":
+                return "test_api_key"
+            elif key == "OPENAI_MODEL":
+                return "gpt-4.1-nano"
             else:
                 return default
 
         mock_environ.side_effect = mock_environ_get
 
-        # Ollama 모의 응답 설정
+        # OpenAI 모의 응답 설정
         mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"response": "회의 일정 안내 이메일입니다."}
-        mock_requests.return_value = mock_response
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = "회의 일정 안내 이메일입니다."
+        mock_openai.return_value = mock_response
 
         classifier = AIClassifier()
         summary = classifier.summarize_email(
@@ -469,28 +461,24 @@ class TestAIClassifier:
 
         assert "회의" in summary
 
-    @patch("cleanbox.email.ai_classifier.requests.post")
+    @patch("cleanbox.email.ai_classifier.openai.ChatCompletion.create")
     @patch("cleanbox.email.ai_classifier.os.environ.get")
-    def test_ai_api_error_handling(self, mock_environ, mock_requests, app):
-        """AI API 오류 처리 테스트 (Ollama 사용)"""
+    def test_ai_api_error_handling(self, mock_environ, mock_openai, app):
+        """AI API 오류 처리 테스트 (OpenAI 사용)"""
 
-        # Ollama 환경변수 모킹
+        # OpenAI 환경변수 모킹
         def mock_environ_get(key, default=None):
-            if key == "CLEANBOX_USE_OLLAMA":
-                return "true"
-            elif key == "OLLAMA_URL":
-                return "http://localhost:11434"
-            elif key == "OLLAMA_MODEL":
-                return "llama2"
-            elif key == "OPENAI_API_KEY":
-                return "test_api_key"  # OpenAI API 키도 설정
+            if key == "OPENAI_API_KEY":
+                return "test_api_key"
+            elif key == "OPENAI_MODEL":
+                return "gpt-4.1-nano"
             else:
                 return default
 
         mock_environ.side_effect = mock_environ_get
 
         # API 오류 모의
-        mock_requests.side_effect = Exception("AI API 오류")
+        mock_openai.side_effect = Exception("AI API 오류")
 
         classifier = AIClassifier()
         result = classifier.classify_email(
@@ -500,21 +488,17 @@ class TestAIClassifier:
         assert result[0] is None
         assert "수동" in result[1]  # "수동으로 분류해주세요" 메시지 확인
 
-    @patch("cleanbox.email.ai_classifier.requests.post")
+    @patch("cleanbox.email.ai_classifier.openai.ChatCompletion.create")
     @patch("cleanbox.email.ai_classifier.os.environ.get")
-    def test_ai_api_timeout(self, mock_environ, mock_requests, app):
-        """AI API 타임아웃 테스트 (Ollama 사용)"""
+    def test_ai_api_timeout(self, mock_environ, mock_openai, app):
+        """AI API 타임아웃 테스트 (OpenAI 사용)"""
 
-        # Ollama 환경변수 모킹
+        # OpenAI 환경변수 모킹
         def mock_environ_get(key, default=None):
-            if key == "CLEANBOX_USE_OLLAMA":
-                return "true"
-            elif key == "OLLAMA_URL":
-                return "http://localhost:11434"
-            elif key == "OLLAMA_MODEL":
-                return "llama2"
-            elif key == "OPENAI_API_KEY":
-                return "test_api_key"  # OpenAI API 키도 설정
+            if key == "OPENAI_API_KEY":
+                return "test_api_key"
+            elif key == "OPENAI_MODEL":
+                return "gpt-4.1-nano"
             else:
                 return default
 
@@ -525,9 +509,9 @@ class TestAIClassifier:
         # 타임아웃 모의
         def timeout_request(*args, **kwargs):
             time.sleep(0.1)  # 빠른 테스트를 위해 시간 단축
-            raise requests.exceptions.Timeout("요청 시간 초과")
+            raise Exception("요청 시간 초과")
 
-        mock_requests.side_effect = timeout_request
+        mock_openai.side_effect = timeout_request
 
         classifier = AIClassifier()
         result = classifier.classify_email(
@@ -539,18 +523,14 @@ class TestAIClassifier:
 
     @patch("cleanbox.email.ai_classifier.os.environ.get")
     def test_ai_with_empty_content(self, mock_environ, app):
-        """빈 내용으로 AI 테스트 (Ollama 사용)"""
+        """빈 내용으로 AI 테스트 (OpenAI 사용)"""
 
-        # Ollama 환경변수 모킹
+        # OpenAI 환경변수 모킹
         def mock_environ_get(key, default=None):
-            if key == "CLEANBOX_USE_OLLAMA":
-                return "true"
-            elif key == "OLLAMA_URL":
-                return "http://localhost:11434"
-            elif key == "OLLAMA_MODEL":
-                return "llama2"
-            elif key == "OPENAI_API_KEY":
-                return "test_api_key"  # OpenAI API 키도 설정
+            if key == "OPENAI_API_KEY":
+                return "test_api_key"
+            elif key == "OPENAI_MODEL":
+                return "gpt-4.1-nano"
             else:
                 return default
 
@@ -561,33 +541,29 @@ class TestAIClassifier:
 
         assert result[0] is None
 
-    @patch("cleanbox.email.ai_classifier.requests.post")
+    @patch("cleanbox.email.ai_classifier.openai.ChatCompletion.create")
     @patch("cleanbox.email.ai_classifier.os.environ.get")
-    def test_ai_with_very_long_content(self, mock_environ, mock_requests, app):
-        """매우 긴 내용으로 AI 테스트 (Ollama 사용)"""
+    def test_ai_with_very_long_content(self, mock_environ, mock_openai, app):
+        """매우 긴 내용으로 AI 테스트 (OpenAI 사용)"""
 
-        # Ollama 환경변수 모킹
+        # OpenAI 환경변수 모킹
         def mock_environ_get(key, default=None):
-            if key == "CLEANBOX_USE_OLLAMA":
-                return "true"
-            elif key == "OLLAMA_URL":
-                return "http://localhost:11434"
-            elif key == "OLLAMA_MODEL":
-                return "llama2"
-            elif key == "OPENAI_API_KEY":
-                return "test_api_key"  # OpenAI API 키도 설정
+            if key == "OPENAI_API_KEY":
+                return "test_api_key"
+            elif key == "OPENAI_MODEL":
+                return "gpt-4.1-nano"
             else:
                 return default
 
         mock_environ.side_effect = mock_environ_get
 
-        # Ollama 모의 응답 설정
+        # OpenAI 모의 응답 설정
         mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "response": "카테고리ID: 1\n신뢰도: 80\n이유: 긴 내용 분석 완료"
-        }
-        mock_requests.return_value = mock_response
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = (
+            "카테고리ID: 1\n신뢰도: 80\n이유: 긴 내용 분석 완료"
+        )
+        mock_openai.return_value = mock_response
 
         long_content = "A" * 10000  # 10KB 내용
         classifier = AIClassifier()

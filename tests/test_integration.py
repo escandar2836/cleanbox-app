@@ -467,30 +467,26 @@ class TestErrorHandlingIntegration:
                 service.fetch_recent_emails()
             assert "Gmail API 오류" in str(exc_info.value)
 
-    @patch("cleanbox.email.ai_classifier.requests.post")
+    @patch("cleanbox.email.ai_classifier.openai.ChatCompletion.create")
     @patch("cleanbox.email.ai_classifier.os.environ.get")
     def test_ai_api_error_integration(
-        self, mock_environ, mock_requests, app, sample_data
+        self, mock_environ, mock_openai, app, sample_data
     ):
-        """AI API 오류 통합 테스트 (Ollama 사용)"""
+        """AI API 오류 통합 테스트 (OpenAI 사용)"""
 
-        # Ollama 환경변수 모킹
+        # OpenAI 환경변수 모킹
         def mock_environ_get(key, default=None):
-            if key == "CLEANBOX_USE_OLLAMA":
-                return "true"
-            elif key == "OLLAMA_URL":
-                return "http://localhost:11434"
-            elif key == "OLLAMA_MODEL":
-                return "llama2"
-            elif key == "OPENAI_API_KEY":
-                return "test_api_key"  # OpenAI API 키도 설정
+            if key == "OPENAI_API_KEY":
+                return "test_api_key"
+            elif key == "OPENAI_MODEL":
+                return "gpt-4.1-nano"
             else:
                 return default
 
         mock_environ.side_effect = mock_environ_get
 
         # AI API 오류 모의
-        mock_requests.side_effect = Exception("AI API 오류")
+        mock_openai.side_effect = Exception("AI API 오류")
 
         classifier = AIClassifier()
         categories = [sample_data["category"]]

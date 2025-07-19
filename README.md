@@ -91,7 +91,7 @@ python scripts/validate-env.py
 ## 📋 주요 기능
 
 - 🔐 **보안**: Fernet 암호화로 OAuth 토큰 보안 저장
-- 🤖 **AI 분류**: Ollama를 사용한 이메일 자동 분류
+- 🤖 **AI 분류**: OpenAI를 사용한 이메일 자동 분류
 - 📧 **Gmail 연동**: Google OAuth를 통한 안전한 Gmail 접근
 - 🗂️ **카테고리 관리**: 사용자 정의 이메일 카테고리
 - ⏰ **자동 동기화**: 스케줄러를 통한 정기적인 이메일 동기화

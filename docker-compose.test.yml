@@ -16,20 +16,8 @@ services:
     networks:
       - cleanbox_test_network
 
-  # 테스트용 Ollama AI 서비스
-  ollama_test:
-    image: ollama/ollama:latest
-    container_name: cleanbox_ollama_test
-    ports:
-      - "11435:11434"  # 테스트용 포트
-    volumes:
-      - ollama_test_data:/root/.ollama
-    networks:
-      - cleanbox_test_network
-
 volumes:
   postgres_test_data:
-  ollama_test_data:
 
 networks:
   cleanbox_test_network:

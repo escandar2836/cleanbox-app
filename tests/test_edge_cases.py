@@ -223,21 +223,17 @@ class TestNetworkEdgeCases:
                 with pytest.raises(Exception):
                     service.fetch_recent_emails()
 
-    @patch("cleanbox.email.ai_classifier.requests.post")
+    @patch("cleanbox.email.ai_classifier.openai.ChatCompletion.create")
     @patch("cleanbox.email.ai_classifier.os.environ.get")
-    def test_openai_api_rate_limit(self, mock_environ, mock_requests, app):
-        """Ollama API 속도 제한 테스트"""
+    def test_openai_api_rate_limit(self, mock_environ, mock_openai, app):
+        """OpenAI API 속도 제한 테스트"""
 
-        # Ollama 환경변수 모킹
+        # OpenAI 환경변수 모킹
         def mock_environ_get(key, default=None):
-            if key == "CLEANBOX_USE_OLLAMA":
-                return "true"
-            elif key == "OLLAMA_URL":
-                return "http://localhost:11434"
-            elif key == "OLLAMA_MODEL":
-                return "llama2"
-            elif key == "OPENAI_API_KEY":
-                return "test_api_key"  # OpenAI API 키도 설정
+            if key == "OPENAI_API_KEY":
+                return "test_api_key"
+            elif key == "OPENAI_MODEL":
+                return "gpt-4.1-nano"
             else:
                 return default
 
@@ -248,9 +244,9 @@ class TestNetworkEdgeCases:
         # 속도 제한 모의
         def rate_limited_request(*args, **kwargs):
             time.sleep(0.1)  # 짧은 지연
-            raise requests.exceptions.HTTPError("Rate limit exceeded")
+            raise Exception("Rate limit exceeded")
 
-        mock_requests.side_effect = rate_limited_request
+        mock_openai.side_effect = rate_limited_request
 
         classifier = AIClassifier()
         categories = [MagicMock(id=1, name="테스트", description="테스트용")]
