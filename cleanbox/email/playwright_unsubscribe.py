@@ -235,7 +235,7 @@ class PlaywrightUnsubscribeService:
                 raise Exception("페이지 생성 실패")
 
             print(f"🔍 페이지 타임아웃 설정 시작...")
-            await self.page.set_default_timeout(self.timeouts["page_load"])
+            self.page.set_default_timeout(self.timeouts["page_load"])
             print("✅ 새 페이지 생성 완료")
             return self.page
         except Exception as e:
