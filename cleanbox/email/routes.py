@@ -642,23 +642,45 @@ def bulk_actions():
 
         elif action == "unsubscribe":
             # 대량 구독해지
+            print(f"🔍 대량 구독해지 시작 - 선택된 이메일 수: {len(email_ids)}")
             for email_id in email_ids:
                 try:
+                    print(f"📝 이메일 {email_id} 처리 시작")
                     email_obj = Email.query.filter_by(
                         id=int(email_id), user_id=current_user.id
                     ).first()
-                    if email_obj and not email_obj.is_unsubscribed:
-                        # 구독해지 처리
-                        gmail_service = GmailService(
-                            current_user.id, email_obj.account_id
+
+                    if not email_obj:
+                        print(f"❌ 이메일 {email_id}를 찾을 수 없음")
+                        continue
+
+                    if email_obj.is_unsubscribed:
+                        print(f"⏭️ 이메일 {email_id}는 이미 구독해지됨")
+                        continue
+
+                    print(f"📝 이메일 {email_id} 구독해지 처리 중...")
+                    # 구독해지 처리
+                    gmail_service = GmailService(current_user.id, email_obj.account_id)
+                    print(f"📝 GmailService 초기화 완료 - 계정: {email_obj.account_id}")
+
+                    result = gmail_service.process_unsubscribe(email_obj)
+                    print(f"📝 process_unsubscribe 결과: {result}")
+
+                    if result["success"]:
+                        processed_count += 1
+                        print(
+                            f"✅ 이메일 {email_id} 구독해지 성공 - processed_count: {processed_count}"
                         )
-                        result = gmail_service.process_unsubscribe(email_obj)
-                        if result["success"]:
-                            processed_count += 1
+                    else:
+                        print(
+                            f"❌ 이메일 {email_id} 구독해지 실패: {result.get('message', '알 수 없는 오류')}"
+                        )
+
                 except Exception as e:
-                    print(f"이메일 구독해지 실패 (ID: {email_id}): {str(e)}")
+                    print(f"❌ 이메일 구독해지 실패 (ID: {email_id}): {str(e)}")
                     continue
 
+            print(f"🎉 대량 구독해지 완료 - 성공: {processed_count}개")
             flash(f"{processed_count}개의 이메일 구독을 해지했습니다.", "success")
 
         else:
@@ -675,18 +697,23 @@ def bulk_actions():
 @login_required
 def unsubscribe_email(email_id):
     """개별 이메일 구독해지"""
+    print(f"🔍 개별 구독해지 시작 - 이메일 ID: {email_id}")
     try:
         # 이메일 조회
         email = Email.query.filter_by(id=email_id, user_id=current_user.id).first()
 
         if not email:
+            print(f"❌ 이메일 {email_id}를 찾을 수 없음")
             return (
                 jsonify({"success": False, "message": "이메일을 찾을 수 없습니다."}),
                 404,
             )
 
+        print(f"📝 이메일 {email_id} 조회 성공 - 제목: {email.subject}")
+
         # 이미 구독해지된 이메일인지 확인
         if email.is_unsubscribed:
+            print(f"⏭️ 이메일 {email_id}는 이미 구독해지됨")
             return jsonify(
                 {
                     "success": True,
@@ -695,14 +722,18 @@ def unsubscribe_email(email_id):
                 }
             )
 
+        print(f"📝 이메일 {email_id} 구독해지 처리 시작")
         # Gmail 서비스 초기화
         gmail_service = GmailService(current_user.id, email.account_id)
+        print(f"📝 GmailService 초기화 완료 - 계정: {email.account_id}")
 
         # 구독해지 처리
         result = gmail_service.process_unsubscribe(email)
+        print(f"📝 process_unsubscribe 결과: {result}")
 
         # 결과 반환
         if result["success"]:
+            print(f"✅ 이메일 {email_id} 구독해지 성공")
             return jsonify(
                 {
                     "success": True,
@@ -712,6 +743,9 @@ def unsubscribe_email(email_id):
                 }
             )
         else:
+            print(
+                f"❌ 이메일 {email_id} 구독해지 실패: {result.get('message', '알 수 없는 오류')}"
+            )
             return (
                 jsonify(
                     {
@@ -727,6 +761,7 @@ def unsubscribe_email(email_id):
             )
 
     except Exception as e:
+        print(f"❌ 구독해지 처리 중 예외 발생: {str(e)}")
         return (
             jsonify(
                 {

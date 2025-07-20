@@ -418,21 +418,29 @@ class GmailService:
 
     def process_unsubscribe(self, email_obj) -> Dict:
         """고급 구독해지 처리"""
+        print(f"🔍 GmailService.process_unsubscribe 시작 - 이메일 ID: {email_obj.id}")
+        print(f"📝 이메일 정보 - 제목: {email_obj.subject}, 발신자: {email_obj.sender}")
+
         try:
             # 고급 구독해지 서비스 사용
+            print(f"📝 AdvancedUnsubscribeService 호출 시작")
             result = self.advanced_unsubscribe.process_unsubscribe_advanced(
                 email_obj.content, getattr(email_obj, "headers", {})
             )
+            print(f"📝 AdvancedUnsubscribeService 결과: {result}")
 
             if result["success"]:
+                print(f"📝 DB 업데이트 시작 - is_unsubscribed = True")
                 # DB에서 구독해지 상태 업데이트
                 email_obj.is_unsubscribed = True
                 email_obj.updated_at = datetime.utcnow()
                 db.session.commit()
+                print(f"✅ DB 업데이트 완료")
 
             return result
 
         except Exception as e:
+            print(f"❌ GmailService.process_unsubscribe 예외 발생: {str(e)}")
             return {
                 "success": False,
                 "message": f"구독해지 처리 실패: {str(e)}",

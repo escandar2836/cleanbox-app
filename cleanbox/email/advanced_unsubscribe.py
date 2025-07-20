@@ -66,17 +66,21 @@ class AdvancedUnsubscribeService:
         self, email_content: str, email_headers: Dict = None
     ) -> List[str]:
         """이메일에서 구독해지 링크 추출 (고급)"""
+        print(f"🔍 extract_unsubscribe_links 시작")
         unsubscribe_links = []
 
         # 1. 이메일 헤더에서 List-Unsubscribe 필드 확인
         if email_headers:
             list_unsubscribe = email_headers.get("List-Unsubscribe", "")
+            print(f"📝 List-Unsubscribe 헤더: {list_unsubscribe}")
             if list_unsubscribe:
                 # 여러 링크가 있을 수 있음 (쉼표로 구분)
                 links = [link.strip() for link in list_unsubscribe.split(",")]
                 unsubscribe_links.extend(links)
+                print(f"📝 헤더에서 추출된 링크: {links}")
 
         # 2. 이메일 본문에서 구독해지 링크 패턴 검색
+        print(f"📝 이메일 본문에서 패턴 검색 시작")
         patterns = [
             r'https?://[^\s<>"]*unsubscribe[^\s<>"]*',
             r'https?://[^\s<>"]*opt-out[^\s<>"]*',
@@ -90,12 +94,17 @@ class AdvancedUnsubscribeService:
             r'https?://[^\s<>"]*account[^\s<>"]*',
         ]
 
-        for pattern in patterns:
+        for i, pattern in enumerate(patterns):
             matches = re.findall(pattern, email_content, re.IGNORECASE)
+            if matches:
+                print(f"📝 패턴 {i + 1}에서 매치 발견: {matches}")
             unsubscribe_links.extend(matches)
 
         # 3. HTML 태그에서 링크 추출
+        print(f"📝 HTML 태그에서 링크 추출 시작")
         soup = BeautifulSoup(email_content, "html.parser")
+        html_links_found = 0
+
         for link in soup.find_all("a", href=True):
             href = link.get("href", "").lower()
             link_text = link.get_text().lower()
@@ -118,14 +127,27 @@ class AdvancedUnsubscribeService:
             for keyword in unsubscribe_keywords:
                 if keyword in href or keyword in link_text:
                     unsubscribe_links.append(link["href"])
+                    html_links_found += 1
+                    print(
+                        f"📝 HTML에서 구독해지 링크 발견: {link['href']} (키워드: {keyword})"
+                    )
                     break
 
+        print(f"📝 HTML에서 발견된 구독해지 링크 수: {html_links_found}")
+
         # 중복 제거 및 유효한 URL만 필터링
+        print(f"📝 중복 제거 및 유효성 검사 시작")
+        print(f"📝 추출된 총 링크 수: {len(unsubscribe_links)}")
+
         valid_links = []
         for link in set(unsubscribe_links):
             if self._is_valid_unsubscribe_url(link):
                 valid_links.append(link)
+                print(f"📝 유효한 링크 추가: {link}")
+            else:
+                print(f"❌ 유효하지 않은 링크 제외: {link}")
 
+        print(f"📝 최종 유효한 링크 수: {len(valid_links)}")
         return valid_links
 
     def _is_valid_unsubscribe_url(self, url: str) -> bool:
@@ -479,20 +501,27 @@ class AdvancedUnsubscribeService:
 
     def process_unsubscribe_simple(self, unsubscribe_url: str) -> Dict:
         """간단한 구독해지 처리 (requests 사용)"""
+        print(f"🔍 process_unsubscribe_simple 시작: {unsubscribe_url}")
         result = {"success": False, "message": "", "steps": []}
 
         try:
             # 페이지 접속
+            print(f"📝 페이지 접속 시도: {unsubscribe_url}")
             response = requests.get(unsubscribe_url, timeout=10)
             response.raise_for_status()
+            print(f"✅ 페이지 접속 성공 - 상태 코드: {response.status_code}")
 
             result["steps"].append(f"페이지 접속: {unsubscribe_url}")
 
             # HTML 파싱
+            print(f"📝 HTML 파싱 시작")
             soup = BeautifulSoup(response.content, "html.parser")
+            print(f"✅ HTML 파싱 완료")
 
             # 구독해지 링크 찾기
+            print(f"📝 구독해지 링크 검색 시작")
             unsubscribe_link = self._find_unsubscribe_link_simple(soup)
+            print(f"📝 찾은 구독해지 링크: {unsubscribe_link}")
 
             if unsubscribe_link:
                 # 구독해지 링크 클릭
@@ -501,18 +530,25 @@ class AdvancedUnsubscribeService:
                 else:
                     final_url = urljoin(unsubscribe_url, unsubscribe_link)
 
+                print(f"📝 최종 구독해지 URL: {final_url}")
+                print(f"📝 구독해지 링크 클릭 시도")
+
                 requests.get(final_url, timeout=10)
                 result["success"] = True
                 result["message"] = "구독해지가 성공적으로 처리되었습니다"
                 result["steps"].append("구독해지 링크 클릭 완료")
+                print(f"✅ 구독해지 링크 클릭 성공")
             else:
                 result["message"] = "구독해지 링크를 찾을 수 없습니다"
                 result["steps"].append("구독해지 링크를 찾을 수 없음")
+                print(f"❌ 구독해지 링크를 찾을 수 없음")
 
         except Exception as e:
             result["message"] = f"구독해지 처리 중 오류: {str(e)}"
             result["steps"].append(f"오류 발생: {str(e)}")
+            print(f"❌ process_unsubscribe_simple 예외 발생: {str(e)}")
 
+        print(f"📝 process_unsubscribe_simple 결과: {result}")
         return result
 
     def _find_unsubscribe_link_simple(self, soup: BeautifulSoup) -> Optional[str]:
@@ -545,22 +581,32 @@ class AdvancedUnsubscribeService:
         self, email_content: str, email_headers: Dict = None
     ) -> Dict:
         """고급 구독해지 처리 (자동 방법 선택)"""
+        print(f"🔍 AdvancedUnsubscribeService.process_unsubscribe_advanced 시작")
+        print(f"📝 이메일 내용 길이: {len(email_content)}")
+        print(f"📝 이메일 헤더: {email_headers}")
+
         result = {"success": False, "message": "", "steps": [], "progress": 0}
 
         # 1단계: 구독해지 링크 추출
         result["steps"].append("🔍 이메일에서 구독해지 링크 검색 중...")
         result["progress"] = 10
+        print(f"📝 구독해지 링크 추출 시작")
 
         unsubscribe_links = self.extract_unsubscribe_links(email_content, email_headers)
+        print(f"📝 추출된 링크 수: {len(unsubscribe_links)}")
+        if unsubscribe_links:
+            print(f"📝 추출된 링크들: {unsubscribe_links}")
 
         if not unsubscribe_links:
             result["message"] = "구독해지 링크를 찾을 수 없습니다"
             result["steps"].append("❌ 구독해지 링크 추출 실패")
             result["progress"] = 100
+            print(f"❌ 구독해지 링크를 찾을 수 없음")
             return result
 
         result["steps"].append(f"✅ 구독해지 링크 {len(unsubscribe_links)}개 발견")
         result["progress"] = 20
+        print(f"✅ 구독해지 링크 {len(unsubscribe_links)}개 발견")
 
         # 모든 링크에 대해 시도
         for i, unsubscribe_url in enumerate(unsubscribe_links):
@@ -572,16 +618,23 @@ class AdvancedUnsubscribeService:
             )
             result["progress"] = current_progress
 
+            print(
+                f"📝 링크 {i + 1}/{len(unsubscribe_links)} 처리 시작: {unsubscribe_url}"
+            )
             self.logger.info(
                 f"구독해지 링크 시도 ({i + 1}/{len(unsubscribe_links)}): {unsubscribe_url}"
             )
 
             # 웹사이트별 특별 처리
             result["steps"].append("🔧 웹사이트별 특별 처리 시도...")
+            print(f"📝 웹사이트별 특별 처리 시도: {unsubscribe_url}")
             website_specific_result = self._handle_website_specific_logic(
                 unsubscribe_url
             )
+            print(f"📝 웹사이트별 처리 결과: {website_specific_result}")
+
             if website_specific_result["success"]:
+                print(f"✅ 웹사이트별 처리 성공")
                 result["steps"].extend(website_specific_result["steps"])
                 result["success"] = True
                 result["message"] = website_specific_result["message"]
@@ -590,20 +643,28 @@ class AdvancedUnsubscribeService:
 
             # 먼저 간단한 방법 시도
             result["steps"].append("📡 간단한 HTTP 요청 시도...")
+            print(f"📝 간단한 HTTP 요청 시도: {unsubscribe_url}")
             simple_result = self.process_unsubscribe_simple(unsubscribe_url)
+            print(f"📝 간단한 HTTP 요청 결과: {simple_result}")
 
             # 간단한 방법이 실패하면 Selenium 사용
             if not simple_result["success"]:
                 result["steps"].append("🤖 Selenium 브라우저 자동화 시도...")
+                print(f"📝 Selenium 브라우저 자동화 시도: {unsubscribe_url}")
                 simple_result = self.process_unsubscribe_with_selenium(unsubscribe_url)
+                print(f"📝 Selenium 처리 결과: {simple_result}")
 
             if simple_result["success"]:
+                print(f"✅ 링크 {i + 1} 처리 성공")
                 result["steps"].extend(simple_result["steps"])
                 result["success"] = True
                 result["message"] = simple_result["message"]
                 result["progress"] = 100
                 return result
             else:
+                print(
+                    f"❌ 링크 {i + 1} 처리 실패: {simple_result.get('message', '알 수 없는 오류')}"
+                )
                 result["steps"].append(f"❌ 링크 {i + 1} 처리 실패")
 
         # 모든 링크 실패
