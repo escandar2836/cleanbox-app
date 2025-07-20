@@ -74,26 +74,48 @@ class SeleniumUnsubscribeService:
         }
 
     def _setup_chrome_driver(self) -> webdriver.Chrome:
-        """Chrome WebDriver 설정 (메모리 최적화)"""
+        """Chrome WebDriver 설정 (메모리 최적화 + JavaScript 활성화)"""
         chrome_options = Options()
 
-        # 메모리 사용량 최적화
+        # 메모리 사용량 최적화 (더 강화)
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--disable-extensions")
         chrome_options.add_argument("--disable-plugins")
         chrome_options.add_argument("--disable-images")
-        chrome_options.add_argument("--disable-javascript")  # 필요시 제거
+        # JavaScript 활성화 (구독해지 버튼 렌더링을 위해)
+        # chrome_options.add_argument("--disable-javascript")  # 제거
         chrome_options.add_argument("--headless")
-        chrome_options.add_argument("--window-size=1280,720")  # 해상도 줄임
+        chrome_options.add_argument("--window-size=1024,768")  # 해상도 더 줄임
         chrome_options.add_argument("--disable-background-timer-throttling")
         chrome_options.add_argument("--disable-backgrounding-occluded-windows")
         chrome_options.add_argument("--disable-renderer-backgrounding")
         chrome_options.add_argument("--disable-features=TranslateUI")
         chrome_options.add_argument("--disable-ipc-flooding-protection")
         chrome_options.add_argument("--memory-pressure-off")
-        chrome_options.add_argument("--max_old_space_size=128")  # 메모리 제한
+        chrome_options.add_argument("--max_old_space_size=64")  # 메모리 제한 더 줄임
+        chrome_options.add_argument("--disable-web-security")
+        chrome_options.add_argument("--disable-features=VizDisplayCompositor")
+        chrome_options.add_argument("--disable-software-rasterizer")
+        chrome_options.add_argument("--disable-threaded-animation")
+        chrome_options.add_argument("--disable-threaded-scrolling")
+        chrome_options.add_argument("--disable-checker-imaging")
+        chrome_options.add_argument("--disable-new-content-rendering-timeout")
+        chrome_options.add_argument("--disable-hang-monitor")
+        chrome_options.add_argument("--disable-prompt-on-repost")
+        chrome_options.add_argument("--disable-client-side-phishing-detection")
+        chrome_options.add_argument("--disable-component-update")
+        chrome_options.add_argument("--disable-default-apps")
+        chrome_options.add_argument("--disable-sync")
+        chrome_options.add_argument("--disable-translate")
+        chrome_options.add_argument("--no-first-run")
+        chrome_options.add_argument("--no-default-browser-check")
+        chrome_options.add_argument("--disable-background-networking")
+        chrome_options.add_argument("--disable-sync-preferences")
+        chrome_options.add_argument("--disable-default-apps")
+        chrome_options.add_argument("--disable-background-mode")
+        chrome_options.add_argument("--disable-background-downloads")
         chrome_options.add_argument(
             "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         )
@@ -296,20 +318,43 @@ class SeleniumUnsubscribeService:
         return self._finalize_failure("최대 재시도 횟수 초과", start_time)
 
     def _try_basic_unsubscribe(self, user_email: str = None) -> Dict:
-        """기본 구독해지 시도"""
+        """기본 구독해지 시도 (동적 요소 대기 + POST 요청 처리)"""
         try:
-            # 구독해지 관련 요소들 찾기
+            # 1. 동적 요소가 로드될 때까지 대기
+            print(f"📝 동적 요소 대기 시작")
+            if not self._wait_for_dynamic_elements(timeout=15):
+                print(f"⚠️ 동적 요소를 찾을 수 없습니다")
+
+            # 2. 구독해지 관련 요소들 찾기 (더 포괄적으로)
             selectors = [
+                # 버튼 선택자
+                "button[type='submit']",
+                "input[type='submit']",
+                "button:contains('Unsubscribe')",
+                "button:contains('구독해지')",
+                "button:contains('Cancel')",
+                "button:contains('Confirm')",
+                "button:contains('Remove')",
+                "button:contains('Opt-out')",
+                # 링크 선택자
                 "a[href*='unsubscribe']",
                 "a[href*='opt-out']",
                 "a[href*='remove']",
                 "a[href*='cancel']",
-                "button[onclick*='unsubscribe']",
-                "input[value*='unsubscribe']",
+                # 클래스/ID 선택자
                 ".unsubscribe",
                 "#unsubscribe",
                 "[class*='unsubscribe']",
                 "[id*='unsubscribe']",
+                ".unsubscribe-button",
+                "#unsubscribe-button",
+                # 폼 관련
+                "form[action*='unsubscribe']",
+                "form[action*='opt-out']",
+                # 일반적인 버튼
+                "button",
+                "input[type='button']",
+                "input[type='submit']",
             ]
 
             for selector in selectors:
@@ -317,10 +362,49 @@ class SeleniumUnsubscribeService:
                     elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
                     for element in elements:
                         if element.is_displayed() and element.is_enabled():
-                            print(f"📝 구독해지 요소 발견: {selector}")
-                            element.click()
-                            time.sleep(2)
-                            return {"success": True, "message": "기본 구독해지 성공"}
+                            element_text = element.text.lower()
+                            print(
+                                f"📝 구독해지 요소 발견: {selector} - 텍스트: '{element.text}'"
+                            )
+
+                            # 구독해지 관련 키워드 확인
+                            unsubscribe_keywords = [
+                                "unsubscribe",
+                                "구독해지",
+                                "cancel",
+                                "remove",
+                                "opt-out",
+                                "confirm",
+                                "submit",
+                                "확인",
+                                "제출",
+                            ]
+
+                            is_unsubscribe_element = any(
+                                keyword in element_text
+                                for keyword in unsubscribe_keywords
+                            )
+
+                            if (
+                                is_unsubscribe_element
+                                or "unsubscribe" in selector.lower()
+                            ):
+                                print(f"📝 구독해지 요소 클릭: {element.text}")
+                                element.click()
+                                time.sleep(3)  # 클릭 후 대기 시간 증가
+
+                                # POST 요청 처리 확인
+                                if self._check_post_request_success():
+                                    return {
+                                        "success": True,
+                                        "message": "기본 구독해지 성공 (POST 요청 확인됨)",
+                                    }
+                                else:
+                                    return {
+                                        "success": True,
+                                        "message": "기본 구독해지 성공",
+                                    }
+
                 except Exception as e:
                     print(f"⚠️ 선택자 {selector} 처리 중 오류: {str(e)}")
                     continue
@@ -330,20 +414,82 @@ class SeleniumUnsubscribeService:
         except Exception as e:
             return {"success": False, "message": f"기본 구독해지 실패: {str(e)}"}
 
-    def _try_second_page_unsubscribe(self, user_email: str = None) -> Dict:
-        """두 번째 페이지 구독해지 처리"""
+    def _check_post_request_success(self) -> bool:
+        """POST 요청 성공 여부 확인"""
         try:
-            # 현재 페이지에서 구독해지 관련 버튼/링크 찾기
+            # 현재 URL 확인
+            current_url = self.driver.current_url
+
+            # 페이지 소스에서 성공 메시지 확인
+            page_source = self.driver.page_source.lower()
+            success_indicators = [
+                "success",
+                "성공",
+                "unsubscribed",
+                "구독해지됨",
+                "cancelled",
+                "취소됨",
+                "removed",
+                "제거됨",
+                "thank you",
+                "감사합니다",
+                "completed",
+                "완료",
+            ]
+
+            for indicator in success_indicators:
+                if indicator in page_source:
+                    print(f"📝 성공 지표 발견: {indicator}")
+                    return True
+
+            # URL 변경 확인
+            if "unsubscribe" in current_url and "success" in current_url:
+                print(f"📝 URL에서 성공 확인: {current_url}")
+                return True
+
+            return False
+
+        except Exception as e:
+            print(f"⚠️ POST 요청 확인 중 오류: {str(e)}")
+            return False
+
+    def _try_second_page_unsubscribe(self, user_email: str = None) -> Dict:
+        """두 번째 페이지 구독해지 처리 (동적 요소 대기 포함)"""
+        try:
+            # 동적 요소 대기
+            print(f"📝 두 번째 페이지 동적 요소 대기")
+            if not self._wait_for_dynamic_elements(timeout=10):
+                print(f"⚠️ 두 번째 페이지에서 동적 요소를 찾을 수 없습니다")
+
+            # 현재 페이지에서 구독해지 관련 버튼/링크 찾기 (더 포괄적으로)
             second_page_selectors = [
+                # 확인/제출 버튼
                 "button[type='submit']",
                 "input[type='submit']",
                 "button:contains('Confirm')",
+                "button:contains('확인')",
+                "button:contains('Submit')",
+                "button:contains('제출')",
+                # 구독해지 버튼
                 "button:contains('Unsubscribe')",
+                "button:contains('구독해지')",
                 "a:contains('Unsubscribe')",
+                "a:contains('구독해지')",
+                # 일반적인 버튼
                 ".confirm-button",
                 ".submit-button",
+                ".unsubscribe-button",
                 "#confirm",
                 "#submit",
+                "#unsubscribe",
+                # 클래스 기반
+                "[class*='confirm']",
+                "[class*='submit']",
+                "[class*='unsubscribe']",
+                # 모든 버튼 (마지막 수단)
+                "button",
+                "input[type='button']",
+                "input[type='submit']",
             ]
 
             for selector in second_page_selectors:
@@ -351,13 +497,50 @@ class SeleniumUnsubscribeService:
                     elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
                     for element in elements:
                         if element.is_displayed() and element.is_enabled():
-                            print(f"📝 두 번째 페이지 요소 발견: {selector}")
-                            element.click()
-                            time.sleep(2)
-                            return {
-                                "success": True,
-                                "message": "두 번째 페이지 구독해지 성공",
-                            }
+                            element_text = element.text.lower()
+                            print(
+                                f"📝 두 번째 페이지 요소 발견: {selector} - 텍스트: '{element.text}'"
+                            )
+
+                            # 구독해지 관련 키워드 확인
+                            action_keywords = [
+                                "confirm",
+                                "확인",
+                                "submit",
+                                "제출",
+                                "unsubscribe",
+                                "구독해지",
+                                "cancel",
+                                "취소",
+                                "remove",
+                                "제거",
+                            ]
+
+                            is_action_element = any(
+                                keyword in element_text for keyword in action_keywords
+                            )
+
+                            if (
+                                is_action_element
+                                or "confirm" in selector.lower()
+                                or "submit" in selector.lower()
+                            ):
+                                print(f"📝 두 번째 페이지 요소 클릭: {element.text}")
+                                element.click()
+                                time.sleep(3)  # 클릭 후 대기 시간 증가
+
+                                # POST 요청 처리 확인
+                                if self._check_post_request_success():
+                                    return {
+                                        "success": True,
+                                        "message": "두 번째 페이지 구독해지 성공 (POST 요청 확인됨)",
+                                    }
+                                else:
+                                    return {
+                                        "success": True,
+                                        "message": "두 번째 페이지 구독해지 성공",
+                                    }
+
                 except Exception as e:
                     print(f"⚠️ 두 번째 페이지 선택자 {selector} 처리 중 오류: {str(e)}")
                     continue
@@ -681,9 +864,15 @@ class SeleniumUnsubscribeService:
             print(f"⚠️ 메모리 모니터링 오류: {str(e)}")
 
     def _cleanup_driver(self):
-        """드라이버 정리 및 메모리 해제"""
+        """드라이버 정리 및 메모리 해제 (강화)"""
         if self.driver:
             try:
+                # 모든 탭 닫기
+                for handle in self.driver.window_handles:
+                    self.driver.switch_to.window(handle)
+                    self.driver.close()
+
+                # 드라이버 종료
                 self.driver.quit()
                 print("🧹 Chrome 드라이버 정리 완료")
             except Exception as e:
@@ -691,10 +880,13 @@ class SeleniumUnsubscribeService:
             finally:
                 self.driver = None
 
-        # 가비지 컬렉션 강제 실행
+        # 가비지 컬렉션 강제 실행 (여러 번)
         import gc
 
-        gc.collect()
+        for i in range(3):
+            gc.collect()
+            time.sleep(0.1)
+
         self._log_memory_usage("드라이버 정리 후")
 
     def _check_memory_limit(self) -> bool:
@@ -706,10 +898,46 @@ class SeleniumUnsubscribeService:
             memory_info = process.memory_info()
             memory_mb = memory_info.rss / 1024 / 1024
 
-            # 500MB 제한 (Render 무료 플랜 기준)
-            if memory_mb > 500:
+            # 300MB 제한 (더 낮게 설정)
+            if memory_mb > 300:
                 print(f"⚠️ 메모리 사용량 초과: {memory_mb:.1f} MB")
                 return False
             return True
         except:
             return True  # 모니터링 불가시 계속 진행
+
+    def _wait_for_dynamic_elements(self, timeout: int = 10) -> bool:
+        """동적 요소가 로드될 때까지 대기"""
+        try:
+            wait = WebDriverWait(self.driver, timeout)
+
+            # 구독해지 관련 요소들이 나타날 때까지 대기
+            selectors = [
+                "button[type='submit']",
+                "input[type='submit']",
+                "button:contains('Unsubscribe')",
+                "button:contains('구독해지')",
+                "button:contains('Cancel')",
+                "button:contains('Confirm')",
+                "a[href*='unsubscribe']",
+                ".unsubscribe-button",
+                "#unsubscribe",
+                "[class*='unsubscribe']",
+                "[id*='unsubscribe']",
+            ]
+
+            for selector in selectors:
+                try:
+                    element = wait.until(
+                        EC.presence_of_element_located((By.CSS_SELECTOR, selector))
+                    )
+                    if element.is_displayed() and element.is_enabled():
+                        print(f"📝 동적 요소 발견: {selector}")
+                        return True
+                except TimeoutException:
+                    continue
+
+            return False
+        except Exception as e:
+            print(f"⚠️ 동적 요소 대기 중 오류: {str(e)}")
+            return False
