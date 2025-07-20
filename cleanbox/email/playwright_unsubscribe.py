@@ -118,11 +118,20 @@ class PlaywrightUnsubscribeService:
     async def initialize_browser(self):
         """브라우저 초기화 (재사용 가능)"""
         if self.browser is None:
+            # 브라우저 경로 확인
+            import os
+
+            playwright_browsers_path = os.environ.get(
+                "PLAYWRIGHT_BROWSERS_PATH", "/ms-playwright"
+            )
+            print(f"📝 Playwright 브라우저 경로: {playwright_browsers_path}")
+
             playwright = await async_playwright().start()
             self.browser = await playwright.chromium.launch(
                 headless=True,
                 args=self.browser_args,
                 chromium_sandbox=False,
+                executable_path=None,  # 자동 감지
             )
             print("✅ Playwright 브라우저 초기화 완료")
 

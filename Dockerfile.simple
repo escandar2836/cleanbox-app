@@ -11,6 +11,22 @@ RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
     python3-dev \
+    # Playwright 브라우저 의존성
+    libnss3 \
+    libatk-bridge2.0-0 \
+    libdrm2 \
+    libxkbcommon0 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxrandr2 \
+    libgbm1 \
+    libasound2 \
+    libatspi2.0-0 \
+    libgtk-3-0 \
+    libx11-xcb1 \
+    libxcb-dri3-0 \
+    libxss1 \
+    libxshmfence1 \
     && rm -rf /var/lib/apt/lists/*
 
 # 작업 디렉토리 설정
@@ -22,8 +38,10 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
 # Playwright 브라우저 설치 (별도 레이어로 분리하여 캐시 최적화)
-RUN playwright install chromium --with-deps
+RUN playwright install chromium
+RUN playwright install-deps chromium
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+ENV DISPLAY=:99
 
 # 애플리케이션 코드 복사 (마지막에 복사하여 캐시 활용)
 COPY . .

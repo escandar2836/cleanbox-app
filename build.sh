@@ -19,6 +19,10 @@ case $BUILD_TYPE in
         echo "🔧 전체 빌드"
         docker build -f Dockerfile -t cleanbox-app:full .
         ;;
+    "test")
+        echo "🧪 브라우저 설치 테스트"
+        docker run --rm cleanbox-app:simple python check_playwright.py
+        ;;
     *)
         echo "❌ 알 수 없는 빌드 타입: $BUILD_TYPE"
         echo "사용법: ./build.sh [fast|simple|full]"
