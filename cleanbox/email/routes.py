@@ -410,10 +410,21 @@ def analyze_email(email_id):
                 {"success": False, "message": "사용 가능한 카테고리가 없습니다."}
             )
 
+        # 디버깅 정보 출력
+        print(f"🔍 AI 분석 시작 - 이메일 ID: {email_id}")
+        print(f"   제목: {email_obj.subject}")
+        print(f"   발신자: {email_obj.sender}")
+        print(f"   내용 길이: {len(email_obj.content) if email_obj.content else 0}")
+        print(f"   카테고리 수: {len(categories)}")
+
         # AI 분류 및 요약 수행
         category_id, summary = ai_classifier.classify_and_summarize_email(
             email_obj.content, email_obj.subject, email_obj.sender, categories
         )
+
+        print(f"📊 AI 분석 결과:")
+        print(f"   카테고리 ID: {category_id}")
+        print(f"   요약: {summary[:100]}..." if summary else "   요약: 없음")
 
         # 결과 업데이트
         if category_id:
