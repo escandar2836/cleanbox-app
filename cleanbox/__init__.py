@@ -103,12 +103,16 @@ def create_app(config_class=Config):
     from .category.routes import category_bp
     from .email.routes import email_bp
     from .email.webhook_routes import webhook_bp
+    from .unsubscribe_routes import init_unsubscribe_routes
 
     app.register_blueprint(auth_bp, url_prefix="/auth")
     app.register_blueprint(main_bp, url_prefix="/main")
     app.register_blueprint(category_bp, url_prefix="/category")
     app.register_blueprint(email_bp, url_prefix="/email")
     app.register_blueprint(webhook_bp, url_prefix="/webhook")
+
+    # 구독 해지 라우트 등록
+    init_unsubscribe_routes(app)
 
     # 메인 라우트 (루트 URL)
     @app.route("/")
