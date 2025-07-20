@@ -13,6 +13,12 @@ RUN apt-get update && apt-get install -y \
     python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Chrome 및 ChromeDriver 설치
+RUN apt-get update && apt-get install -y \
+    chromium \
+    chromium-driver \
+    && rm -rf /var/lib/apt/lists/*
+
 # Playwright를 위한 시스템 의존성 설치
 RUN apt-get update && apt-get install -y \
     libxss1 \
@@ -62,6 +68,10 @@ RUN pip install --no-cache-dir playwright==1.39.0
 # Playwright 브라우저 설치
 RUN playwright install --with-deps chromium
 RUN playwright install-deps
+
+# Chrome 환경 변수 설정
+ENV CHROME_BIN=/usr/bin/chromium
+ENV CHROMEDRIVER_PATH=/usr/bin/chromedriver
 
 # 애플리케이션 코드 복사
 COPY . .

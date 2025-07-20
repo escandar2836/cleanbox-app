@@ -11,7 +11,8 @@ CleanBox는 이메일 관리와 함께 웹 스크래핑을 통한 구독 해지 
 - 구독 해지 이메일 자동 감지
 
 ### 구독 해지 자동화 (신규 기능)
-- **Playwright** 기반 headless 브라우저 자동화
+- **Selenium** 기반 headless 브라우저 자동화
+- **Playwright** 기반 특정 서비스 전용 자동화
 - 지원 서비스:
   - Netflix
   - Spotify  
@@ -26,7 +27,7 @@ CleanBox는 이메일 관리와 함께 웹 스크래핑을 통한 구독 해지 
 
 - **Backend**: Flask, Python 3.11
 - **Database**: PostgreSQL
-- **Browser Automation**: Playwright
+- **Browser Automation**: Selenium, Playwright
 - **Deployment**: Docker, Render
 - **Frontend**: Bootstrap, JavaScript
 
@@ -51,8 +52,10 @@ source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-4. **Playwright 브라우저 설치**
+4. **브라우저 드라이버 설치**
 ```bash
+# Selenium용 ChromeDriver (자동 설치됨)
+# Playwright 브라우저 설치
 playwright install --with-deps chromium
 ```
 
@@ -85,12 +88,13 @@ docker run -p 8000:8000 cleanbox-app
 
 1. 브라우저에서 `http://localhost:8000` 접속
 2. 로그인 후 대시보드에서 이메일 관리 기능 사용
-3. 구독 해지 기능은 `/unsubscribe` 페이지에서 사용
+3. 구독 해지 기능은 `/unsubscribe` 페이지에서 사용 가능
 
 ### API 사용
 
-#### 구독 해지 요청
+#### 구독 해지 API
 ```bash
+# 구독 해지 요청
 curl -X POST http://localhost:8000/api/unsubscribe \
   -H "Content-Type: application/json" \
   -d '{
@@ -98,55 +102,82 @@ curl -X POST http://localhost:8000/api/unsubscribe \
     "email": "user@example.com",
     "password": "password123"
   }'
-```
 
-#### 작업 상태 확인
-```bash
+# 작업 상태 확인
 curl http://localhost:8000/api/unsubscribe/status/task_1
-```
 
-#### 지원 서비스 목록 조회
-```bash
+# 지원 서비스 목록
 curl http://localhost:8000/api/unsubscribe/services
 ```
 
-## 🔧 환경 변수
+## 🔧 구독 해지 시스템
 
-| 변수명 | 설명 | 기본값 |
-|--------|------|--------|
-| `DATABASE_URI` | PostgreSQL 연결 문자열 | - |
-| `GMAIL_CLIENT_ID` | Gmail API 클라이언트 ID | - |
-| `GMAIL_CLIENT_SECRET` | Gmail API 클라이언트 시크릿 | - |
-| `FLASK_SECRET_KEY` | Flask 시크릿 키 | - |
+### Selenium 기반 시스템
+- **범용 처리**: 이메일에서 추출한 구독해지 링크 처리
+- **JavaScript 지원**: 동적 콘텐츠 및 SPA 처리
+- **AI 연동**: OpenAI API를 통한 지능형 페이지 분석
+- **다단계 처리**: 복잡한 구독해지 플로우 지원
 
-## 🚀 Render 배포
+### Playwright 기반 시스템
+- **특정 서비스**: Netflix, Spotify 등 주요 서비스 전용
+- **로그인 기반**: 사용자 계정으로 직접 로그인
+- **비동기 처리**: 안정적인 브라우저 자동화
 
-이 프로젝트는 Docker 기반으로 Render에 배포됩니다.
+## 📊 모니터링 및 로깅
 
-1. Render 대시보드에서 새 Web Service 생성
-2. GitHub 저장소 연결
-3. 환경 변수 설정
-4. 자동 배포 완료
+- 구독해지 시도 및 결과 로깅
+- 성공률 및 처리 시간 통계
+- 실패 케이스 분석
+- 시스템 상태 모니터링
 
-## 🔒 보안 고려사항
+## 🚀 배포
 
-- 계정 정보는 메모리에만 임시 저장되며 영구 저장되지 않습니다
-- HTTPS를 통한 안전한 통신
-- 환경 변수를 통한 민감한 정보 관리
-- Docker 컨테이너 격리
+### Render 배포
 
-## 📝 라이선스
+1. **Render 대시보드에서 새 서비스 생성**
+2. **GitHub 저장소 연결**
+3. **환경 변수 설정**
+4. **Docker 이미지 자동 빌드 및 배포**
+
+### 환경 변수
+
+```bash
+# 필수 환경 변수
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+OPENAI_API_KEY=your-openai-api-key
+DATABASE_URL=your-postgresql-url
+
+# 선택적 환경 변수
+CLEANBOX_SECRET_KEY=your-secret-key
+CLEANBOX_ENCRYPTION_KEY=your-encryption-key
+```
+
+## 🧪 테스트
+
+```bash
+# 전체 테스트 실행
+pytest
+
+# 특정 테스트 실행
+pytest tests/test_unsubscribe.py
+
+# 커버리지 리포트
+pytest --cov=cleanbox --cov-report=html
+```
+
+## 📝 라이센스
 
 MIT License
 
-## 🤝 기여하기
+## 🤝 기여
 
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+1. Fork the repository
+2. Create a feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
 
-## 📞 문의
+## 📞 지원
 
-프로젝트에 대한 문의사항이 있으시면 이슈를 생성해주세요.
+문제가 발생하거나 질문이 있으시면 이슈를 생성해주세요.
