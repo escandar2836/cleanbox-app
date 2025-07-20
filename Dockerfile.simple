@@ -41,12 +41,10 @@ RUN pip install --no-cache-dir --upgrade pip && \
 RUN playwright install chromium
 RUN playwright install-deps chromium
 
-# 브라우저 설치 확인 및 경로 설정
-RUN playwright install chromium --dry-run || true
-RUN ls -la /ms-playwright/ || echo "브라우저 디렉토리 확인"
-RUN find /ms-playwright -name "chrome" -type f 2>/dev/null || echo "Chrome 실행 파일 검색"
+# 설치된 브라우저 위치 확인
+RUN ls -la ~/.cache/ms-playwright || echo "캐시 디렉토리 없음"
+RUN find ~/.cache/ms-playwright -maxdepth 3 | sed -e 's/^/PATH: /'
 
-ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 ENV DISPLAY=:99
 
 # 애플리케이션 코드 복사 (마지막에 복사하여 캐시 활용)

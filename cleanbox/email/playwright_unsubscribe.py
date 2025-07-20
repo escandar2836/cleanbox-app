@@ -122,19 +122,18 @@ class PlaywrightUnsubscribeService:
             import os
             import glob
 
-            playwright_browsers_path = os.environ.get(
-                "PLAYWRIGHT_BROWSERS_PATH", "/ms-playwright"
-            )
-            print(f"📝 Playwright 브라우저 경로: {playwright_browsers_path}")
-
             # Chrome 실행 파일 찾기
             chrome_paths = [
-                os.path.join(
-                    playwright_browsers_path, "chromium-*/chrome-linux/chrome"
+                os.path.expanduser(
+                    "~/.cache/ms-playwright/chromium-*/chrome-linux/chrome"
                 ),
-                os.path.join(
-                    playwright_browsers_path, "chromium-*/chrome-linux/chromium"
+                os.path.expanduser(
+                    "~/.cache/ms-playwright/chromium-*/chrome-linux/chromium"
                 ),
+                "/root/.cache/ms-playwright/chromium-*/chrome-linux/chrome",
+                "/root/.cache/ms-playwright/chromium-*/chrome-linux/chromium",
+                "/ms-playwright/chromium-*/chrome-linux/chrome",
+                "/ms-playwright/chromium-*/chrome-linux/chromium",
                 "/usr/bin/chromium",
                 "/usr/bin/chromium-browser",
                 "/usr/bin/google-chrome",

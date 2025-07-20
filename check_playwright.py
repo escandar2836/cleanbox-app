@@ -68,6 +68,10 @@ def check_browser_path():
     chrome_paths = [
         os.path.join(playwright_browsers_path, "chromium-*/chrome-linux/chrome"),
         os.path.join(playwright_browsers_path, "chromium-*/chrome-linux/chromium"),
+        "/root/.cache/ms-playwright/chromium-*/chrome-linux/chrome",
+        "/root/.cache/ms-playwright/chromium-*/chrome-linux/chromium",
+        "~/.cache/ms-playwright/chromium-*/chrome-linux/chrome",
+        "~/.cache/ms-playwright/chromium-*/chrome-linux/chromium",
         "/usr/bin/chromium",
         "/usr/bin/chromium-browser",
         "/usr/bin/google-chrome",
