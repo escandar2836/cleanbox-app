@@ -12,6 +12,7 @@ from flask import Blueprint, request, jsonify, session
 from ..models import User, UserAccount, Email, WebhookStatus, db
 from .gmail_service import GmailService
 from .ai_classifier import AIClassifier
+from .. import socketio
 
 logger = logging.getLogger(__name__)
 
@@ -59,18 +60,29 @@ def gmail_webhook():
         # 새 이메일 처리
         result = process_new_emails_for_account(account)
 
-        # 새 이메일이 처리되었으면 세션 플래그 설정
+        # 새 이메일이 처리되었으면 WebSocket 알림 전송
         if result and result.get("processed_count", 0) > 0:
-            # 사용자별 세션에 새 이메일 처리 플래그 설정
-            session_key = f"new_emails_processed_{account.user_id}"
-            session[session_key] = {
+            # WebSocket으로 실시간 알림 전송
+            notification_data = {
+                "type": "new_emails",
+                "user_id": account.user_id,
                 "processed_count": result["processed_count"],
                 "classified_count": result["classified_count"],
                 "archived_count": result["archived_count"],
                 "account_email": account.account_email,
                 "timestamp": datetime.utcnow().isoformat(),
+                "message": f"{result['processed_count']}개의 새로운 이메일이 처리되었습니다. 새로고침하여 확인하세요.",
             }
-            logger.info(f"새 이메일 처리 알림 플래그 설정: {account.user_id}")
+
+            # 해당 사용자에게 WebSocket 이벤트 전송
+            socketio.emit(
+                "new_emails_notification",
+                notification_data,
+                room=f"user_{account.user_id}",
+            )
+            logger.info(
+                f"WebSocket 알림 전송: {account.user_id} - {result['processed_count']}개 이메일"
+            )
 
         # 웹훅 수신 시간 업데이트
         try:
@@ -267,24 +279,11 @@ def process_new_emails_for_account(account):
             "archived_count": archived_count,
         }
 
-        # 새 이메일이 처리된 경우 세션 플래그 설정 (Redis나 세션 스토리지 사용)
+        # 새 이메일이 처리된 경우 로그 기록
         if processed_count > 0:
-            try:
-                # 사용자별로 새 이메일 처리 알림 플래그 설정
-                # 실제 구현에서는 Redis나 데이터베이스를 사용하는 것이 좋습니다
-                logger.info(
-                    f"새 이메일 처리됨 - 사용자: {account.user_id}, 처리된 이메일: {processed_count}개"
-                )
-
-                # 간단한 파일 기반 알림 시스템 (실제로는 Redis 사용 권장)
-                notification_file = f"notifications/{account.user_id}_new_emails.txt"
-                os.makedirs("notifications", exist_ok=True)
-
-                with open(notification_file, "w") as f:
-                    f.write(f"{datetime.utcnow().isoformat()},{processed_count}")
-
-            except Exception as e:
-                logger.error(f"알림 플래그 설정 실패: {str(e)}")
+            logger.info(
+                f"새 이메일 처리됨 - 사용자: {account.user_id}, 처리된 이메일: {processed_count}개"
+            )
 
         return result
 

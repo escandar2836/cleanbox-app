@@ -1141,4 +1141,160 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 {% endif %}
+
+{% block scripts %}
+<script>
+// WebSocket 연결 및 실시간 알림 처리
+let socket;
+
+// 브라우저 알림 권한 요청
+function requestNotificationPermission() {
+    if ('Notification' in window) {
+        Notification.requestPermission().then(function(permission) {
+            console.log('알림 권한:', permission);
+        });
+    }
+}
+
+// 브라우저 알림 표시
+function showBrowserNotification(title, body, icon = null) {
+    if ('Notification' in window && Notification.permission === 'granted') {
+        const notification = new Notification(title, {
+            body: body,
+            icon: icon || '/static/favicon.ico',
+            badge: '/static/favicon.ico',
+            tag: 'cleanbox-notification'
+        });
+        
+        // 알림 클릭 시 페이지 새로고침
+        notification.onclick = function() {
+            window.focus();
+            location.reload();
+            notification.close();
+        };
+        
+        // 5초 후 자동으로 닫기
+        setTimeout(() => {
+            notification.close();
+        }, 5000);
+    }
+}
+
+// WebSocket 연결 설정
+function initializeWebSocket() {
+    // Socket.IO 연결
+    socket = io();
+    
+    // 연결 성공
+    socket.on('connect', function() {
+        console.log('✅ WebSocket 연결 성공');
+        
+        // 사용자별 방에 조인
+        {% if current_user and current_user.is_authenticated %}
+        socket.emit('join', { user_id: '{{ current_user.id }}' });
+        console.log('👤 사용자 방 조인:', '{{ current_user.id }}');
+        {% endif %}
+    });
+    
+    // 연결 실패
+    socket.on('connect_error', function(error) {
+        console.error('❌ WebSocket 연결 실패:', error);
+    });
+    
+    // 새 이메일 알림 수신
+    socket.on('new_emails_notification', function(data) {
+        console.log('📧 새 이메일 알림 수신:', data);
+        
+        // 브라우저 알림 표시
+        showBrowserNotification(
+            '새 이메일 도착! 📧',
+            data.message,
+            '/static/favicon.ico'
+        );
+        
+        // 화면에 토스트 알림 표시
+        showToastNotification(data);
+    });
+    
+    // 연결 해제
+    socket.on('disconnect', function() {
+        console.log('🔌 WebSocket 연결 해제');
+    });
+}
+
+// 토스트 알림 표시
+function showToastNotification(data) {
+    const toastContainer = document.getElementById('toastContainer');
+    if (!toastContainer) {
+        // 토스트 컨테이너가 없으면 생성
+        const container = document.createElement('div');
+        container.id = 'toastContainer';
+        container.className = 'toast-container position-fixed top-0 end-0 p-3';
+        container.style.cssText = 'z-index: 9999;';
+        document.body.appendChild(container);
+    }
+    
+    const toastId = 'toast-' + Date.now();
+    const toastHtml = `
+        <div id="${toastId}" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="toast-header bg-success text-white">
+                <i class="fas fa-envelope-open me-2"></i>
+                <strong class="me-auto">새 이메일 알림</strong>
+                <small class="text-white-50">방금 전</small>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast"></button>
+            </div>
+            <div class="toast-body">
+                <p class="mb-1"><strong>${data.processed_count}개의 새로운 이메일</strong>이 처리되었습니다.</p>
+                <p class="mb-2 small text-muted">계정: ${data.account_email}</p>
+                <div class="d-flex justify-content-between">
+                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="location.reload()">
+                        <i class="fas fa-sync-alt"></i> 새로고침
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="toast">
+                        닫기
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('toastContainer').insertAdjacentHTML('beforeend', toastHtml);
+    
+    // 토스트 표시
+    const toastElement = document.getElementById(toastId);
+    const toast = new bootstrap.Toast(toastElement, { delay: 10000 });
+    toast.show();
+    
+    // 10초 후 자동 제거
+    setTimeout(() => {
+        if (toastElement.parentNode) {
+            toastElement.remove();
+        }
+    }, 10000);
+}
+
+// 페이지 로드 시 WebSocket 초기화
+document.addEventListener('DOMContentLoaded', function() {
+    // 브라우저 알림 권한 요청
+    requestNotificationPermission();
+    
+    // WebSocket 연결 초기화
+    initializeWebSocket();
+    
+    // 기존 새 이메일 알림 모달 처리
+    const notificationModal = document.getElementById('newEmailNotificationModal');
+    if (notificationModal) {
+        const modal = new bootstrap.Modal(notificationModal);
+        modal.show();
+    }
+});
+
+// 페이지 언로드 시 WebSocket 연결 해제
+window.addEventListener('beforeunload', function() {
+    if (socket) {
+        socket.disconnect();
+    }
+});
+</script>
+{% endblock %}
 {% endblock %}

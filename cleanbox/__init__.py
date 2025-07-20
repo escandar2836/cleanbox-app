@@ -4,10 +4,11 @@ import os
 from logging.handlers import RotatingFileHandler
 
 # Third-party imports
-from flask import Flask, render_template, redirect, url_for, flash
+from flask import Flask, render_template, redirect, url_for, flash, request
 from flask_login import LoginManager, current_user
 from flask_sqlalchemy import SQLAlchemy
 from flask_apscheduler import APScheduler
+from flask_socketio import SocketIO, join_room, leave_room
 from sqlalchemy.exc import OperationalError, DisconnectionError
 
 # psycopg3는 자동으로 binary 구현을 사용합니다
@@ -21,6 +22,9 @@ login_manager = LoginManager()
 
 # 스케줄러 초기화
 scheduler = APScheduler()
+
+# SocketIO 초기화
+socketio = SocketIO()
 
 
 @login_manager.user_loader
@@ -73,6 +77,34 @@ def create_app(config_class=Config):
     # 스케줄러 초기화
     scheduler.init_app(app)
     scheduler.start()
+
+    # SocketIO 초기화
+    socketio.init_app(app)
+
+    # SocketIO 이벤트 핸들러
+    @socketio.on("connect")
+    def handle_connect():
+        print(f"✅ 클라이언트 연결: {request.sid}")
+
+    @socketio.on("disconnect")
+    def handle_disconnect():
+        print(f"🔌 클라이언트 연결 해제: {request.sid}")
+
+    @socketio.on("join")
+    def handle_join(data):
+        user_id = data.get("user_id")
+        if user_id:
+            join_room(f"user_{user_id}")
+            print(f"👤 사용자 {user_id}가 방에 조인: user_{user_id}")
+        else:
+            print("❌ 사용자 ID가 없습니다")
+
+    @socketio.on("leave")
+    def handle_leave(data):
+        user_id = data.get("user_id")
+        if user_id:
+            leave_room(f"user_{user_id}")
+            print(f"👤 사용자 {user_id}가 방에서 나감: user_{user_id}")
 
     # 주기적 웹훅 모니터링 스케줄러 설정
     @scheduler.task("interval", id="webhook_monitor", hours=6)
