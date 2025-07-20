@@ -22,11 +22,17 @@
                     
                     <div class="mb-3">
                         <label for="description" class="form-label">
-                            <i class="fas fa-align-left"></i> 설명
+                            <i class="fas fa-align-left"></i> 설명 <span class="text-info">💡</span>
                         </label>
                         <textarea class="form-control" id="description" name="description" rows="3"
-                                  placeholder="카테고리에 대한 설명을 입력하세요 (선택사항)">{{ category.description or '' }}</textarea>
-                        <div class="form-text">AI가 이메일을 분류할 때 참고할 설명입니다.</div>
+                                  placeholder="예: 회사 업무 관련 이메일, 프로젝트 진행상황, 회의 일정 등">{{ category.description or '' }}</textarea>
+                        <div class="form-text">
+                            <i class="fas fa-robot text-success"></i> 
+                            <strong>AI 분류 정확도 향상을 위해 구체적인 설명을 입력하세요!</strong><br>
+                            • "업무 - 회사 관련 이메일, 프로젝트 진행상황"<br>
+                            • "개인 - 친구/가족과의 소통, 개인 일정"<br>
+                            • "뉴스레터 - 구독한 서비스의 업데이트 소식"
+                        </div>
                     </div>
                     
                     <div class="row">

@@ -34,6 +34,15 @@ class AIClassifier:
     ) -> Tuple[Optional[int], str]:
         """이메일을 심층 분석하여 분류하고 구조화된 요약 제공
 
+        # 디버깅: 카테고리 정보 출력
+        print(f"🔍 AI 분류 시작 - 카테고리 수: {len(categories)}")
+        for cat in categories:
+            print(f"   카테고리: {cat['name']} (ID: {cat['id']})")
+            print(f"   설명: {cat['description'] if cat['description'] else '설명 없음'}")
+        print(f"   이메일 제목: {subject}")
+        print(f"   발신자: {sender}")
+        print(f"   내용 길이: {len(email_content)}")
+
         사용 예시:
         # 사용자 카테고리 가져오기
         from cleanbox.models import Category
@@ -104,10 +113,10 @@ class AIClassifier:
     def _build_unified_prompt(
         self, content: str, subject: str, sender: str, categories: List[Dict]
     ) -> str:
-        # 사용자 카테고리 리스트 생성
+        # 사용자 카테고리 리스트 생성 (description 강조)
         category_list = "\n".join(
             [
-                f"- {cat['id']}: {cat['name']} ({cat['description']})"
+                f"- {cat['id']}: {cat['name']} - 설명: {cat['description'] if cat['description'] else '설명 없음'}"
                 for cat in categories
             ]
         )
@@ -128,6 +137,7 @@ class AIClassifier:
    - 각 카테고리별로 이메일과의 적합도를 0-100점으로 평가
    - 단순한 키워드 매칭이 아닌 이메일의 전체적인 맥락과 목적을 고려
    - 카테고리 이름과 설명의 의미를 정확히 이해하여 분류
+   - 카테고리 설명(description)을 우선적으로 참고하여 분류
    - 가장 높은 점수의 카테고리 ID 선택
 
 2. 문맥 기반 요약:
@@ -148,6 +158,8 @@ class AIClassifier:
 - 이메일의 전체적인 맥락과 목적을 우선적으로 고려하세요
 - 단순한 키워드 매칭이 아닌 의미적 연결을 찾으세요
 - 카테고리 이름과 설명의 의미를 정확히 이해하여 분류하세요
+- 카테고리 설명(description)이 있는 경우 이를 우선적으로 참고하세요
+- 설명이 없는 카테고리는 이름만으로 분류하세요
 - 요약은 이메일의 핵심 의도를 담아 자연스럽게 작성하세요
 - 한국어로 작성하세요"""
         return prompt
