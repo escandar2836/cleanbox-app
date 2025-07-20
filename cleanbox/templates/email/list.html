@@ -564,6 +564,11 @@ function performBulkAction(action, emailIds) {
                                 실패: ${data.failed_count}개
                             </small>
                         </div>
+                        <div class="mt-3">
+                            <div style="white-space: pre-line; text-align: left; font-size: 0.9em; color: #666;">
+                                ${data.message}
+                            </div>
+                        </div>
                     </div>
                 `;
             } else {
@@ -962,7 +967,9 @@ function handleUnsubscribeResult(data, modalElement) {
                 <div class="text-center">
                     <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
                     <h5 class="text-success">구독 해지 완료!</h5>
-                    <p>${data.message}</p>
+                    <div style="white-space: pre-line; text-align: left; font-size: 0.9em; color: #666;">
+                        ${data.message}
+                    </div>
                     ${data.steps ? `<div class="mt-3"><strong>처리 단계:</strong><ul class="text-start">${data.steps.map(step => `<li>${step}</li>`).join('')}</ul></div>` : ''}
                     ${bulkUpdateInfo}
                 </div>
@@ -996,7 +1003,9 @@ function handleUnsubscribeResult(data, modalElement) {
                 <div class="text-center">
                     <i class="fas fa-exclamation-triangle fa-3x text-danger mb-3"></i>
                     <h5 class="text-danger">구독 해지 실패</h5>
-                    <p>${data.message}</p>
+                    <div style="white-space: pre-line; text-align: left; font-size: 0.9em; color: #666;">
+                        ${data.message}
+                    </div>
                     ${data.steps ? `<div class="mt-3"><strong>시도한 단계:</strong><ul class="text-start">${data.steps.map(step => `<li>${step}</li>`).join('')}</ul></div>` : ''}
                 </div>
             `;
