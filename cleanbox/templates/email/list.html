@@ -478,6 +478,9 @@ function bulkUnsubscribe() {
 
 // Bulk 처리 모달 표시
 function showBulkProcessingModal(action, totalCount) {
+    // Flash 메시지 숨기기
+    hideFlashMessages();
+    
     const modal = new bootstrap.Modal(document.getElementById('bulkProcessingModal'));
     const title = document.getElementById('bulkActionTitle');
     const message = document.getElementById('bulkProcessingMessage');
@@ -844,6 +847,9 @@ function unsubscribeEmail(emailId) {
     console.log('✅ 사용자 확인 완료, 모달 표시');
     
     try {
+        // Flash 메시지 숨기기
+        hideFlashMessages();
+        
         // 모달 표시
         const modal = new bootstrap.Modal(modalElement);
         modal.show();
