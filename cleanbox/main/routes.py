@@ -1,5 +1,5 @@
 # Third-party imports
-from flask import Blueprint, render_template
+from flask import Blueprint, render_template, make_response
 from flask_login import login_required, current_user
 
 # Local imports
@@ -18,8 +18,10 @@ def dashboard():
     ).all()
 
     if not accounts:
-        response = render_template(
-            "main/dashboard.html", user=current_user, accounts=[], categories=[]
+        response = make_response(
+            render_template(
+                "main/dashboard.html", user=current_user, accounts=[], categories=[]
+            )
         )
         # 캐시 무효화
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
@@ -30,11 +32,13 @@ def dashboard():
     # 사용자의 활성 카테고리 목록 (최신 데이터)
     categories = Category.query.filter_by(user_id=current_user.id, is_active=True).all()
 
-    response = render_template(
-        "main/dashboard.html",
-        user=current_user,
-        accounts=accounts,
-        categories=categories,
+    response = make_response(
+        render_template(
+            "main/dashboard.html",
+            user=current_user,
+            accounts=accounts,
+            categories=categories,
+        )
     )
 
     # 캐시 무효화

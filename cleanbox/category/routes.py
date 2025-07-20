@@ -11,6 +11,7 @@ from flask import (
     flash,
     render_template,
     jsonify,
+    make_response,
 )
 from flask_login import login_user, logout_user, login_required, current_user
 
@@ -46,11 +47,13 @@ def list_categories():
     # 사용자의 활성 카테고리 목록 (최신 데이터)
     categories = Category.query.filter_by(user_id=current_user.id, is_active=True).all()
 
-    response = render_template(
-        "category/manage.html",
-        user=current_user,
-        accounts=accounts,
-        categories=categories,
+    response = make_response(
+        render_template(
+            "category/manage.html",
+            user=current_user,
+            accounts=accounts,
+            categories=categories,
+        )
     )
 
     # 캐시 무효화
