@@ -179,13 +179,19 @@ class PlaywrightUnsubscribeService:
 
         # 새 컨텍스트 생성 (기존 컨텍스트 재사용)
         if self.context is None:
-            self.context = await self.browser.new_context(
-                viewport={"width": 640, "height": 480},
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                java_script_enabled=True,
-                ignore_https_errors=True,
-            )
-            print("📝 새 브라우저 컨텍스트 생성")
+            try:
+                self.context = await self.browser.new_context(
+                    viewport={"width": 640, "height": 480},
+                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    java_script_enabled=True,
+                    ignore_https_errors=True,
+                )
+                if self.context is None:
+                    raise Exception("브라우저 컨텍스트 생성 실패")
+                print("📝 새 브라우저 컨텍스트 생성")
+            except Exception as e:
+                print(f"❌ 브라우저 컨텍스트 생성 실패: {str(e)}")
+                raise Exception(f"브라우저 컨텍스트 생성 실패: {str(e)}")
         else:
             self.stats["browser_reuses"] += 1
             print(
@@ -193,10 +199,24 @@ class PlaywrightUnsubscribeService:
             )
 
         # 새 페이지 생성
-        self.page = await self.context.new_page()
-        await self.page.set_default_timeout(self.timeouts["page_load"])
+        try:
+            self.page = await self.context.new_page()
+            if self.page is None:
+                raise Exception("페이지 생성 실패")
 
-        return self.page
+            await self.page.set_default_timeout(self.timeouts["page_load"])
+            print("✅ 새 페이지 생성 완료")
+            return self.page
+        except Exception as e:
+            print(f"❌ 페이지 생성 실패: {str(e)}")
+            # 페이지 정리 시도
+            if self.page:
+                try:
+                    await self.page.close()
+                except:
+                    pass
+                self.page = None
+            raise Exception(f"페이지 생성 실패: {str(e)}")
 
     async def cleanup_page(self):
         """페이지 정리 (컨텍스트는 유지)"""
@@ -344,6 +364,10 @@ class PlaywrightUnsubscribeService:
 
                 # 브라우저 초기화
                 page = await self.initialize_browser()
+
+                # 페이지가 None인지 확인
+                if page is None:
+                    raise Exception("브라우저 페이지 초기화 실패")
 
                 # 1단계: 초기 페이지 접속
                 print(f"📝 1단계: 초기 페이지 접속")
