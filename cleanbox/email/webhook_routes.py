@@ -6,7 +6,7 @@ import os
 from datetime import datetime
 
 # Third-party imports
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, session
 
 # Local imports
 from ..models import User, UserAccount, Email, WebhookStatus, db
@@ -57,7 +57,20 @@ def gmail_webhook():
             return jsonify({"status": "error", "message": "계정을 찾을 수 없음"}), 404
 
         # 새 이메일 처리
-        process_new_emails_for_account(account)
+        result = process_new_emails_for_account(account)
+
+        # 새 이메일이 처리되었으면 세션 플래그 설정
+        if result and result.get("processed_count", 0) > 0:
+            # 사용자별 세션에 새 이메일 처리 플래그 설정
+            session_key = f"new_emails_processed_{account.user_id}"
+            session[session_key] = {
+                "processed_count": result["processed_count"],
+                "classified_count": result["classified_count"],
+                "archived_count": result["archived_count"],
+                "account_email": account.account_email,
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+            logger.info(f"새 이메일 처리 알림 플래그 설정: {account.user_id}")
 
         # 웹훅 수신 시간 업데이트
         try:
@@ -151,7 +164,7 @@ def process_new_emails_for_account(account):
         user = User.query.get(account.user_id)
         if not user:
             logger.error(f"사용자 정보를 찾을 수 없음: {account.user_id}")
-            return
+            return None
 
         # 가입 날짜 이후의 이메일만 가져오기
         after_date = user.first_service_access
@@ -166,7 +179,7 @@ def process_new_emails_for_account(account):
 
         if not recent_emails:
             logger.info(f"새 이메일 없음: {account.account_email}")
-            return
+            return None
 
         # 사용자 카테고리 가져오기 (AI 분류용 딕셔너리 형태로 변환)
         category_objects = gmail_service.get_user_categories()
@@ -247,5 +260,13 @@ def process_new_emails_for_account(account):
             f"웹훅 처리 완료 - 계정: {account.account_email}, 처리: {processed_count}개, 분류: {classified_count}개, 아카이브: {archived_count}개"
         )
 
+        # 처리 결과 반환
+        return {
+            "processed_count": processed_count,
+            "classified_count": classified_count,
+            "archived_count": archived_count,
+        }
+
     except Exception as e:
         logger.error(f"웹훅 이메일 처리 중 오류: {str(e)}")
+        return None

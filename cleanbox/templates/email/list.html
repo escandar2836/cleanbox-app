@@ -954,3 +954,39 @@ function setupWebhook() {
 
 </script>
 {% endblock %} 
+        form.submit();
+    } else {
+        console.log('❌ 사용자가 취소했습니다');
+    }
+}
+
+// 웹훅 재설정 함수
+function setupWebhook() {
+    const button = event.target;
+    const originalText = button.innerHTML;
+    
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 설정 중...';
+    button.disabled = true;
+    
+    fetch('{{ url_for("email.setup_webhook") }}', {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('success', data.message);
+        } else {
+            showAlert('error', data.message);
+        }
+    })
+    .catch(error => {
+        showAlert('error', '웹훅 설정 중 오류가 발생했습니다.');
+    })
+    .finally(() => {
+        button.innerHTML = originalText;
+        button.disabled = false;
+    });
+}
+
+</script>
+{% endblock %} 
