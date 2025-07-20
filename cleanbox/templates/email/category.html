@@ -301,9 +301,18 @@ function bulkDelete() {
 
 function bulkUnsubscribe() {
     const emailIds = getSelectedEmailIds();
-    if (emailIds.length === 0) return;
+    console.log('🔍 [category.html] bulkUnsubscribe() 호출됨');
+    console.log('📧 선택된 이메일 ID들:', emailIds);
+    console.log('📊 선택된 이메일 개수:', emailIds.length);
+    
+    if (emailIds.length === 0) {
+        console.log('⚠️ 선택된 이메일이 없습니다');
+        return;
+    }
     
     if (confirm(`${emailIds.length}개의 이메일에서 구독 해지를 시도하시겠습니까?`)) {
+        console.log('✅ 사용자 확인 완료, 폼 생성 시작');
+        
         const form = document.createElement('form');
         form.method = 'POST';
         form.action = '{{ url_for("email.bulk_actions") }}';
@@ -314,16 +323,20 @@ function bulkUnsubscribe() {
         actionInput.value = 'unsubscribe';
         form.appendChild(actionInput);
         
-        emailIds.forEach(id => {
+        emailIds.forEach((id, index) => {
             const input = document.createElement('input');
             input.type = 'hidden';
             input.name = 'email_ids';
             input.value = id;
             form.appendChild(input);
+            console.log(`📝 폼에 이메일 ID 추가 [${index + 1}]:`, id);
         });
         
+        console.log('🚀 폼 제출:', form.action);
         document.body.appendChild(form);
         form.submit();
+    } else {
+        console.log('❌ 사용자가 취소했습니다');
     }
 }
 

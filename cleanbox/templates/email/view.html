@@ -311,16 +311,27 @@ function displayAnalysis(analysis) {
 
 // 구독 해지 함수
 function unsubscribeEmail(emailId) {
+    console.log('🔍 [view.html] unsubscribeEmail() 호출됨');
+    console.log('📧 이메일 ID:', emailId);
+    console.log('📧 이메일 ID 타입:', typeof emailId);
+    
     if (!confirm('이 이메일의 구독을 해지하시겠습니까?\n\nAI가 자동으로 구독 해지 링크를 찾아 처리합니다.')) {
+        console.log('❌ 사용자가 취소했습니다');
         return;
     }
+    
+    console.log('✅ 사용자 확인 완료, 모달 표시');
     
     // 모달 표시
     const modal = new bootstrap.Modal(document.getElementById('unsubscribeModal'));
     modal.show();
     
     // 구독 해지 요청
-    fetch(`/email/${emailId}/unsubscribe`)
+    const requestUrl = `/email/${emailId}/unsubscribe`;
+    console.log('🚀 요청 URL:', requestUrl);
+    console.log('📡 fetch 요청 시작');
+    
+    fetch(requestUrl)
         .then(response => response.json())
         .then(data => {
             const modalBody = document.getElementById('unsubscribeContent');

@@ -695,9 +695,16 @@ function checkAndRenewWebhook() {
 
 // 구독 해지 함수
 function unsubscribeEmail(emailId) {
+    console.log('🔍 [list.html] unsubscribeEmail() 호출됨');
+    console.log('📧 이메일 ID:', emailId);
+    console.log('📧 이메일 ID 타입:', typeof emailId);
+    
     if (!confirm('이 이메일의 구독을 해지하시겠습니까?\n\nAI가 자동으로 구독 해지 링크를 찾아 처리합니다.')) {
+        console.log('❌ 사용자가 취소했습니다');
         return;
     }
+    
+    console.log('✅ 사용자 확인 완료, 모달 표시');
     
     // 모달 표시
     const modal = new bootstrap.Modal(document.getElementById('unsubscribeModal'));
@@ -722,7 +729,11 @@ function unsubscribeEmail(emailId) {
     `;
     
     // 구독 해지 요청
-    fetch(`/email/${emailId}/unsubscribe`)
+    const requestUrl = `/email/${emailId}/unsubscribe`;
+    console.log('🚀 요청 URL:', requestUrl);
+    console.log('📡 fetch 요청 시작');
+    
+    fetch(requestUrl)
         .then(response => response.json())
         .then(data => {
             const progressBar = document.getElementById('unsubscribeProgress');
@@ -807,9 +818,18 @@ function unsubscribeEmail(emailId) {
 // 대량 구독 해지 함수
 function bulkUnsubscribe() {
     const emailIds = getSelectedEmailIds();
-    if (emailIds.length === 0) return;
+    console.log('🔍 [list.html] bulkUnsubscribe() 호출됨');
+    console.log('📧 선택된 이메일 ID들:', emailIds);
+    console.log('📊 선택된 이메일 개수:', emailIds.length);
+    
+    if (emailIds.length === 0) {
+        console.log('⚠️ 선택된 이메일이 없습니다');
+        return;
+    }
     
     if (confirm(`${emailIds.length}개의 이메일 구독을 해지하시겠습니까?\n\nAI가 각 이메일에서 구독 해지 링크를 찾아 자동으로 처리합니다.`)) {
+        console.log('✅ 사용자 확인 완료, 폼 생성 시작');
+        
         const form = document.createElement('form');
         form.method = 'POST';
         form.action = '{{ url_for("email.bulk_actions") }}';
@@ -820,16 +840,20 @@ function bulkUnsubscribe() {
         actionInput.value = 'unsubscribe';
         form.appendChild(actionInput);
         
-        emailIds.forEach(id => {
+        emailIds.forEach((id, index) => {
             const input = document.createElement('input');
             input.type = 'hidden';
             input.name = 'email_ids';
             input.value = id;
             form.appendChild(input);
+            console.log(`📝 폼에 이메일 ID 추가 [${index + 1}]:`, id);
         });
         
+        console.log('🚀 폼 제출:', form.action);
         document.body.appendChild(form);
         form.submit();
+    } else {
+        console.log('❌ 사용자가 취소했습니다');
     }
 }
 
