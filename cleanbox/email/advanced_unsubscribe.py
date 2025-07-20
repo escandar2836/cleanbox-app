@@ -11,21 +11,12 @@ from urllib.parse import urlparse, urljoin
 import requests
 from bs4 import BeautifulSoup
 import mechanicalsoup
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.options import Options
-from selenium.common.exceptions import TimeoutException, NoSuchElementException
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.chrome.service import Service
 
 
 class AdvancedUnsubscribeService:
     """고급 구독해지 서비스"""
 
     def __init__(self):
-        self.driver = None
         self.setup_logging()
 
         # 타임아웃 설정
@@ -61,36 +52,6 @@ class AdvancedUnsubscribeService:
             "service_success_rates": {},
             "error_counts": {},
         }
-
-    def setup_driver(self, headless: bool = True):
-        """Selenium 드라이버 설정"""
-        try:
-            chrome_options = Options()
-            if headless:
-                chrome_options.add_argument("--headless")
-            chrome_options.add_argument("--no-sandbox")
-            chrome_options.add_argument("--disable-dev-shm-usage")
-            chrome_options.add_argument("--disable-gpu")
-            chrome_options.add_argument("--window-size=1920,1080")
-            chrome_options.add_argument(
-                "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            )
-
-            service = Service(ChromeDriverManager().install())
-            self.driver = webdriver.Chrome(service=service, options=chrome_options)
-            self.driver.set_page_load_timeout(30)
-            return True
-        except Exception as e:
-            self.logger.error(f"드라이버 설정 실패: {str(e)}")
-            return False
-
-    def close_driver(self):
-        """드라이버 종료"""
-        if self.driver:
-            try:
-                self.driver.quit()
-            except Exception as e:
-                self.logger.error(f"드라이버 종료 실패: {str(e)}")
 
     def extract_unsubscribe_links(
         self, email_content: str, email_headers: Dict = None
@@ -268,356 +229,6 @@ class AdvancedUnsubscribeService:
             print(f"❌ 개인 이메일 감지 중 오류: {str(e)}")
             return False
 
-    def process_unsubscribe_with_selenium(
-        self, unsubscribe_url: str, user_email: str = None
-    ) -> Dict:
-        """Selenium을 사용한 고급 구독해지 처리 (재시도 로직 포함)"""
-        result = {"success": False, "message": "", "steps": []}
-        max_retries = 3
-        retry_count = 0
-
-        while retry_count < max_retries:
-            try:
-                if not self.setup_driver():
-                    result["message"] = "브라우저 드라이버 설정 실패"
-                    return result
-
-                self.logger.info(
-                    f"구독해지 페이지 접속 (시도 {retry_count + 1}/{max_retries}): {unsubscribe_url}"
-                )
-                result["steps"].append(
-                    f"페이지 접속 (시도 {retry_count + 1}): {unsubscribe_url}"
-                )
-
-                # 페이지 로드
-                self.driver.get(unsubscribe_url)
-                time.sleep(3)  # 페이지 로딩 대기
-
-                # 구독해지 버튼/링크 찾기 및 클릭
-                unsubscribe_found = self._find_and_click_unsubscribe_elements(
-                    user_email
-                )
-
-                if unsubscribe_found:
-                    result["success"] = True
-                    result["message"] = "구독해지가 성공적으로 처리되었습니다"
-                    result["steps"].append("구독해지 버튼 클릭 완료")
-                    break
-                else:
-                    result["message"] = "구독해지 버튼을 찾을 수 없습니다"
-                    result["steps"].append("구독해지 버튼을 찾을 수 없음")
-
-                    # 재시도 전 대기
-                    if retry_count < max_retries - 1:
-                        time.sleep(2)
-                        retry_count += 1
-                        continue
-                    else:
-                        break
-
-            except TimeoutException:
-                result["message"] = "페이지 로딩 시간 초과"
-                result["steps"].append(
-                    f"페이지 로딩 시간 초과 (시도 {retry_count + 1})"
-                )
-
-                if retry_count < max_retries - 1:
-                    retry_count += 1
-                    time.sleep(2)
-                    continue
-                else:
-                    break
-
-            except Exception as e:
-                result["message"] = f"구독해지 처리 중 오류: {str(e)}"
-                result["steps"].append(f"오류 발생 (시도 {retry_count + 1}): {str(e)}")
-
-                if retry_count < max_retries - 1:
-                    retry_count += 1
-                    time.sleep(2)
-                    continue
-                else:
-                    break
-            finally:
-                self.close_driver()
-
-        return result
-
-    def _find_and_click_unsubscribe_elements(self, user_email: str = None) -> bool:
-        """구독해지 요소 찾기 및 클릭 (개선된 버전)"""
-        unsubscribe_selectors = [
-            # 버튼
-            "button[contains(text(), 'Unsubscribe')]",
-            "button[contains(text(), '구독해지')]",
-            "button[contains(text(), 'Cancel')]",
-            "button[contains(text(), 'Remove')]",
-            "button[contains(text(), 'Opt-out')]",
-            # 링크
-            "a[contains(text(), 'Unsubscribe')]",
-            "a[contains(text(), '구독해지')]",
-            "a[contains(text(), 'Cancel')]",
-            "a[contains(text(), 'Remove')]",
-            "a[contains(text(), 'Opt-out')]",
-            # input 버튼
-            "input[value*='Unsubscribe']",
-            "input[value*='구독해지']",
-            "input[value*='Cancel']",
-            # 일반적인 클래스명
-            ".unsubscribe",
-            ".opt-out",
-            ".cancel",
-            ".remove",
-            "[class*='unsubscribe']",
-            "[class*='opt-out']",
-            # ID 기반
-            "#unsubscribe",
-            "#opt-out",
-            "#cancel",
-        ]
-
-        for selector in unsubscribe_selectors:
-            try:
-                # 요소 찾기
-                element = WebDriverWait(self.driver, 5).until(
-                    EC.element_to_be_clickable((By.CSS_SELECTOR, selector))
-                )
-
-                # 스크롤하여 요소가 보이도록
-                self.driver.execute_script(
-                    "arguments[0].scrollIntoView(true);", element
-                )
-                time.sleep(1)
-
-                # 클릭
-                element.click()
-                self.logger.info(f"구독해지 요소 클릭: {selector}")
-
-                # 클릭 후 페이지 변화 대기
-                time.sleep(3)
-
-                return True
-
-            except (TimeoutException, NoSuchElementException):
-                continue
-
-        # 폼 제출 시도 (사용자 이메일 전달)
-        return self._try_form_submission(user_email)
-
-    def _try_form_submission(self, user_email: str = None) -> bool:
-        """폼 제출 시도 (AI 에이전트 기능 강화)"""
-        try:
-            # 구독해지 관련 폼 찾기
-            forms = self.driver.find_elements(By.TAG_NAME, "form")
-
-            for form in forms:
-                form_html = form.get_attribute("innerHTML").lower()
-
-                # 구독해지 관련 키워드가 포함된 폼
-                unsubscribe_keywords = ["unsubscribe", "opt-out", "cancel", "구독해지"]
-                if any(keyword in form_html for keyword in unsubscribe_keywords):
-
-                    # AI 에이전트: 폼 필드 자동 작성 (사용자 이메일 전달)
-                    self._fill_form_fields_ai(form, user_email)
-
-                    # 폼 내의 submit 버튼 찾기
-                    submit_buttons = form.find_elements(
-                        By.CSS_SELECTOR,
-                        "input[type='submit'], button[type='submit'], button",
-                    )
-
-                    for button in submit_buttons:
-                        button_text = button.text.lower()
-                        if any(
-                            keyword in button_text for keyword in unsubscribe_keywords
-                        ):
-                            button.click()
-                            time.sleep(3)
-                            self.logger.info("구독해지 폼 제출 완료")
-                            return True
-
-        except Exception as e:
-            self.logger.error(f"폼 제출 시도 실패: {str(e)}")
-
-        return False
-
-    def _fill_form_fields_ai(self, form, user_email: str = None) -> None:
-        """AI 에이전트: 폼 필드 자동 작성 (개선된 버전)"""
-        try:
-            # CSRF 토큰 자동 처리
-            self._handle_csrf_token(form)
-
-            # 이메일 입력 필드 찾기 및 작성
-            email_inputs = form.find_elements(
-                By.CSS_SELECTOR,
-                "input[type='email'], input[name*='email'], input[placeholder*='email'], input[id*='email']",
-            )
-
-            for email_input in email_inputs:
-                if not email_input.get_attribute("value"):
-                    # 실제 사용자 이메일 주소 사용 (개선)
-                    if user_email:
-                        email_input.send_keys(user_email)
-                        self.logger.info(f"이메일 필드 자동 작성: {user_email}")
-                    else:
-                        # 기본값 사용 (하지만 로그로 표시)
-                        email_input.send_keys("user@example.com")
-                        self.logger.info("이메일 필드 자동 작성 (기본값 사용)")
-
-            # 체크박스 처리 (구독해지 관련)
-            checkboxes = form.find_elements(By.CSS_SELECTOR, "input[type='checkbox']")
-
-            for checkbox in checkboxes:
-                checkbox_name = checkbox.get_attribute("name") or ""
-                checkbox_id = checkbox.get_attribute("id") or ""
-                checkbox_value = checkbox.get_attribute("value") or ""
-
-                # 구독해지 관련 체크박스 자동 체크
-                if any(
-                    keyword in (checkbox_name + checkbox_id + checkbox_value).lower()
-                    for keyword in [
-                        "unsubscribe",
-                        "opt-out",
-                        "cancel",
-                        "구독해지",
-                        "remove",
-                    ]
-                ):
-                    if not checkbox.is_selected():
-                        checkbox.click()
-                        self.logger.info(
-                            f"구독해지 체크박스 자동 체크: {checkbox_name}"
-                        )
-
-            # 라디오 버튼 처리
-            radio_buttons = form.find_elements(By.CSS_SELECTOR, "input[type='radio']")
-
-            for radio in radio_buttons:
-                radio_name = radio.get_attribute("name") or ""
-                radio_value = radio.get_attribute("value") or ""
-
-                # 구독해지 관련 라디오 버튼 선택
-                if any(
-                    keyword in (radio_name + radio_value).lower()
-                    for keyword in [
-                        "unsubscribe",
-                        "opt-out",
-                        "cancel",
-                        "구독해지",
-                        "remove",
-                    ]
-                ):
-                    radio.click()
-                    self.logger.info(f"구독해지 라디오 버튼 선택: {radio_name}")
-
-            # 드롭다운 처리
-            select_elements = form.find_elements(By.TAG_NAME, "select")
-
-            for select in select_elements:
-                select_name = select.get_attribute("name") or ""
-
-                # 구독해지 관련 드롭다운 처리
-                if any(
-                    keyword in select_name.lower()
-                    for keyword in [
-                        "unsubscribe",
-                        "opt-out",
-                        "cancel",
-                        "구독해지",
-                        "remove",
-                    ]
-                ):
-                    try:
-                        from selenium.webdriver.support.ui import Select
-
-                        select_obj = Select(select)
-
-                        # 구독해지 관련 옵션 찾기
-                        for option in select_obj.options:
-                            option_text = option.text.lower()
-                            if any(
-                                keyword in option_text
-                                for keyword in [
-                                    "unsubscribe",
-                                    "opt-out",
-                                    "cancel",
-                                    "구독해지",
-                                    "remove",
-                                ]
-                            ):
-                                select_obj.select_by_visible_text(option.text)
-                                self.logger.info(
-                                    f"구독해지 드롭다운 선택: {option.text}"
-                                )
-                                break
-                    except Exception as e:
-                        self.logger.warning(f"드롭다운 처리 실패: {str(e)}")
-
-            # 텍스트 입력 필드 처리 (이름, 이유 등)
-            text_inputs = form.find_elements(
-                By.CSS_SELECTOR, "input[type='text'], textarea"
-            )
-
-            for text_input in text_inputs:
-                input_name = text_input.get_attribute("name") or ""
-                input_placeholder = text_input.get_attribute("placeholder") or ""
-
-                # 이름 필드
-                if any(
-                    keyword in (input_name + input_placeholder).lower()
-                    for keyword in ["name", "이름", "name"]
-                ):
-                    if not text_input.get_attribute("value"):
-                        text_input.send_keys("User")
-                        self.logger.info("이름 필드 자동 작성")
-
-                # 이유 필드
-                elif any(
-                    keyword in (input_name + input_placeholder).lower()
-                    for keyword in ["reason", "comment", "이유", "comment"]
-                ):
-                    if not text_input.get_attribute("value"):
-                        text_input.send_keys("No longer interested")
-                        self.logger.info("이유 필드 자동 작성")
-
-        except Exception as e:
-            self.logger.error(f"폼 필드 자동 작성 실패: {str(e)}")
-
-    def _handle_csrf_token(self, form) -> None:
-        """CSRF 토큰 자동 처리"""
-        try:
-            # CSRF 토큰 필드 찾기
-            csrf_inputs = form.find_elements(
-                By.CSS_SELECTOR,
-                "input[name*='csrf'], input[name*='token'], input[name*='_token'], input[type='hidden']",
-            )
-
-            for csrf_input in csrf_inputs:
-                input_name = csrf_input.get_attribute("name") or ""
-                input_value = csrf_input.get_attribute("value") or ""
-
-                # CSRF 토큰이 비어있으면 페이지에서 찾기
-                if not input_value and any(
-                    keyword in input_name.lower()
-                    for keyword in ["csrf", "token", "_token"]
-                ):
-                    # 페이지에서 CSRF 토큰 찾기
-                    page_csrf = self.driver.find_elements(
-                        By.CSS_SELECTOR,
-                        "meta[name='csrf-token'], input[name*='csrf'], input[name*='token']",
-                    )
-
-                    for meta in page_csrf:
-                        token_value = meta.get_attribute(
-                            "content"
-                        ) or meta.get_attribute("value")
-                        if token_value:
-                            csrf_input.send_keys(token_value)
-                            self.logger.info("CSRF 토큰 자동 설정")
-                            break
-
-        except Exception as e:
-            self.logger.warning(f"CSRF 토큰 처리 실패: {str(e)}")
-
     def process_unsubscribe_simple(self, unsubscribe_url: str) -> Dict:
         """간단한 구독해지 처리 (requests 사용)"""
         print(f"🔍 process_unsubscribe_simple 시작: {unsubscribe_url}")
@@ -699,7 +310,7 @@ class AdvancedUnsubscribeService:
     def process_unsubscribe_advanced(
         self, email_content: str, email_headers: Dict = None, user_email: str = None
     ) -> Dict:
-        """고급 구독해지 처리 (자동 방법 선택) - 개선된 버전"""
+        """고급 구독해지 처리 (MechanicalSoup + AI만 사용)"""
         print(f"🔍 AdvancedUnsubscribeService.process_unsubscribe_advanced 시작")
         print(f"📝 이메일 내용 길이: {len(email_content)}")
         print(f"📝 이메일 헤더: {email_headers}")
@@ -710,9 +321,9 @@ class AdvancedUnsubscribeService:
             "message": "",
             "steps": [],
             "progress": 0,
-            "error_type": None,  # 에러 타입 추가
-            "error_details": None,  # 상세 에러 정보 추가
-            "is_personal_email": False,  # 개인 이메일 여부
+            "error_type": None,
+            "error_details": None,
+            "is_personal_email": False,
         }
 
         # 1단계: 개인 이메일 감지
@@ -763,7 +374,7 @@ class AdvancedUnsubscribeService:
 
         # 모든 링크에 대해 시도
         for i, unsubscribe_url in enumerate(unsubscribe_links):
-            progress_per_link = 70 // len(unsubscribe_links)  # 70%를 링크 수로 나눔
+            progress_per_link = 70 // len(unsubscribe_links)
             current_progress = 20 + (i * progress_per_link)
 
             result["steps"].append(
@@ -778,76 +389,12 @@ class AdvancedUnsubscribeService:
                 f"구독해지 링크 시도 ({i + 1}/{len(unsubscribe_links)}): {unsubscribe_url}"
             )
 
-            # 웹사이트별 특별 처리
-            result["steps"].append("🔧 웹사이트별 특별 처리 시도...")
-            print(f"📝 웹사이트별 특별 처리 시도: {unsubscribe_url}")
-            website_specific_result = self._handle_website_specific_logic(
-                unsubscribe_url
-            )
-            print(f"📝 웹사이트별 처리 결과: {website_specific_result}")
-
-            if website_specific_result["success"]:
-                print(f"✅ 웹사이트별 처리 성공")
-                result["steps"].extend(website_specific_result["steps"])
-                result["success"] = True
-                result["message"] = website_specific_result["message"]
-                result["progress"] = 100
-                return result
-
-            # 먼저 간단한 방법 시도
-            result["steps"].append(
-                f"📡 간단한 HTTP 요청 시도... ({i + 1}/{len(unsubscribe_links)})"
-            )
+            # 1단계: 간단한 HTTP 요청 시도
+            result["steps"].append("🔧 간단한 HTTP 요청 시도...")
             print(f"📝 간단한 HTTP 요청 시도: {unsubscribe_url}")
             simple_result = self.process_unsubscribe_simple(unsubscribe_url)
-            print(f"📝 간단한 HTTP 요청 결과: {simple_result}")
 
-            # 간단한 방법이 실패하면 MechanicalSoup + AI 사용
-            if not simple_result["success"]:
-                result["steps"].append("🤖 MechanicalSoup + AI 자동화 시도...")
-                print(f"📝 MechanicalSoup + AI 자동화 시도: {unsubscribe_url}")
-                mechanical_ai_result = self.process_unsubscribe_with_mechanicalsoup_ai(
-                    unsubscribe_url, user_email
-                )
-                print(f"📝 MechanicalSoup + AI 처리 결과: {mechanical_ai_result}")
-
-                if mechanical_ai_result["success"]:
-                    print(f"✅ 링크 {i + 1} 처리 성공 (MechanicalSoup + AI)")
-                    result["steps"].extend(mechanical_ai_result.get("steps", []))
-                    result["success"] = True
-                    result["message"] = mechanical_ai_result["message"]
-                    result["progress"] = 100
-                    return result
-
-                # MechanicalSoup + AI도 실패하면 Selenium 사용 (백업용)
-                try:
-                    result["steps"].append("🤖 Selenium 브라우저 자동화 시도...")
-                    print(f"📝 Selenium 브라우저 자동화 시도: {unsubscribe_url}")
-                    selenium_result = self.process_unsubscribe_with_selenium(
-                        unsubscribe_url, user_email
-                    )
-                    print(f"📝 Selenium 처리 결과: {selenium_result}")
-
-                    if selenium_result["success"]:
-                        print(f"✅ 링크 {i + 1} 처리 성공 (Selenium)")
-                        result["steps"].extend(selenium_result.get("steps", []))
-                        result["success"] = True
-                        result["message"] = selenium_result["message"]
-                        result["progress"] = 100
-                        return result
-                    else:
-                        simple_result = (
-                            selenium_result  # 실패 정보를 simple_result에 저장
-                        )
-
-                except Exception as e:
-                    print(f"⚠️ Selenium 실패 (계속 진행): {str(e)}")
-                    simple_result = {
-                        "success": False,
-                        "message": f"Selenium 오류: {str(e)}",
-                    }
-            else:
-                # 간단한 방법이 성공한 경우
+            if simple_result["success"]:
                 print(f"✅ 링크 {i + 1} 처리 성공 (간단한 HTTP)")
                 result["steps"].extend(simple_result.get("steps", []))
                 result["success"] = True
@@ -855,10 +402,26 @@ class AdvancedUnsubscribeService:
                 result["progress"] = 100
                 return result
 
+            # 2단계: MechanicalSoup + AI 자동화 시도
+            result["steps"].append("🤖 MechanicalSoup + AI 자동화 시도...")
+            print(f"📝 MechanicalSoup + AI 자동화 시도: {unsubscribe_url}")
+            mechanicalsoup_result = self.process_unsubscribe_with_mechanicalsoup_ai(
+                unsubscribe_url, user_email
+            )
+
+            if mechanicalsoup_result["success"]:
+                print(f"✅ 링크 {i + 1} 처리 성공 (MechanicalSoup + AI)")
+                result["steps"].extend(mechanicalsoup_result.get("steps", []))
+                result["success"] = True
+                result["message"] = mechanicalsoup_result["message"]
+                result["progress"] = 100
+                return result
+
             # 모든 방법이 실패한 경우
-            error_msg = simple_result.get("message", "알 수 없는 오류")
+            error_msg = mechanicalsoup_result.get("message", "알 수 없는 오류")
             print(f"❌ 링크 {i + 1} 처리 실패: {error_msg}")
             result["steps"].append(f"❌ 링크 {i + 1} 처리 실패: {error_msg}")
+
             # 실패한 링크 정보 저장
             if "failed_links" not in result:
                 result["failed_links"] = []
@@ -878,215 +441,6 @@ class AdvancedUnsubscribeService:
         result["progress"] = 100
         print(f"❌ 모든 구독해지 링크 실패 - 총 {len(unsubscribe_links)}개 링크 시도")
         return result
-
-    def _handle_website_specific_logic(self, url: str) -> Dict:
-        """웹사이트별 특별 처리 로직"""
-        try:
-            from urllib.parse import urlparse
-
-            parsed_url = urlparse(url)
-            domain = parsed_url.netloc.lower()
-
-            # 특정 웹사이트별 처리
-            if "mailchimp" in domain:
-                return self._handle_mailchimp_unsubscribe(url)
-            elif "sendgrid" in domain:
-                return self._handle_sendgrid_unsubscribe(url)
-            elif "mailgun" in domain:
-                return self._handle_mailgun_unsubscribe(url)
-            elif "amazon" in domain:
-                return self._handle_amazon_unsubscribe(url)
-            elif "google" in domain:
-                return self._handle_google_unsubscribe(url)
-
-            # 기본 처리
-            return {"success": False, "message": "", "steps": []}
-
-        except Exception as e:
-            self.logger.warning(f"웹사이트별 처리 실패: {str(e)}")
-            return {"success": False, "message": "", "steps": []}
-
-    def _handle_mailchimp_unsubscribe(self, url: str) -> Dict:
-        """Mailchimp 구독해지 처리"""
-        try:
-            if not self.setup_driver():
-                return {"success": False, "message": "드라이버 설정 실패", "steps": []}
-
-            self.driver.get(url)
-            time.sleep(3)
-
-            # Mailchimp 특정 요소 찾기
-            unsubscribe_button = self.driver.find_element(
-                By.CSS_SELECTOR, "button[data-testid='unsubscribe-button']"
-            )
-            if unsubscribe_button:
-                unsubscribe_button.click()
-                time.sleep(2)
-
-                # 확인 버튼 클릭
-                confirm_button = self.driver.find_element(
-                    By.CSS_SELECTOR, "button[data-testid='confirm-button']"
-                )
-                if confirm_button:
-                    confirm_button.click()
-                    time.sleep(2)
-
-                    return {
-                        "success": True,
-                        "message": "Mailchimp 구독해지 완료",
-                        "steps": [
-                            "Mailchimp 페이지 접속",
-                            "구독해지 버튼 클릭",
-                            "확인 버튼 클릭",
-                        ],
-                    }
-
-            return {"success": False, "message": "Mailchimp 구독해지 실패", "steps": []}
-
-        except Exception as e:
-            return {
-                "success": False,
-                "message": f"Mailchimp 처리 오류: {str(e)}",
-                "steps": [],
-            }
-        finally:
-            self.close_driver()
-
-    def _handle_sendgrid_unsubscribe(self, url: str) -> Dict:
-        """SendGrid 구독해지 처리"""
-        try:
-            if not self.setup_driver():
-                return {"success": False, "message": "드라이버 설정 실패", "steps": []}
-
-            self.driver.get(url)
-            time.sleep(3)
-
-            # SendGrid 특정 요소 찾기
-            unsubscribe_link = self.driver.find_element(
-                By.CSS_SELECTOR, "a[href*='unsubscribe']"
-            )
-            if unsubscribe_link:
-                unsubscribe_link.click()
-                time.sleep(2)
-
-                return {
-                    "success": True,
-                    "message": "SendGrid 구독해지 완료",
-                    "steps": ["SendGrid 페이지 접속", "구독해지 링크 클릭"],
-                }
-
-            return {"success": False, "message": "SendGrid 구독해지 실패", "steps": []}
-
-        except Exception as e:
-            return {
-                "success": False,
-                "message": f"SendGrid 처리 오류: {str(e)}",
-                "steps": [],
-            }
-        finally:
-            self.close_driver()
-
-    def _handle_mailgun_unsubscribe(self, url: str) -> Dict:
-        """Mailgun 구독해지 처리"""
-        try:
-            if not self.setup_driver():
-                return {"success": False, "message": "드라이버 설정 실패", "steps": []}
-
-            self.driver.get(url)
-            time.sleep(3)
-
-            # Mailgun 특정 요소 찾기
-            unsubscribe_button = self.driver.find_element(
-                By.CSS_SELECTOR, "button[type='submit']"
-            )
-            if unsubscribe_button:
-                unsubscribe_button.click()
-                time.sleep(2)
-
-                return {
-                    "success": True,
-                    "message": "Mailgun 구독해지 완료",
-                    "steps": ["Mailgun 페이지 접속", "구독해지 버튼 클릭"],
-                }
-
-            return {"success": False, "message": "Mailgun 구독해지 실패", "steps": []}
-
-        except Exception as e:
-            return {
-                "success": False,
-                "message": f"Mailgun 처리 오류: {str(e)}",
-                "steps": [],
-            }
-        finally:
-            self.close_driver()
-
-    def _handle_amazon_unsubscribe(self, url: str) -> Dict:
-        """Amazon 구독해지 처리"""
-        try:
-            if not self.setup_driver():
-                return {"success": False, "message": "드라이버 설정 실패", "steps": []}
-
-            self.driver.get(url)
-            time.sleep(3)
-
-            # Amazon 특정 요소 찾기
-            unsubscribe_button = self.driver.find_element(
-                By.CSS_SELECTOR, "input[type='submit'][value*='Unsubscribe']"
-            )
-            if unsubscribe_button:
-                unsubscribe_button.click()
-                time.sleep(2)
-
-                return {
-                    "success": True,
-                    "message": "Amazon 구독해지 완료",
-                    "steps": ["Amazon 페이지 접속", "구독해지 버튼 클릭"],
-                }
-
-            return {"success": False, "message": "Amazon 구독해지 실패", "steps": []}
-
-        except Exception as e:
-            return {
-                "success": False,
-                "message": f"Amazon 처리 오류: {str(e)}",
-                "steps": [],
-            }
-        finally:
-            self.close_driver()
-
-    def _handle_google_unsubscribe(self, url: str) -> Dict:
-        """Google 구독해지 처리"""
-        try:
-            if not self.setup_driver():
-                return {"success": False, "message": "드라이버 설정 실패", "steps": []}
-
-            self.driver.get(url)
-            time.sleep(3)
-
-            # Google 특정 요소 찾기
-            unsubscribe_button = self.driver.find_element(
-                By.CSS_SELECTOR, "button[aria-label*='Unsubscribe']"
-            )
-            if unsubscribe_button:
-                unsubscribe_button.click()
-                time.sleep(2)
-
-                return {
-                    "success": True,
-                    "message": "Google 구독해지 완료",
-                    "steps": ["Google 페이지 접속", "구독해지 버튼 클릭"],
-                }
-
-            return {"success": False, "message": "Google 구독해지 실패", "steps": []}
-
-        except Exception as e:
-            return {
-                "success": False,
-                "message": f"Google 처리 오류: {str(e)}",
-                "steps": [],
-            }
-        finally:
-            self.close_driver()
 
     # ==================== MechanicalSoup 기반 처리 함수들 ====================
 
@@ -1438,59 +792,112 @@ class AdvancedUnsubscribeService:
             return {"success": False, "message": f"2단계 처리 오류: {str(e)}"}
 
     def _analyze_page_with_ai(self, browser, soup, user_email: str = None) -> Dict:
-        """OpenAI API로 페이지 분석 및 처리"""
+        """OpenAI API를 사용하여 페이지 분석 및 구독해지 처리"""
         try:
-            # 1. 페이지 구조 분석을 위한 정보 수집
-            page_info = {
-                "url": browser.get_url(),
-                "title": soup.find("title").get_text() if soup.find("title") else "",
-                "forms": [],
-                "buttons": [],
-                "links": [],
-                "text_content": soup.get_text()[:2000],  # 텍스트 내용 제한
-            }
+            print(f"🤖 OpenAI API로 페이지 분석 시작")
 
-            # 폼 정보 수집
-            for form in soup.find_all("form"):
-                form_info = {
-                    "action": form.get("action", ""),
-                    "method": form.get("method", "get"),
-                    "inputs": [],
+            # 페이지 정보 수집
+            page_info = self._extract_page_info(soup)
+
+            # AI 프롬프트 생성
+            prompt = self._create_ai_prompt(page_info, user_email)
+
+            # OpenAI API 호출
+            api_response = self._call_openai_api(prompt)
+
+            if not api_response["success"]:
+                print(f"❌ OpenAI API 호출 실패: {api_response.get('message')}")
+                return {
+                    "success": False,
+                    "message": api_response.get("message", "API 호출 실패"),
                 }
-                for input_tag in form.find_all("input"):
-                    form_info["inputs"].append(
-                        {
-                            "type": input_tag.get("type", "text"),
-                            "name": input_tag.get("name", ""),
-                            "value": input_tag.get("value", ""),
-                        }
-                    )
-                page_info["forms"].append(form_info)
 
-            # 버튼 정보 수집
-            for button in soup.find_all("button"):
-                page_info["buttons"].append(
-                    {
-                        "text": button.get_text().strip(),
-                        "type": button.get("type", "button"),
-                    }
-                )
+            # AI 응답 파싱
+            try:
+                ai_response = json.loads(api_response["content"])
+                print(f"🤖 AI 분석 결과: {ai_response}")
+            except json.JSONDecodeError:
+                print(f"❌ AI 응답 JSON 파싱 실패: {api_response['content']}")
+                return {"success": False, "message": "AI 응답 파싱 실패"}
 
-            # 링크 정보 수집
-            for link in soup.find_all("a", href=True):
-                page_info["links"].append(
-                    {"text": link.get_text().strip(), "href": link.get("href")}
-                )
+            # AI 지시사항 실행
+            result = self._execute_ai_instructions(browser, ai_response, user_email)
 
-            # 2. OpenAI API 호출
-            ai_prompt = self._create_ai_prompt(page_info, user_email)
-            ai_response = self._call_openai_api(ai_prompt)
-
-            # 3. AI 응답에 따른 처리
-            return self._execute_ai_instructions(browser, ai_response, user_email)
+            if result["success"]:
+                print(f"✅ AI 지시사항 실행 성공")
+                return result
+            else:
+                print(f"❌ AI 지시사항 실행 실패: {result.get('message')}")
+                return result
 
         except Exception as e:
-            return {"success": False, "message": f"AI 분석 오류: {str(e)}"}
+            error_msg = f"AI 분석 실패: {str(e)}"
+            print(f"❌ {error_msg}")
+            return {"success": False, "message": error_msg}
+
+    def _extract_page_info(self, soup):
+        """페이지 정보 수집"""
+        page_info = {
+            "url": "",
+            "title": soup.find("title").get_text() if soup.find("title") else "",
+            "forms": [],
+            "buttons": [],
+            "links": [],
+            "text_content": "",
+        }
+
+        # 폼 정보 수집
+        forms = soup.find_all("form")
+        for form in forms:
+            form_info = {
+                "action": form.get("action", ""),
+                "method": form.get("method", "get"),
+                "inputs": [],
+            }
+
+            # 폼 내부 입력 필드들
+            inputs = form.find_all("input")
+            for input_field in inputs:
+                input_info = {
+                    "type": input_field.get("type", "text"),
+                    "name": input_field.get("name", ""),
+                    "id": input_field.get("id", ""),
+                    "value": input_field.get("value", ""),
+                    "placeholder": input_field.get("placeholder", ""),
+                }
+                form_info["inputs"].append(input_info)
+
+            page_info["forms"].append(form_info)
+
+        # 버튼 정보 수집
+        buttons = soup.find_all(["button", "input"])
+        for button in buttons:
+            if button.name == "button" or button.get("type") in ["submit", "button"]:
+                button_info = {
+                    "text": button.get_text().strip(),
+                    "type": button.get("type", "button"),
+                    "name": button.get("name", ""),
+                    "id": button.get("id", ""),
+                    "class": button.get("class", []),
+                }
+                page_info["buttons"].append(button_info)
+
+        # 링크 정보 수집
+        links = soup.find_all("a")
+        for link in links:
+            link_info = {
+                "text": link.get_text().strip(),
+                "href": link.get("href", ""),
+                "title": link.get("title", ""),
+                "class": link.get("class", []),
+            }
+            page_info["links"].append(link_info)
+
+        # 텍스트 내용 수집 (구독해지 관련 키워드 포함)
+        text_content = soup.get_text()
+        page_info["text_content"] = text_content[:1000]  # 처음 1000자만
+
+        return page_info
 
     def _create_ai_prompt(self, page_info: Dict, user_email: str = None) -> str:
         """OpenAI API용 프롬프트 생성 (최적화된 버전)"""
@@ -1542,51 +949,40 @@ class AdvancedUnsubscribeService:
         return prompt
 
     def _call_openai_api(self, prompt: str) -> Dict:
-        """OpenAI API 호출 (타임아웃 적용)"""
+        """OpenAI API 호출 (최신 버전 1.x 호환)"""
         try:
-            import openai
+            from openai import OpenAI
 
-            # 타임아웃 설정
-            import signal
+            # OpenAI 클라이언트 초기화
+            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-            def timeout_handler(signum, frame):
-                raise TimeoutError("OpenAI API 호출 타임아웃")
+            # API 호출
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "당신은 웹페이지 분석 전문가입니다. 구독해지 페이지를 분석하여 사용자가 구독을 해지할 수 있도록 도와주세요.",
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                max_tokens=500,
+                temperature=0.1,
+            )
 
-            # 타임아웃 설정
-            signal.signal(signal.SIGALRM, timeout_handler)
-            signal.alarm(self.timeouts["api_call"])
-
-            try:
-                response = openai.ChatCompletion.create(
-                    model="gpt-3.5-turbo",
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": "당신은 웹페이지 분석 전문가입니다.",
-                        },
-                        {"role": "user", "content": prompt},
-                    ],
-                    max_tokens=500,
-                    temperature=0.1,
-                )
-
-                # 타임아웃 해제
-                signal.alarm(0)
-
-                # JSON 응답 파싱
-                ai_response = json.loads(response.choices[0].message.content)
-                return ai_response
-
-            except TimeoutError:
-                signal.alarm(0)
-                return {"action": "none", "reason": "OpenAI API 호출 타임아웃"}
-            except Exception as e:
-                signal.alarm(0)
-                raise e
+            # 응답 파싱
+            if response.choices and len(response.choices) > 0:
+                content = response.choices[0].message.content
+                print(f"🤖 OpenAI API 응답: {content}")
+                return {"success": True, "content": content}
+            else:
+                print("❌ OpenAI API 응답이 비어있습니다")
+                return {"success": False, "message": "API 응답이 비어있습니다"}
 
         except Exception as e:
-            print(f"❌ OpenAI API 호출 실패: {str(e)}")
-            return {"action": "none", "reason": f"API 호출 실패: {str(e)}"}
+            error_msg = f"OpenAI API 호출 실패: {str(e)}"
+            print(f"❌ {error_msg}")
+            return {"success": False, "message": error_msg}
 
     def _execute_ai_instructions(
         self, browser, ai_response: Dict, user_email: str = None
