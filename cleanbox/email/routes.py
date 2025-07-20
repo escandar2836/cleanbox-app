@@ -703,6 +703,18 @@ def bulk_actions():
             print(f"🎉 대량 삭제 완료 - {result_message}")
             flash(result_message, "info" if failed_emails else "success")
 
+            # JSON 응답 반환 (클라이언트에서 처리)
+            return jsonify(
+                {
+                    "success": True,
+                    "message": result_message,
+                    "action": action,
+                    "total_processed": len(email_ids),
+                    "success_count": success_count,
+                    "failed_count": len(failed_emails),
+                }
+            )
+
         elif action == "archive":
             # 대량 아카이브 (개선된 버전)
             print(f"🔍 대량 아카이브 시작 - 선택된 이메일 수: {len(email_ids)}")
@@ -807,6 +819,18 @@ def bulk_actions():
             print(f"🎉 대량 아카이브 완료 - {result_message}")
             flash(result_message, "info" if failed_emails else "success")
 
+            # JSON 응답 반환 (클라이언트에서 처리)
+            return jsonify(
+                {
+                    "success": True,
+                    "message": result_message,
+                    "action": action,
+                    "total_processed": len(email_ids),
+                    "success_count": success_count,
+                    "failed_count": len(failed_emails),
+                }
+            )
+
         elif action == "mark_read":
             # 대량 읽음 표시 (개선된 버전)
             print(f"🔍 대량 읽음 표시 시작 - 선택된 이메일 수: {len(email_ids)}")
@@ -909,6 +933,18 @@ def bulk_actions():
 
             print(f"🎉 대량 읽음 표시 완료 - {result_message}")
             flash(result_message, "info" if failed_emails else "success")
+
+            # JSON 응답 반환 (클라이언트에서 처리)
+            return jsonify(
+                {
+                    "success": True,
+                    "message": result_message,
+                    "action": action,
+                    "total_processed": len(email_ids),
+                    "success_count": success_count,
+                    "failed_count": len(failed_emails),
+                }
+            )
 
         elif action == "unsubscribe":
             # 대량 구독해지 (발신자별 그룹화 처리)
@@ -1091,6 +1127,21 @@ def bulk_actions():
             print(f"🎉 대량 구독해지 완료 - {result_message}")
             flash(result_message, "info" if failed_senders else "success")
 
+            # JSON 응답 반환 (클라이언트에서 처리)
+            return jsonify(
+                {
+                    "success": True,
+                    "message": result_message,
+                    "action": action,
+                    "total_processed": len(email_ids),
+                    "success_count": len(successful_senders),
+                    "failed_count": len(failed_senders),
+                    "successful_senders": len(successful_senders),
+                    "failed_senders": len(failed_senders),
+                    "already_unsubscribed_senders": len(already_unsubscribed_senders),
+                }
+            )
+
         else:
             return (
                 jsonify(
@@ -1102,27 +1153,6 @@ def bulk_actions():
                 ),
                 400,
             )
-
-        # JSON 응답 반환 (클라이언트에서 처리)
-        return jsonify(
-            {
-                "success": True,
-                "message": result_message,
-                "action": action,
-                "total_processed": len(email_ids),
-                "successful_senders": (
-                    len(successful_senders) if "successful_senders" in locals() else 0
-                ),
-                "failed_senders": (
-                    len(failed_senders) if "failed_senders" in locals() else 0
-                ),
-                "already_unsubscribed_senders": (
-                    len(already_unsubscribed_senders)
-                    if "already_unsubscribed_senders" in locals()
-                    else 0
-                ),
-            }
-        )
 
     except Exception as e:
         return (
