@@ -454,29 +454,54 @@ class PlaywrightUnsubscribeService:
         return self._finalize_failure("최대 재시도 횟수 초과", start_time)
 
     async def _try_basic_unsubscribe(self, page: Page, user_email: str = None) -> Dict:
-        """기본 구독해지 시도 (AI 기반 완료 판단 적용)"""
+        """기본 구독해지 처리 (개선된 버전)"""
         try:
-            # 구독해지 관련 요소들 찾기
-            selectors = [
+            print(f"📝 기본 구독해지 처리 시작")
+
+            # 1단계: Form Action URL 처리 시도
+            form_result = await self._try_form_action_submit(page, user_email)
+            if form_result["success"]:
+                return form_result
+
+            # 2단계: 개선된 선택자로 처리 시도
+            selector_result = await self._try_enhanced_selectors(page, user_email)
+            if selector_result["success"]:
+                return selector_result
+
+            # 3단계: 링크 기반 처리 시도
+            link_result = await self._try_link_based_unsubscribe(page, user_email)
+            if link_result["success"]:
+                return link_result
+
+            # 4단계: 기존 방식 (하위 호환성)
+            return await self._try_legacy_unsubscribe(page, user_email)
+
+        except Exception as e:
+            return {"success": False, "message": f"기본 구독해지 실패: {str(e)}"}
+
+    async def _try_legacy_unsubscribe(self, page: Page, user_email: str = None) -> Dict:
+        """기존 방식의 구독해지 처리 (하위 호환성)"""
+        try:
+            # 기존 선택자들
+            legacy_selectors = [
                 "button[type='submit']",
                 "input[type='submit']",
                 "button",
                 "input[type='button']",
                 "a[href*='unsubscribe']",
                 "a[href*='opt-out']",
-                "a[href*='remove']",
-                "a[href*='cancel']",
-                ".unsubscribe",
-                "#unsubscribe",
-                "[class*='unsubscribe']",
-                "[id*='unsubscribe']",
+                ".confirm-button",
+                ".submit-button",
                 ".unsubscribe-button",
-                "#unsubscribe-button",
-                "form[action*='unsubscribe']",
-                "form[action*='opt-out']",
+                "#confirm",
+                "#submit",
+                "#unsubscribe",
+                "[class*='confirm']",
+                "[class*='submit']",
+                "[class*='unsubscribe']",
             ]
 
-            for selector in selectors:
+            for selector in legacy_selectors:
                 try:
                     elements = await page.query_selector_all(selector)
                     for element in elements:
@@ -486,19 +511,22 @@ class PlaywrightUnsubscribeService:
                         if is_visible and is_enabled:
                             element_text = await element.text_content()
                             print(
-                                f"📝 구독해지 요소 발견: {selector} - 텍스트: '{element_text}'"
+                                f"📝 기존 방식 요소 발견: {selector} - 텍스트: '{element_text}'"
                             )
 
                             # 구독해지 관련 키워드 확인
                             unsubscribe_keywords = [
                                 "unsubscribe",
                                 "구독해지",
-                                "cancel",
-                                "remove",
                                 "opt-out",
+                                "수신거부",
+                                "remove",
+                                "제거",
+                                "cancel",
+                                "취소",
                                 "confirm",
-                                "submit",
                                 "확인",
+                                "submit",
                                 "제출",
                             ]
 
@@ -511,25 +539,24 @@ class PlaywrightUnsubscribeService:
                                 is_unsubscribe_element
                                 or "unsubscribe" in selector.lower()
                             ):
-                                print(f"📝 구독해지 요소 클릭: {element_text}")
+                                print(f"📝 기존 방식 요소 클릭: {element_text}")
 
                                 # 클릭 전 현재 URL 저장
                                 before_url = page.url
 
-                                # 클릭 실행
-                                await element.click()
-
-                                # 네트워크 요청 완료 대기
+                                # 클릭 실행 (짧은 타임아웃)
                                 try:
-                                    await page.wait_for_load_state(
-                                        "networkidle", timeout=10000
-                                    )
-                                    print("📝 네트워크 요청 완료 대기 성공")
-                                except Exception as e:
+                                    await element.click(timeout=5000)
+                                except Exception as click_error:
                                     print(
-                                        f"⚠️ 네트워크 대기 실패, 기본 대기로 전환: {str(e)}"
+                                        f"⚠️ 클릭 실패, JavaScript로 재시도: {str(click_error)}"
                                     )
-                                    await page.wait_for_timeout(3000)
+                                    await page.evaluate(
+                                        "(element) => element.click()", element
+                                    )
+
+                                # 짧은 대기
+                                await page.wait_for_timeout(2000)
 
                                 # URL 변경 확인
                                 after_url = page.url
@@ -555,7 +582,7 @@ class PlaywrightUnsubscribeService:
                                     )
                                     return {
                                         "success": True,
-                                        "message": f"구독해지 성공 (AI 신뢰도: {ai_result['confidence']}%)",
+                                        "message": f"기존 방식 구독해지 성공 (AI 신뢰도: {ai_result['confidence']}%)",
                                         "ai_confidence": ai_result["confidence"],
                                         "ai_reason": ai_result["reason"],
                                     }
@@ -568,60 +595,89 @@ class PlaywrightUnsubscribeService:
                                         print("📝 기본 지표로 성공 확인")
                                         return {
                                             "success": True,
-                                            "message": "구독해지 성공",
+                                            "message": "기존 방식 구독해지 성공",
                                         }
                                     else:
                                         print("📝 구독해지 미완료로 판단")
                                         return {
                                             "success": False,
-                                            "message": "구독해지 미완료",
+                                            "message": "기존 방식 구독해지 미완료",
                                         }
 
                 except Exception as e:
-                    print(f"⚠️ 선택자 {selector} 처리 중 오류: {str(e)}")
+                    print(f"⚠️ 기존 방식 선택자 {selector} 처리 중 오류: {str(e)}")
                     continue
 
-            return {"success": False, "message": "구독해지 요소를 찾을 수 없습니다"}
+            return {
+                "success": False,
+                "message": "기존 방식 구독해지 요소를 찾을 수 없습니다",
+            }
 
         except Exception as e:
-            return {"success": False, "message": f"기본 구독해지 실패: {str(e)}"}
+            return {"success": False, "message": f"기존 방식 구독해지 실패: {str(e)}"}
 
     async def _analyze_unsubscribe_completion_with_ai(self, page: Page) -> Dict:
-        """AI를 사용한 구독해지 완료 분석 (간단한 방식)"""
+        """AI를 사용한 구독해지 완료 분석 (개선된 버전)"""
         try:
-            # 페이지 내용 추출
-            content = await page.content()
+            # 페이지 정보 추출
             current_url = page.url
-            current_title = await page.title()
+            title = await page.title()
+            content = await page.content()
 
-            # 간단한 프롬프트 생성
+            # 더 상세한 프롬프트 생성
             prompt = f"""
-다음 웹 페이지에서 구독해지가 완료되었는지 판단해주세요.
+다음 웹 페이지에서 구독해지가 성공적으로 완료되었는지 분석해주세요.
 
 URL: {current_url}
-제목: {current_title}
-내용: {content[:1000]}
+제목: {title}
+페이지 내용: {content[:2000]}
 
-구독해지가 완료되었으면 "완료됨", 아니면 "완료되지 않음"으로만 답변하세요.
+분석 기준:
+1. 구독해지 완료 지표: "unsubscribed", "cancelled", "removed", "success", "complete", "thank you", "구독해지", "취소", "완료", "성공"
+2. 오류 지표: "error", "failed", "invalid", "not found", "expired", "오류", "실패", "잘못된"
+3. 중립 지표: "confirm", "확인", "submit", "제출"
+
+분석 결과를 다음 형식으로 답변하세요:
+- 완료 여부: "완료됨" 또는 "완료되지 않음"
+- 신뢰도: 0-100 숫자
+- 이유: 간단한 설명
 """
 
             # OpenAI API 호출
             ai_response = await self._call_simple_ai_api(prompt)
 
-            return self._parse_simple_completion_result(ai_response)
+            return self._parse_enhanced_completion_result(
+                ai_response, current_url, title
+            )
 
         except Exception as e:
             print(f"⚠️ AI 구독해지 완료 분석 실패: {str(e)}")
             return {"success": False, "confidence": 0, "reason": str(e)}
 
-    def _parse_simple_completion_result(self, ai_response: str) -> Dict:
-        """간단한 AI 응답 파싱"""
+    def _parse_enhanced_completion_result(
+        self, ai_response: str, url: str, title: str
+    ) -> Dict:
+        """개선된 AI 응답 파싱"""
         try:
-            # 응답에서 완료 여부 판단
             response_lower = ai_response.lower()
 
-            # 완료 지표들
-            completion_indicators = [
+            # 완료 지표들 (가중치 높음)
+            completion_indicators_high = [
+                "unsubscribed successfully",
+                "successfully unsubscribed",
+                "subscription cancelled",
+                "cancelled successfully",
+                "removed from mailing list",
+                "no longer receive emails",
+                "thank you for",
+                "구독해지 완료",
+                "구독이 취소되었습니다",
+                "수신거부 완료",
+                "더 이상 수신하지 않습니다",
+            ]
+
+            # 완료 지표들 (가중치 중간)
+            completion_indicators_medium = [
                 "완료됨",
                 "완료",
                 "성공",
@@ -649,31 +705,90 @@ URL: {current_url}
                 "retry",
                 "잘못된",
                 "invalid",
+                "not found",
+                "expired",
+                "만료됨",
+                "찾을 수 없음",
             ]
 
-            # 완료 여부 판단
-            is_completed = any(
-                indicator in response_lower for indicator in completion_indicators
+            # 중립 지표들
+            neutral_indicators = [
+                "confirm",
+                "확인",
+                "submit",
+                "제출",
+                "proceed",
+                "진행",
+            ]
+
+            # 점수 계산
+            score = 0
+
+            # 완료 지표 확인 (가중치 높음)
+            for indicator in completion_indicators_high:
+                if indicator in response_lower:
+                    score += 30
+                    break
+
+            # 완료 지표 확인 (가중치 중간)
+            for indicator in completion_indicators_medium:
+                if indicator in response_lower:
+                    score += 20
+                    break
+
+            # 실패 지표 확인
+            for indicator in failure_indicators:
+                if indicator in response_lower:
+                    score -= 40
+                    break
+
+            # 중립 지표 확인
+            neutral_count = sum(
+                1 for indicator in neutral_indicators if indicator in response_lower
             )
-            is_failed = any(
+            score += neutral_count * 5
+
+            # URL/제목 기반 추가 점수
+            url_title_lower = (url + " " + title).lower()
+            url_title_indicators = [
+                "success",
+                "complete",
+                "thank",
+                "unsubscribed",
+                "cancelled",
+                "완료",
+                "성공",
+                "구독해지",
+                "취소",
+            ]
+
+            for indicator in url_title_indicators:
+                if indicator in url_title_lower:
+                    score += 10
+                    break
+
+            # 신뢰도 계산 (0-100)
+            confidence = max(0, min(100, score + 50))
+
+            # 완료 여부 판단
+            is_completed = confidence >= 60 and not any(
                 indicator in response_lower for indicator in failure_indicators
             )
-
-            # 신뢰도 계산 (간단한 방식)
-            confidence = 80 if is_completed and not is_failed else 20
 
             result = {
                 "success": is_completed,
                 "confidence": confidence,
                 "reason": ai_response,
-                "indicators": [],
-                "suggested_action": "",
+                "score": score,
+                "url": url,
+                "title": title,
             }
 
             print(f"🤖 AI 구독해지 완료 분석:")
             print(f"   - 완료 여부: {is_completed}")
             print(f"   - 신뢰도: {confidence}%")
-            print(f"   - 응답: {ai_response}")
+            print(f"   - 점수: {score}")
+            print(f"   - 응답: {ai_response[:100]}...")
 
             return result
 
@@ -758,9 +873,8 @@ URL: {current_url}
             return "완료되지 않음"
 
     def _parse_simple_completion_result(self, ai_response: str) -> Dict:
-        """간단한 AI 응답 파싱"""
+        """간단한 AI 응답 파싱 (하위 호환성)"""
         try:
-            # 응답에서 완료 여부 판단
             response_lower = ai_response.lower()
 
             # 완료 지표들
@@ -809,11 +923,9 @@ URL: {current_url}
                 "success": is_completed,
                 "confidence": confidence,
                 "reason": ai_response,
-                "indicators": [],
-                "suggested_action": "",
             }
 
-            print(f"🤖 AI 구독해지 완료 분석:")
+            print(f"🤖 간단한 AI 구독해지 완료 분석:")
             print(f"   - 완료 여부: {is_completed}")
             print(f"   - 신뢰도: {confidence}%")
             print(f"   - 응답: {ai_response}")
@@ -821,78 +933,379 @@ URL: {current_url}
             return result
 
         except Exception as e:
-            print(f"⚠️ AI 응답 파싱 실패: {str(e)}")
+            print(f"⚠️ 간단한 AI 응답 파싱 실패: {str(e)}")
             return {"success": False, "confidence": 0, "reason": f"파싱 오류: {str(e)}"}
 
     async def _check_basic_success_indicators(self, page: Page) -> bool:
-        """기본 성공 지표 확인 (기존 로직)"""
+        """기본 성공 지표 확인 (개선된 버전)"""
         try:
+            # 1. URL 기반 확인
             current_url = page.url
-            title = await page.title()
-            page_content = await page.content()
-            page_source = page_content.lower()
-
-            # 기존 성공 지표들
-            success_indicators = [
-                "unsubscribe complete",
-                "구독해지 완료",
-                "subscription cancelled",
-                "구독이 취소되었습니다",
-                "you have been unsubscribed",
-                "구독해지되었습니다",
+            success_url_indicators = [
+                "success",
+                "confirmed",
+                "unsubscribed",
+                "cancelled",
+                "removed",
+                "thank",
+                "complete",
+                "완료",
+                "성공",
+                "확인",
+                "해지",
+                "취소",
             ]
 
-            for indicator in success_indicators:
-                if indicator in page_source:
-                    print(f"📝 성공 지표 발견: {indicator}")
+            if any(
+                indicator in current_url.lower() for indicator in success_url_indicators
+            ):
+                print(f"📝 URL 기반 성공 확인: {current_url}")
+                return True
+
+            # 2. 페이지 제목 기반 확인
+            title = await page.title()
+            success_title_indicators = [
+                "unsubscribed",
+                "cancelled",
+                "removed",
+                "confirmed",
+                "success",
+                "complete",
+                "thank you",
+                "구독해지",
+                "취소",
+                "확인",
+                "완료",
+                "성공",
+            ]
+
+            if any(
+                indicator in title.lower() for indicator in success_title_indicators
+            ):
+                print(f"📝 제목 기반 성공 확인: {title}")
+                return True
+
+            # 3. 페이지 내용 기반 확인
+            content = await page.content()
+            content_lower = content.lower()
+
+            success_content_indicators = [
+                "successfully unsubscribed",
+                "unsubscribed successfully",
+                "subscription cancelled",
+                "cancelled successfully",
+                "removed from mailing list",
+                "no longer receive",
+                "thank you for",
+                "구독해지 완료",
+                "구독이 취소되었습니다",
+                "수신거부 완료",
+                "더 이상 수신하지 않습니다",
+                "감사합니다",
+                "성공적으로",
+                "완료되었습니다",
+            ]
+
+            if any(
+                indicator in content_lower for indicator in success_content_indicators
+            ):
+                print(f"📝 내용 기반 성공 확인")
+                return True
+
+            # 4. 특정 요소 기반 확인
+            success_elements = [
+                ".success-message",
+                ".confirmation-message",
+                ".thank-you-message",
+                "#success",
+                "#confirmation",
+                "#thank-you",
+                "[class*='success']",
+                "[class*='confirm']",
+                "[class*='thank']",
+                "[id*='success']",
+                "[id*='confirm']",
+                "[id*='thank']",
+            ]
+
+            for selector in success_elements:
+                try:
+                    element = await page.query_selector(selector)
+                    if element and await element.is_visible():
+                        element_text = await element.text_content()
+                        if element_text:
+                            print(
+                                f"📝 요소 기반 성공 확인: {selector} - {element_text}"
+                            )
+                            return True
+                except Exception:
+                    continue
+
+            # 5. 오류 메시지 확인 (실패 지표)
+            error_indicators = [
+                "error",
+                "failed",
+                "invalid",
+                "not found",
+                "expired",
+                "오류",
+                "실패",
+                "잘못된",
+                "찾을 수 없음",
+                "만료됨",
+            ]
+
+            if any(indicator in content_lower for indicator in error_indicators):
+                print(f"📝 오류 지표 발견")
+                return False
+
+            # 6. AI 기반 분석 (보조 지표)
+            try:
+                ai_result = await self._analyze_unsubscribe_completion_with_ai(page)
+                if ai_result["success"] and ai_result["confidence"] >= 60:
+                    print(f"📝 AI 기반 성공 확인 (신뢰도: {ai_result['confidence']}%)")
                     return True
-
-            # URL/제목 확인
-            if any(
-                keyword in current_url.lower()
-                for keyword in ["complete", "success", "thank"]
-            ):
-                return True
-
-            if any(
-                keyword in title.lower()
-                for keyword in ["complete", "success", "unsubscribed"]
-            ):
-                return True
+            except Exception as e:
+                print(f"⚠️ AI 분석 실패: {str(e)}")
 
             return False
 
         except Exception as e:
-            print(f"⚠️ 기본 지표 확인 중 오류: {str(e)}")
+            print(f"⚠️ 성공 지표 확인 실패: {str(e)}")
             return False
 
     async def _try_second_page_unsubscribe(
         self, page: Page, user_email: str = None
     ) -> Dict:
-        """두 번째 페이지 구독해지 처리 (AI 기반 완료 판단 적용)"""
+        """두 번째 페이지 구독해지 처리 (다양한 케이스 지원)"""
         try:
-            # 두 번째 페이지에서 구독해지 관련 버튼/링크 찾기
-            second_page_selectors = [
-                "button[type='submit']",
+            print(f"📝 두 번째 페이지 구독해지 처리 시작")
+
+            # 1단계: Form Action URL 처리 시도
+            form_result = await self._try_form_action_submit(page, user_email)
+            if form_result["success"]:
+                return form_result
+
+            # 2단계: JavaScript 실행을 통한 처리 시도
+            js_result = await self._try_javascript_submit(page, user_email)
+            if js_result["success"]:
+                return js_result
+
+            # 3단계: 개선된 선택자로 처리 시도
+            selector_result = await self._try_enhanced_selectors(page, user_email)
+            if selector_result["success"]:
+                return selector_result
+
+            # 4단계: 링크 기반 처리 시도
+            link_result = await self._try_link_based_unsubscribe(page, user_email)
+            if link_result["success"]:
+                return link_result
+
+            return {
+                "success": False,
+                "message": "모든 구독해지 방법에서 실패했습니다.",
+                "reason": "all_methods_failed",
+            }
+
+        except Exception as e:
+            return {
+                "success": False,
+                "message": f"두 번째 페이지 구독해지 실패: {str(e)}",
+            }
+
+    async def _try_form_action_submit(self, page: Page, user_email: str = None) -> Dict:
+        """Form Action URL을 통한 구독해지 처리"""
+        try:
+            print(f"📝 Form Action URL 처리 시도")
+
+            # Form 요소 찾기
+            forms = await page.query_selector_all("form")
+
+            for form in forms:
+                try:
+                    action = await form.get_attribute("action")
+                    method = await form.get_attribute("method") or "GET"
+
+                    if action and "unsubscribe" in action.lower():
+                        print(f"📝 구독해지 Form 발견: {action}")
+
+                        # Form 데이터 수집
+                        form_data = {}
+                        inputs = await form.query_selector_all("input")
+
+                        for input_elem in inputs:
+                            name = await input_elem.get_attribute("name")
+                            value = await input_elem.get_attribute("value")
+                            input_type = await input_elem.get_attribute("type")
+
+                            if name and input_type != "submit":
+                                form_data[name] = value or ""
+
+                        print(f"📝 Form 데이터: {form_data}")
+
+                        # POST 요청 실행
+                        if method.upper() == "POST":
+                            response = await page.request.post(action, data=form_data)
+                            print(f"📝 POST 요청 완료: {response.status}")
+
+                            if response.status in [200, 201, 302]:
+                                # 성공 확인
+                                if await self._check_basic_success_indicators(page):
+                                    return {
+                                        "success": True,
+                                        "message": "Form Action URL을 통한 구독해지 성공",
+                                        "method": "form_action_post",
+                                    }
+
+                        # GET 요청 실행
+                        elif method.upper() == "GET":
+                            query_string = "&".join(
+                                [f"{k}={v}" for k, v in form_data.items()]
+                            )
+                            full_url = (
+                                f"{action}?{query_string}" if query_string else action
+                            )
+
+                            await page.goto(full_url, wait_until="domcontentloaded")
+                            await page.wait_for_timeout(2000)
+
+                            if await self._check_basic_success_indicators(page):
+                                return {
+                                    "success": True,
+                                    "message": "Form Action URL을 통한 구독해지 성공",
+                                    "method": "form_action_get",
+                                }
+
+                except Exception as e:
+                    print(f"⚠️ Form 처리 중 오류: {str(e)}")
+                    continue
+
+            return {"success": False, "message": "Form Action URL 처리 실패"}
+
+        except Exception as e:
+            return {"success": False, "message": f"Form Action URL 처리 실패: {str(e)}"}
+
+    async def _try_javascript_submit(self, page: Page, user_email: str = None) -> Dict:
+        """JavaScript 실행을 통한 구독해지 처리"""
+        try:
+            print(f"📝 JavaScript 실행 처리 시도")
+
+            # 1. Form submit JavaScript 실행
+            forms = await page.query_selector_all("form")
+            for form in forms:
+                try:
+                    action = await form.get_attribute("action")
+                    if action and "unsubscribe" in action.lower():
+                        print(f"📝 JavaScript Form submit 실행: {action}")
+
+                        # JavaScript로 form submit 실행
+                        await page.evaluate("(form) => form.submit()", form)
+                        await page.wait_for_timeout(3000)
+
+                        if await self._check_basic_success_indicators(page):
+                            return {
+                                "success": True,
+                                "message": "JavaScript Form submit 성공",
+                                "method": "javascript_form_submit",
+                            }
+
+                except Exception as e:
+                    print(f"⚠️ JavaScript Form submit 실패: {str(e)}")
+                    continue
+
+            # 2. 클릭 이벤트 JavaScript 실행
+            click_selectors = [
                 "input[type='submit']",
+                "button[type='submit']",
                 "button",
-                "input[type='button']",
-                "a[href*='unsubscribe']",
-                "a[href*='opt-out']",
-                ".confirm-button",
-                ".submit-button",
                 ".unsubscribe-button",
-                "#confirm",
-                "#submit",
                 "#unsubscribe",
-                "[class*='confirm']",
-                "[class*='submit']",
                 "[class*='unsubscribe']",
             ]
 
-            for selector in second_page_selectors:
+            for selector in click_selectors:
                 try:
                     elements = await page.query_selector_all(selector)
+                    for element in elements:
+                        is_visible = await element.is_visible()
+                        if is_visible:
+                            print(f"📝 JavaScript 클릭 실행: {selector}")
+
+                            # JavaScript로 클릭 이벤트 실행
+                            await page.evaluate("(element) => element.click()", element)
+                            await page.wait_for_timeout(3000)
+
+                            if await self._check_basic_success_indicators(page):
+                                return {
+                                    "success": True,
+                                    "message": "JavaScript 클릭 성공",
+                                    "method": "javascript_click",
+                                }
+
+                except Exception as e:
+                    print(f"⚠️ JavaScript 클릭 실패: {str(e)}")
+                    continue
+
+            return {"success": False, "message": "JavaScript 실행 처리 실패"}
+
+        except Exception as e:
+            return {"success": False, "message": f"JavaScript 실행 처리 실패: {str(e)}"}
+
+    async def _try_enhanced_selectors(self, page: Page, user_email: str = None) -> Dict:
+        """개선된 선택자로 구독해지 처리"""
+        try:
+            print(f"📝 개선된 선택자 처리 시도")
+
+            # 확장된 선택자 목록
+            enhanced_selectors = [
+                # 기본 버튼/입력
+                "input[type='submit']",
+                "button[type='submit']",
+                "input[type='button']",
+                "button",
+                # 구독해지 관련
+                "a[href*='unsubscribe']",
+                "a[href*='opt-out']",
+                "a[href*='remove']",
+                "a[href*='cancel']",
+                ".unsubscribe",
+                "#unsubscribe",
+                "[class*='unsubscribe']",
+                "[id*='unsubscribe']",
+                ".unsubscribe-button",
+                "#unsubscribe-button",
+                # 확인/제출 관련
+                ".confirm-button",
+                ".submit-button",
+                "#confirm",
+                "#submit",
+                "[class*='confirm']",
+                "[class*='submit']",
+                "[id*='confirm']",
+                "[id*='submit']",
+                # 일반적인 버튼
+                ".btn",
+                ".button",
+                "[class*='btn']",
+                "[class*='button']",
+                # 텍스트 기반 선택자
+                "button:has-text('Unsubscribe')",
+                "button:has-text('구독해지')",
+                "button:has-text('Confirm')",
+                "button:has-text('확인')",
+                "input:has-text('Unsubscribe')",
+                "input:has-text('구독해지')",
+                # 폼 관련
+                "form[action*='unsubscribe']",
+                "form[action*='opt-out']",
+                "form[action*='remove']",
+                "form[action*='cancel']",
+            ]
+
+            for selector in enhanced_selectors:
+                try:
+                    elements = await page.query_selector_all(selector)
+
                     for element in elements:
                         is_visible = await element.is_visible()
                         is_enabled = await element.is_enabled()
@@ -900,7 +1313,7 @@ URL: {current_url}
                         if is_visible and is_enabled:
                             element_text = await element.text_content()
                             print(
-                                f"📝 두 번째 페이지 요소 발견: {selector} - 텍스트: '{element_text}'"
+                                f"📝 개선된 선택자 요소 발견: {selector} - 텍스트: '{element_text}'"
                             )
 
                             # 구독해지 관련 키워드 확인
@@ -915,37 +1328,42 @@ URL: {current_url}
                                 "취소",
                                 "remove",
                                 "제거",
+                                "opt-out",
+                                "수신거부",
+                                "수신취소",
                             ]
 
                             is_action_element = any(
-                                keyword in element_text.lower()
+                                (
+                                    keyword in element_text.lower()
+                                    if element_text
+                                    else False
+                                )
                                 for keyword in action_keywords
                             )
 
-                            if (
-                                is_action_element
-                                or "confirm" in selector.lower()
-                                or "submit" in selector.lower()
+                            if is_action_element or any(
+                                keyword in selector.lower()
+                                for keyword in ["unsubscribe", "confirm", "submit"]
                             ):
-                                print(f"📝 두 번째 페이지 요소 클릭: {element_text}")
+                                print(f"📝 개선된 선택자 요소 클릭: {element_text}")
 
                                 # 클릭 전 현재 URL 저장
                                 before_url = page.url
 
-                                # 클릭 실행
-                                await element.click()
-
-                                # 네트워크 요청 완료 대기
+                                # 클릭 실행 (짧은 타임아웃)
                                 try:
-                                    await page.wait_for_load_state(
-                                        "networkidle", timeout=10000
-                                    )
-                                    print("📝 네트워크 요청 완료 대기 성공")
-                                except Exception as e:
+                                    await element.click(timeout=5000)
+                                except Exception as click_error:
                                     print(
-                                        f"⚠️ 네트워크 대기 실패, 기본 대기로 전환: {str(e)}"
+                                        f"⚠️ 클릭 실패, JavaScript로 재시도: {str(click_error)}"
                                     )
-                                    await page.wait_for_timeout(3000)
+                                    await page.evaluate(
+                                        "(element) => element.click()", element
+                                    )
+
+                                # 짧은 대기
+                                await page.wait_for_timeout(2000)
 
                                 # URL 변경 확인
                                 after_url = page.url
@@ -954,58 +1372,68 @@ URL: {current_url}
                                         f"📝 URL 변경 감지: {before_url} → {after_url}"
                                     )
 
-                                # AI 기반 구독해지 완료 판단
-                                print("🤖 AI 기반 구독해지 완료 분석 시작...")
-                                ai_result = (
-                                    await self._analyze_unsubscribe_completion_with_ai(
-                                        page
-                                    )
-                                )
-
-                                if (
-                                    ai_result["success"]
-                                    and ai_result["confidence"] >= 70
-                                ):
-                                    print(
-                                        f"🤖 AI 분석으로 구독해지 완료 확인 (신뢰도: {ai_result['confidence']}%)"
-                                    )
+                                # 성공 확인
+                                if await self._check_basic_success_indicators(page):
                                     return {
                                         "success": True,
-                                        "message": f"두 번째 페이지 구독해지 성공 (AI 신뢰도: {ai_result['confidence']}%)",
-                                        "ai_confidence": ai_result["confidence"],
-                                        "ai_reason": ai_result["reason"],
+                                        "message": f"개선된 선택자로 구독해지 성공: {selector}",
+                                        "method": "enhanced_selector",
+                                        "selector": selector,
                                     }
-                                else:
-                                    print(
-                                        f"🤖 AI 분석 결과: 구독해지 미완료 (신뢰도: {ai_result['confidence']}%)"
-                                    )
-                                    # 기존 방식으로도 확인
-                                    if await self._check_basic_success_indicators(page):
-                                        print("📝 기본 지표로 성공 확인")
-                                        return {
-                                            "success": True,
-                                            "message": "두 번째 페이지 구독해지 성공",
-                                        }
-                                    else:
-                                        print("📝 구독해지 미완료로 판단")
-                                        return {
-                                            "success": False,
-                                            "message": "두 번째 페이지 구독해지 미완료",
-                                        }
 
                 except Exception as e:
-                    print(f"⚠️ 두 번째 페이지 선택자 {selector} 처리 중 오류: {str(e)}")
+                    print(f"⚠️ 개선된 선택자 {selector} 처리 중 오류: {str(e)}")
                     continue
 
-            return {
-                "success": False,
-                "message": "두 번째 페이지 구독해지 요소를 찾을 수 없습니다",
-            }
+            return {"success": False, "message": "개선된 선택자 처리 실패"}
+
+        except Exception as e:
+            return {"success": False, "message": f"개선된 선택자 처리 실패: {str(e)}"}
+
+    async def _try_link_based_unsubscribe(
+        self, page: Page, user_email: str = None
+    ) -> Dict:
+        """링크 기반 구독해지 처리"""
+        try:
+            print(f"📝 링크 기반 구독해지 처리 시도")
+
+            # 모든 링크 찾기
+            links = await page.query_selector_all("a[href]")
+
+            for link in links:
+                try:
+                    href = await link.get_attribute("href")
+                    link_text = await link.text_content()
+
+                    if href and any(
+                        keyword in href.lower()
+                        for keyword in ["unsubscribe", "opt-out", "remove", "cancel"]
+                    ):
+                        print(f"📝 구독해지 링크 발견: {href} - 텍스트: '{link_text}'")
+
+                        # 링크 클릭
+                        await link.click(timeout=5000)
+                        await page.wait_for_timeout(2000)
+
+                        # 성공 확인
+                        if await self._check_basic_success_indicators(page):
+                            return {
+                                "success": True,
+                                "message": f"링크 기반 구독해지 성공: {href}",
+                                "method": "link_based",
+                                "link": href,
+                            }
+
+                except Exception as e:
+                    print(f"⚠️ 링크 처리 중 오류: {str(e)}")
+                    continue
+
+            return {"success": False, "message": "링크 기반 구독해지 처리 실패"}
 
         except Exception as e:
             return {
                 "success": False,
-                "message": f"두 번째 페이지 구독해지 실패: {str(e)}",
+                "message": f"링크 기반 구독해지 처리 실패: {str(e)}",
             }
 
     async def _analyze_page_with_ai(self, page: Page, user_email: str = None) -> Dict:
@@ -1330,6 +1758,55 @@ URL: {current_url}
                             return {
                                 "success": True,
                                 "message": "AI 지시에 따른 폼 제출 완료",
+                            }
+
+            elif action == "confirm":
+                # 확인 버튼 클릭 처리
+                elements = await page.query_selector_all(
+                    "button:has-text('확인'), button:has-text('Confirm')"
+                )
+                for element in elements:
+                    element_text = await element.text_content()
+                    if target.lower() in element_text.lower():
+                        print(f"📝 AI 지시에 따른 확인 버튼 클릭: {element_text}")
+
+                        # 클릭 전 현재 URL 저장
+                        before_url = page.url
+
+                        # 클릭 실행
+                        await element.click()
+
+                        # 네트워크 요청 완료 대기
+                        try:
+                            await page.wait_for_load_state("networkidle", timeout=10000)
+                            print("📝 네트워크 요청 완료 대기 성공")
+                        except Exception as e:
+                            print(f"⚠️ 네트워크 대기 실패, 기본 대기로 전환: {str(e)}")
+                            await page.wait_for_timeout(2000)
+
+                        # AI 기반 구독해지 완료 판단
+                        print("🤖 AI 기반 구독해지 완료 분석 시작...")
+                        ai_result = await self._analyze_unsubscribe_completion_with_ai(
+                            page
+                        )
+
+                        if ai_result["success"] and ai_result["confidence"] >= 70:
+                            print(
+                                f"🤖 AI 분석으로 구독해지 완료 확인 (신뢰도: {ai_result['confidence']}%)"
+                            )
+                            return {
+                                "success": True,
+                                "message": f"AI 지시에 따른 확인 버튼 클릭 완료 (AI 신뢰도: {ai_result['confidence']}%)",
+                                "ai_confidence": ai_result["confidence"],
+                                "ai_reason": ai_result["reason"],
+                            }
+                        else:
+                            print(
+                                f"🤖 AI 분석 결과: 구독해지 미완료 (신뢰도: {ai_result['confidence']}%)"
+                            )
+                            return {
+                                "success": True,
+                                "message": "AI 지시에 따른 확인 버튼 클릭 완료",
                             }
 
             return {"success": False, "message": "AI 지시를 실행할 수 없습니다"}
