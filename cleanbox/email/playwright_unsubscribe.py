@@ -9,6 +9,7 @@ import re
 import time
 import os
 import json
+import psutil
 from typing import List, Dict, Optional
 from urllib.parse import urlparse
 
@@ -114,6 +115,19 @@ class PlaywrightUnsubscribeService:
             "browser_reuses": 0,
             "memory_usage": [],
         }
+
+    def _log_memory_usage(self, stage: str):
+        """메모리 사용량 로깅"""
+        try:
+            process = psutil.Process(os.getpid())
+            memory_info = process.memory_info()
+            memory_mb = memory_info.rss / 1024 / 1024
+            print(f"📊 메모리 사용량 [{stage}]: {memory_mb:.1f} MB")
+            self.stats["memory_usage"].append(
+                {"stage": stage, "memory_mb": memory_mb, "timestamp": time.time()}
+            )
+        except Exception as e:
+            print(f"⚠️ 메모리 모니터링 실패: {str(e)}")
 
     async def initialize_browser(self):
         """브라우저 초기화 (재사용 가능)"""
@@ -1513,24 +1527,34 @@ JSON 형식으로 답변해주세요:
             return False
 
     async def _wait_for_service_worker(self, page: Page) -> bool:
-        """Service Worker 등록 대기"""
+        """Service Worker 등록 대기 (타임아웃 포함)"""
         try:
             print("📝 Service Worker 등록 대기")
 
-            # Service Worker 등록 확인
+            # Service Worker 등록 확인 (5초 타임아웃)
             sw_result = await page.evaluate(
                 """
                 () => {
-                    if ('serviceWorker' in navigator) {
-                        return navigator.serviceWorker.ready.then(() => {
-                            return { success: true, message: 'Service Worker ready' };
-                        }).catch(e => {
-                            return { success: false, error: e.message };
-                        });
-                    }
-                    return { success: false, message: 'Service Worker not supported' };
+                    return new Promise((resolve) => {
+                        if ('serviceWorker' in navigator) {
+                            // 5초 타임아웃 설정
+                            const timeout = setTimeout(() => {
+                                resolve({ success: false, message: 'Service Worker timeout' });
+                            }, 5000);
+                            
+                            navigator.serviceWorker.ready.then(() => {
+                                clearTimeout(timeout);
+                                resolve({ success: true, message: 'Service Worker ready' });
+                            }).catch(e => {
+                                clearTimeout(timeout);
+                                resolve({ success: false, error: e.message });
+                            });
+                        } else {
+                            resolve({ success: false, message: 'Service Worker not supported' });
+                        }
+                    });
                 }
-            """
+                """
             )
 
             if sw_result.get("success"):
@@ -1735,6 +1759,7 @@ JSON 형식으로 답변해주세요:
         """통합 JavaScript 기반 구독해지 처리 (모든 방법 통합 + 개선된 기능)"""
         try:
             print(f"📝 통합 JavaScript 구독해지 처리 시작")
+            self._log_memory_usage("javascript_submit_start")
 
             # 0단계: CAPTCHA 감지 및 처리
             if await self._detect_captcha(page):
@@ -1755,10 +1780,8 @@ JSON 형식으로 답변해주세요:
             if form_result["success"]:
                 return form_result
 
-            # 3단계: Service Worker 대기 (최신 웹사이트 지원)
-            await self._wait_for_service_worker(page)
-
-            # 4단계: Form submit JavaScript 실행
+            # 3단계: Form submit JavaScript 실행
+            self._log_memory_usage("form_submit_start")
             forms = await page.query_selector_all("form")
             for form in forms:
                 try:
@@ -1800,7 +1823,7 @@ JSON 형식으로 답변해주세요:
                     print(f"⚠️ JavaScript Form submit 실패: {str(e)}")
                     continue
 
-            # 5단계: 복잡한 JavaScript 로직 실행
+            # 4단계: 복잡한 JavaScript 로직 실행
             if await self._execute_complex_javascript(page):
                 # 복잡한 JavaScript 실행 후 구독해지 완료 확인
                 if await self._check_already_unsubscribed(page):
@@ -1810,7 +1833,7 @@ JSON 형식으로 답변해주세요:
                         "method": "complex_js_completed",
                     }
 
-            # 6단계: 개선된 선택자로 클릭 처리
+            # 5단계: 개선된 선택자로 클릭 처리
             enhanced_selectors = [
                 "input[type='submit']",
                 "button[type='submit']",
@@ -1901,14 +1924,14 @@ JSON 형식으로 답변해주세요:
                     print(f"⚠️ JavaScript 클릭 실패: {str(e)}")
                     continue
 
-            # 7단계: 다단계 구독해지 처리
+            # 6단계: 다단계 구독해지 처리
             multi_step_result = await self._handle_multi_step_unsubscribe(
                 page, user_email
             )
             if multi_step_result["success"]:
                 return multi_step_result
 
-            # 8단계: 링크 기반 처리
+            # 7단계: 링크 기반 처리
             link_result = await self._try_link_based_unsubscribe(page, user_email)
             if link_result["success"]:
                 return link_result
