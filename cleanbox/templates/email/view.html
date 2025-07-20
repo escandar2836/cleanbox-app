@@ -392,12 +392,24 @@ function handleUnsubscribeResult(data, modalElement) {
     }
     
     if (data.success) {
+        // 일괄 업데이트 정보 포함
+        let bulkUpdateInfo = '';
+        if (data.bulk_updated_count && data.bulk_updated_count > 0) {
+            bulkUpdateInfo = `
+                <div class="alert alert-info mt-3">
+                    <i class="fas fa-info-circle"></i>
+                    <strong>일괄 업데이트 완료:</strong> ${data.bulk_updated_message}
+                </div>
+            `;
+        }
+        
         modalBody.innerHTML = `
             <div class="text-center">
                 <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
                 <h5 class="text-success">구독 해지 완료!</h5>
                 <p>${data.message}</p>
                 ${data.steps ? `<div class="mt-3"><strong>처리 단계:</strong><ul class="text-start">${data.steps.map(step => `<li>${step}</li>`).join('')}</ul></div>` : ''}
+                ${bulkUpdateInfo}
             </div>
         `;
         

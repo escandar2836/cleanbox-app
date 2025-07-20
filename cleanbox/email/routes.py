@@ -911,154 +911,185 @@ def bulk_actions():
             flash(result_message, "info" if failed_emails else "success")
 
         elif action == "unsubscribe":
-            # 대량 구독해지 (개선된 버전)
+            # 대량 구독해지 (발신자별 그룹화 처리)
             print(f"🔍 대량 구독해지 시작 - 선택된 이메일 수: {len(email_ids)}")
 
-            # 결과 수집을 위한 변수들
-            success_count = 0
-            failed_emails = []
-            personal_emails = []
-            already_unsubscribed_count = 0  # 이미 구독해지된 이메일 카운트 추가
-
+            # 선택된 이메일들을 발신자별로 그룹화
+            sender_groups = {}
             for email_id in email_ids:
                 try:
-                    print(f"📝 이메일 {email_id} 처리 시작")
                     email_obj = Email.query.filter_by(
                         id=int(email_id), user_id=current_user.id
                     ).first()
 
                     if not email_obj:
                         print(f"❌ 이메일 {email_id}를 찾을 수 없음")
-                        failed_emails.append(
-                            {
-                                "id": email_id,
-                                "subject": "알 수 없음",
-                                "error": "이메일을 찾을 수 없습니다",
-                            }
-                        )
                         continue
 
-                    if email_obj.is_unsubscribed:
-                        print(f"⏭️ 이메일 {email_id}는 이미 구독해지됨")
-                        already_unsubscribed_count += 1  # 이미 구독해지된 이메일 카운트
-                        continue
+                    sender = email_obj.sender
+                    if sender not in sender_groups:
+                        sender_groups[sender] = []
+                    sender_groups[sender].append(email_obj)
 
-                    print(f"📝 이메일 {email_id} 구독해지 처리 중...")
+                except Exception as e:
+                    print(f"❌ 이메일 {email_id} 조회 중 예외 발생: {str(e)}")
+                    continue
+
+            print(f"📝 발신자별 그룹화 완료 - {len(sender_groups)}개 발신자")
+
+            # 결과 수집을 위한 변수들
+            successful_senders = []  # 성공한 발신자 목록
+            failed_senders = []  # 실패한 발신자 목록 (발신자, 실패 이유)
+            already_unsubscribed_senders = []  # 이미 구독해지된 발신자 목록
+
+            # 각 발신자 그룹별로 처리
+            for sender, emails in sender_groups.items():
+                print(f"📝 발신자 '{sender}' 처리 시작 - {len(emails)}개 이메일")
+
+                # 이미 구독해지된 이메일이 있는지 확인
+                unsubscribed_count = sum(1 for email in emails if email.is_unsubscribed)
+                if unsubscribed_count == len(emails):
+                    print(f"⏭️ 발신자 '{sender}'의 모든 이메일이 이미 구독해지됨")
+                    already_unsubscribed_senders.append(sender)
+                    continue
+
+                # 대표 이메일 선택 (구독해지되지 않은 첫 번째 이메일)
+                representative_email = None
+                for email in emails:
+                    if not email.is_unsubscribed:
+                        representative_email = email
+                        break
+
+                if not representative_email:
+                    print(f"⏭️ 발신자 '{sender}'의 모든 이메일이 이미 구독해지됨")
+                    already_unsubscribed_senders.append(sender)
+                    continue
+
+                print(
+                    f"📝 발신자 '{sender}' 대표 이메일 선택: {representative_email.subject}"
+                )
+
+                try:
                     # 구독해지 처리
-                    gmail_service = GmailService(current_user.id, email_obj.account_id)
-                    print(f"📝 GmailService 초기화 완료 - 계정: {email_obj.account_id}")
+                    gmail_service = GmailService(
+                        current_user.id, representative_email.account_id
+                    )
+                    print(
+                        f"📝 GmailService 초기화 완료 - 계정: {representative_email.account_id}"
+                    )
 
-                    result = gmail_service.process_unsubscribe(email_obj)
+                    result = gmail_service.process_unsubscribe(representative_email)
                     print(f"📝 process_unsubscribe 결과: {result}")
 
                     if result["success"]:
-                        success_count += 1
-                        print(
-                            f"✅ 이메일 {email_id} 구독해지 성공 - success_count: {success_count}"
+                        print(f"✅ 발신자 '{sender}' 구독해지 성공")
+                        successful_senders.append(
+                            {
+                                "sender": sender,
+                                "email_count": len(emails),
+                                "bulk_updated_count": result.get(
+                                    "bulk_updated_count", 0
+                                ),
+                                "representative_subject": representative_email.subject,
+                            }
                         )
                     else:
                         # 실패 이유 분석
                         error_type = result.get("error_type", "unknown")
                         error_details = result.get("error_details", "알 수 없는 오류")
+                        error_message = result.get(
+                            "message", "구독해지 처리에 실패했습니다."
+                        )
 
                         if error_type == "personal_email":
-                            personal_emails.append(
-                                {
-                                    "id": email_id,
-                                    "subject": email_obj.subject,
-                                    "sender": email_obj.sender,
-                                    "error": "개인 이메일로 감지됨",
-                                    "error_type": "personal_email",
-                                }
-                            )
+                            error_message = "개인 이메일로 감지됨"
                         elif error_type == "already_unsubscribed":
-                            # 이미 구독해지된 경우 (처리 중에 감지된 경우)
-                            already_unsubscribed_count += 1
-                            print(
-                                f"⏭️ 이메일 {email_id}는 처리 중에 이미 구독해지됨으로 감지됨"
-                            )
-                        else:
-                            failed_emails.append(
-                                {
-                                    "id": email_id,
-                                    "subject": email_obj.subject,
-                                    "sender": email_obj.sender,
-                                    "error": error_details,
-                                    "error_type": error_type,
-                                }
-                            )
+                            already_unsubscribed_senders.append(sender)
+                            continue
+
+                        print(f"❌ 발신자 '{sender}' 구독해지 실패: {error_message}")
+                        failed_senders.append(
+                            {
+                                "sender": sender,
+                                "email_count": len(emails),
+                                "error": error_message,
+                                "error_type": error_type,
+                                "representative_subject": representative_email.subject,
+                            }
+                        )
 
                 except Exception as e:
-                    print(f"❌ 이메일 {email_id} 처리 중 예외 발생: {str(e)}")
-                    failed_emails.append(
+                    print(f"❌ 발신자 '{sender}' 처리 중 예외 발생: {str(e)}")
+                    failed_senders.append(
                         {
-                            "id": email_id,
-                            "subject": "알 수 없음",
+                            "sender": sender,
+                            "email_count": len(emails),
                             "error": f"처리 오류: {str(e)}",
                             "error_type": "processing_error",
+                            "representative_subject": (
+                                representative_email.subject
+                                if representative_email
+                                else "알 수 없음"
+                            ),
                         }
                     )
 
-            # 에러 타입별로 그룹화
-            error_groups = {}
-            for email in failed_emails:
-                error_type = email.get("error_type", "unknown")
-                if error_type not in error_groups:
-                    error_groups[error_type] = []
-                error_groups[error_type].append(email)
-
-            # 결과 메시지 생성 (성공은 항상 표시, 실패는 존재할 때만)
-            total_processed = (
-                success_count
-                + len(failed_emails)
-                + len(personal_emails)
-                + already_unsubscribed_count
-            )
+            # 결과 메시지 생성
             message_parts = []
+            total_senders = len(sender_groups)
 
-            # 성공 개수는 항상 표시 (0이어도)
-            message_parts.append(f"✅ 성공: {success_count}개")
+            # 성공한 발신자 목록
+            if successful_senders:
+                message_parts.append(f"✅ 성공한 발신자 ({len(successful_senders)}개):")
+                for sender_info in successful_senders:
+                    bulk_info = (
+                        f" (일괄 업데이트: {sender_info['bulk_updated_count']}개)"
+                        if sender_info["bulk_updated_count"] > 0
+                        else ""
+                    )
+                    message_parts.append(
+                        f"  • {sender_info['sender']} - {sender_info['email_count']}개 이메일{bulk_info}"
+                    )
 
-            # 이미 구독해지된 이메일은 존재할 때만 표시
-            if already_unsubscribed_count > 0:
-                message_parts.append(
-                    f"⏭️ 이미 구독해지됨: {already_unsubscribed_count}개"
-                )
-
-            # 개인 이메일은 존재할 때만 표시
-            if personal_emails:
-                message_parts.append(f"📧 개인 이메일: {len(personal_emails)}개")
-
-            # 에러 타입별로 실제 발생한 것만 표시
-            for error_type, emails in error_groups.items():
-                if emails:  # 실제 발생한 에러만 표시
+            # 실패한 발신자 목록
+            if failed_senders:
+                message_parts.append(f"❌ 실패한 발신자 ({len(failed_senders)}개):")
+                for sender_info in failed_senders:
                     error_name = {
                         "no_unsubscribe_link": "구독해지 링크 없음",
                         "all_links_failed": "모든 링크 실패",
                         "processing_error": "처리 오류",
                         "network_error": "네트워크 오류",
                         "timeout_error": "시간 초과",
-                        "already_unsubscribed": "이미 구독해지됨",
+                        "personal_email": "개인 이메일",
                         "unknown": "알 수 없는 오류",
-                    }.get(error_type, error_type)
+                    }.get(sender_info["error_type"], sender_info["error_type"])
 
-                    message_parts.append(f"❌ {error_name}: {len(emails)}개")
+                    message_parts.append(
+                        f"  • {sender_info['sender']} - {sender_info['email_count']}개 이메일 ({error_name}: {sender_info['error']})"
+                    )
 
-            result_message = f"처리 완료 ({total_processed}개):\n" + "\n".join(
-                message_parts
+            # 이미 구독해지된 발신자 목록
+            if already_unsubscribed_senders:
+                message_parts.append(
+                    f"⏭️ 이미 구독해지된 발신자 ({len(already_unsubscribed_senders)}개):"
+                )
+                for sender in already_unsubscribed_senders:
+                    message_parts.append(f"  • {sender}")
+
+            # 전체 요약
+            total_processed = (
+                len(successful_senders)
+                + len(failed_senders)
+                + len(already_unsubscribed_senders)
+            )
+            result_message = (
+                f"처리 완료 ({total_processed}/{total_senders}개 발신자):\n"
+                + "\n".join(message_parts)
             )
 
             print(f"🎉 대량 구독해지 완료 - {result_message}")
-            flash(
-                result_message,
-                (
-                    "info"
-                    if failed_emails
-                    or personal_emails
-                    or already_unsubscribed_count > 0
-                    else "success"
-                ),
-            )
+            flash(result_message, "info" if failed_senders else "success")
 
         else:
             return (
@@ -1079,9 +1110,16 @@ def bulk_actions():
                 "message": result_message,
                 "action": action,
                 "total_processed": len(email_ids),
-                "success_count": success_count if "success_count" in locals() else 0,
-                "failed_count": (
-                    len(failed_emails) if "failed_emails" in locals() else 0
+                "successful_senders": (
+                    len(successful_senders) if "successful_senders" in locals() else 0
+                ),
+                "failed_senders": (
+                    len(failed_senders) if "failed_senders" in locals() else 0
+                ),
+                "already_unsubscribed_senders": (
+                    len(already_unsubscribed_senders)
+                    if "already_unsubscribed_senders" in locals()
+                    else 0
                 ),
             }
         )
@@ -1162,14 +1200,24 @@ def unsubscribe_email(email_id):
         # 결과 반환
         if result["success"]:
             print(f"✅ 이메일 {email_id} 구독해지 성공")
-            return jsonify(
-                {
-                    "success": True,
-                    "message": "구독해지가 성공적으로 처리되었습니다.",
-                    "steps": result.get("steps", []),
-                    "email_id": email_id,
-                }
-            )
+
+            # 일괄 업데이트 정보 포함
+            response_data = {
+                "success": True,
+                "message": "구독해지가 성공적으로 처리되었습니다.",
+                "steps": result.get("steps", []),
+                "email_id": email_id,
+            }
+
+            # 일괄 업데이트 정보가 있으면 추가
+            if "bulk_updated_count" in result:
+                response_data["bulk_updated_count"] = result["bulk_updated_count"]
+                response_data["bulk_updated_message"] = result["bulk_updated_message"]
+                print(
+                    f"📝 일괄 업데이트 정보 추가: {result['bulk_updated_count']}개 이메일"
+                )
+
+            return jsonify(response_data)
         else:
             error_message = result.get("message", "구독해지 처리에 실패했습니다.")
             error_type = result.get("error_type", "unknown")

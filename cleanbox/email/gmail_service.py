@@ -485,6 +485,42 @@ class GmailService:
                 # DB에서 구독해지 상태 업데이트
                 email_obj.is_unsubscribed = True
                 email_obj.updated_at = datetime.utcnow()
+
+                # 동일한 발신자로부터 온 다른 이메일들도 일괄 업데이트
+                print(
+                    f"📝 동일 발신자 이메일 일괄 업데이트 시작 - 발신자: {email_obj.sender}"
+                )
+                from ..models import Email
+
+                # 같은 사용자와 같은 발신자로부터 온 다른 이메일들 찾기
+                related_emails = Email.query.filter(
+                    Email.user_id == self.user_id,
+                    Email.sender == email_obj.sender,
+                    Email.id != email_obj.id,  # 현재 이메일 제외
+                    Email.is_unsubscribed == False,  # 아직 구독해지되지 않은 이메일만
+                ).all()
+
+                if related_emails:
+                    print(f"📝 일괄 업데이트할 이메일 수: {len(related_emails)}")
+                    for related_email in related_emails:
+                        related_email.is_unsubscribed = True
+                        related_email.updated_at = datetime.utcnow()
+                        print(
+                            f"📝 이메일 ID {related_email.id} 업데이트: {related_email.subject}"
+                        )
+
+                    # 일괄 업데이트 결과를 결과에 추가
+                    result["bulk_updated_count"] = len(related_emails)
+                    result["bulk_updated_message"] = (
+                        f"동일 발신자로부터 온 {len(related_emails)}개의 이메일도 함께 구독해지 처리되었습니다."
+                    )
+                else:
+                    print(f"📝 일괄 업데이트할 이메일 없음")
+                    result["bulk_updated_count"] = 0
+                    result["bulk_updated_message"] = (
+                        "동일 발신자로부터 온 다른 이메일이 없습니다."
+                    )
+
                 db.session.commit()
                 print(f"✅ DB 업데이트 완료")
             else:
