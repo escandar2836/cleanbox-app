@@ -1,152 +1,174 @@
-# CleanBox - 이메일 관리 및 구독 해지 자동화 서비스
+# CleanBox - AI 기반 이메일 관리 시스템
 
-CleanBox는 이메일 관리와 함께 웹 스크래핑을 통한 구독 해지 자동화 기능을 제공하는 Flask 기반 웹 애플리케이션입니다.
+## 🚀 빠른 시작
 
-## 🚀 주요 기능
+### 1. 환경 설정
 
-### 이메일 관리
-- Gmail API를 통한 이메일 수신 및 처리
-- AI 기반 이메일 분류 및 카테고리 관리
-- 웹훅을 통한 실시간 이메일 알림
-- 구독 해지 이메일 자동 감지
-
-### 구독 해지 자동화 (신규 기능)
-- **Playwright** 기반 headless 브라우저 자동화
-- 지원 서비스:
-  - Netflix
-  - Spotify  
-  - YouTube Premium
-  - Amazon Prime
-  - Disney+
-  - Hulu
-- 웹 인터페이스를 통한 간편한 구독 해지
-- 비동기 작업 처리로 안정적인 실행
-
-## 🛠️ 기술 스택
-
-- **Backend**: Flask, Python 3.11
-- **Database**: PostgreSQL
-- **Browser Automation**: Playwright
-- **Deployment**: Docker, Render
-- **Frontend**: Bootstrap, JavaScript
-
-## 📦 설치 및 실행
-
-### 로컬 개발 환경
-
-1. **저장소 클론**
 ```bash
-git clone https://github.com/your-username/cleanbox-app.git
+# 1. 저장소 클론
+git clone <repository-url>
 cd cleanbox-app
+
+# 2. 환경변수 파일 설정
+cp env.example .env
 ```
 
-2. **가상환경 생성 및 활성화**
+**중요**: `.env` 파일에서 다음 값들을 실제 값으로 변경하세요:
+
 ```bash
+# 보안 키 설정 (실제 값으로 변경하세요)
+SECRET_KEY=your-secret-key-here
+CLEANBOX_ENCRYPTION_KEY=NZnrraDcMdcD7vmY0Gd5YXqkCbm-28MgyZfcaJCAYgc=
+
+# Google OAuth 설정
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+
+# OpenAI 설정
+OPENAI_API_KEY=your-openai-api-key
+OPENAI_MODEL=gpt-4.1-nano
+```
+
+**Fernet 키 생성 방법**:
+```bash
+python3 -c "from cryptography.fernet import Fernet; print('Generated Fernet Key:', Fernet.generate_key().decode())"
+```
+
+### 2. 로컬 개발 환경 실행
+
+```bash
+# 3. 가상환경 생성 및 활성화
 python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
-```
 
-3. **의존성 설치**
-```bash
+# 4. 의존성 설치
 pip install -r requirements.txt
-```
 
-4. **Playwright 브라우저 설치**
-```bash
-playwright install --with-deps chromium
-```
+# 5. 환경변수 검증
+python scripts/validate-env.py
 
-5. **환경 변수 설정**
-```bash
-cp env.example .env
-# .env 파일을 편집하여 필요한 환경 변수 설정
-```
-
-6. **데이터베이스 초기화**
-```bash
+# 6. 애플리케이션 실행
 python app.py
 ```
 
-### Docker를 통한 실행
+## 🔧 문제 해결
 
-1. **Docker 이미지 빌드**
+### Fernet Key 오류 해결
+
+**오류**: `Fernet key must be 32 url-safe base64-encoded bytes`
+
+**해결 방법**:
+1. 올바른 Fernet 키 생성:
+   ```bash
+   python3 -c "from cryptography.fernet import Fernet; print('Generated Fernet Key:', Fernet.generate_key().decode())"
+   ```
+
+2. `.env` 파일에서 `CLEANBOX_ENCRYPTION_KEY` 업데이트:
+   ```bash
+   CLEANBOX_ENCRYPTION_KEY=생성된_키_값
+   ```
+
+3. 애플리케이션 재시작:
+   ```bash
+   python app.py
+   ```
+
+### 환경변수 로딩 문제 해결
+
+**문제**: 환경변수가 제대로 로드되지 않음
+
+**해결 방법**:
+1. 환경변수 검증 스크립트 실행:
+   ```bash
+   python scripts/validate-env.py
+   ```
+
+2. `.env` 파일이 프로젝트 루트에 있는지 확인
+
+3. 환경변수 파일 형식 확인:
+   ```bash
+   # .env 파일 예시
+   FLASK_APP=app.py
+   FLASK_ENV=development
+   FLASK_PORT=5001
+   SECRET_KEY=your-secret-key-here
+   CLEANBOX_ENCRYPTION_KEY=your-encryption-key-here
+   ```
+
+## 📋 주요 기능
+
+- 🔐 **보안**: Fernet 암호화로 OAuth 토큰 보안 저장
+- 🤖 **AI 분류**: OpenAI를 사용한 이메일 자동 분류
+- 📧 **Gmail 연동**: Google OAuth를 통한 안전한 Gmail 접근
+- 🗂️ **카테고리 관리**: 사용자 정의 이메일 카테고리
+- ⏰ **자동 동기화**: 스케줄러를 통한 정기적인 이메일 동기화
+
+## 🛠️ 개발 환경
+
+### 로컬 개발
+
 ```bash
-docker build -t cleanbox-app .
+# 가상환경 생성
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
+# 의존성 설치
+pip install -r requirements.txt
+
+# 환경변수 설정
+cp env.example .env
+# .env 파일 편집
+
+# 애플리케이션 실행
+python app.py
 ```
 
-2. **컨테이너 실행**
+### 테스트 실행
+
 ```bash
-docker run -p 8000:8000 cleanbox-app
+# 전체 테스트
+pytest
+
+# 특정 테스트
+pytest tests/test_auth.py
 ```
 
-## 🌐 사용 방법
+## 📁 프로젝트 구조
 
-### 웹 인터페이스
-
-1. 브라우저에서 `http://localhost:8000` 접속
-2. 로그인 후 대시보드에서 이메일 관리 기능 사용
-3. 구독 해지 기능은 `/unsubscribe` 페이지에서 사용
-
-### API 사용
-
-#### 구독 해지 요청
-```bash
-curl -X POST http://localhost:8000/api/unsubscribe \
-  -H "Content-Type: application/json" \
-  -d '{
-    "service": "netflix",
-    "email": "user@example.com",
-    "password": "password123"
-  }'
+```
+cleanbox-app/
+├── cleanbox/           # 메인 애플리케이션
+│   ├── auth/          # 인증 관련
+│   ├── email/         # 이메일 처리
+│   ├── category/      # 카테고리 관리
+│   └── main/          # 메인 기능
+├── scripts/           # 유틸리티 스크립트
+├── tests/            # 테스트 코드
+└── requirements.txt   # Python 의존성
 ```
 
-#### 작업 상태 확인
-```bash
-curl http://localhost:8000/api/unsubscribe/status/task_1
-```
+## 🔒 보안
 
-#### 지원 서비스 목록 조회
-```bash
-curl http://localhost:8000/api/unsubscribe/services
-```
+- **Fernet 암호화**: OAuth 토큰을 안전하게 저장
+- **환경변수**: 민감한 정보는 환경변수로 관리
+- **OAuth 2.0**: Google API 안전한 접근
 
-## 🔧 환경 변수
+## 🚀 배포
 
-| 변수명 | 설명 | 기본값 |
-|--------|------|--------|
-| `DATABASE_URI` | PostgreSQL 연결 문자열 | - |
-| `GMAIL_CLIENT_ID` | Gmail API 클라이언트 ID | - |
-| `GMAIL_CLIENT_SECRET` | Gmail API 클라이언트 시크릿 | - |
-| `FLASK_SECRET_KEY` | Flask 시크릿 키 | - |
+### Render 배포
 
-## 🚀 Render 배포
+1. **Render 계정 생성 및 프로젝트 연결**
+2. **환경변수 설정**:
+   ```
+   GOOGLE_CLIENT_ID=your-google-client-id
+   GOOGLE_CLIENT_SECRET=your-google-client-secret
+   GOOGLE_REDIRECT_URI=https://your-app.onrender.com/auth/callback
+   OPENAI_API_KEY=your-openai-api-key
+   OPENAI_MODEL=gpt-4.1-nano
+   ```
+3. **PostgreSQL 데이터베이스 생성** (Render에서 제공)
+4. **배포 완료**
 
-이 프로젝트는 Docker 기반으로 Render에 배포됩니다.
-
-1. Render 대시보드에서 새 Web Service 생성
-2. GitHub 저장소 연결
-3. 환경 변수 설정
-4. 자동 배포 완료
-
-## 🔒 보안 고려사항
-
-- 계정 정보는 메모리에만 임시 저장되며 영구 저장되지 않습니다
-- HTTPS를 통한 안전한 통신
-- 환경 변수를 통한 민감한 정보 관리
-- Docker 컨테이너 격리
-
-## 📝 라이선스
+## 📄 라이선스
 
 MIT License
-
-## 🤝 기여하기
-
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-## 📞 문의
-
-프로젝트에 대한 문의사항이 있으시면 이슈를 생성해주세요.

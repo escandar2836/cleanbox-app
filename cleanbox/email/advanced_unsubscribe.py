@@ -1525,23 +1525,13 @@ class AdvancedUnsubscribeService:
 
     def monitor_system_health(self) -> Dict:
         """시스템 상태 모니터링"""
-        try:
-            import psutil
-
-            cpu_usage = psutil.cpu_percent()
-            memory_usage = psutil.virtual_memory().percent
-            disk_usage = psutil.disk_usage("/").percent
-        except ImportError:
-            # psutil이 없는 경우 기본값 사용
-            cpu_usage = 0
-            memory_usage = 0
-            disk_usage = 0
+        import psutil
 
         health_data = {
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-            "cpu_usage": cpu_usage,
-            "memory_usage": memory_usage,
-            "disk_usage": disk_usage,
+            "cpu_usage": psutil.cpu_percent(),
+            "memory_usage": psutil.virtual_memory().percent,
+            "disk_usage": psutil.disk_usage("/").percent,
             "total_attempts": self.stats["total_attempts"],
             "success_rate": (
                 self.stats["successful_unsubscribes"]
