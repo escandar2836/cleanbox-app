@@ -10,12 +10,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_apscheduler import APScheduler
 from sqlalchemy.exc import OperationalError, DisconnectionError
 
-# psycopg3 설정
-import os
-
-if os.environ.get("DATABASE_URI") or os.environ.get("DATABASE_URL"):
-    # psycopg3 사용 설정
-    os.environ.setdefault("PSYCOPG_IMPL", "binary")
+# psycopg3는 자동으로 binary 구현을 사용합니다
 
 # Local imports
 from .config import Config

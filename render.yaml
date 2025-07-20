@@ -7,8 +7,7 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
-      - key: PSYCOPG_IMPL
-        value: binary
+
       - key: DATABASE_URI
         fromDatabase:
           name: cleanbox-db

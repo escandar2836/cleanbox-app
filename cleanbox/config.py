@@ -30,16 +30,11 @@ def get_encryption_key():
 
 class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY") or "dev-secret-key"
-    # PostgreSQL 연결을 위한 환경변수 설정
-    if os.environ.get("DATABASE_URI") or os.environ.get("DATABASE_URL"):
-        # psycopg3 사용을 위한 환경변수 설정
-        os.environ.setdefault("PSYCOPG_IMPL", "binary")
-
-        # DATABASE_URI 처리 - psycopg3 dialect 명시
+    # PostgreSQL 연결 설정
     database_uri = os.environ.get("DATABASE_URI") or os.environ.get("DATABASE_URL")
 
     if database_uri and database_uri.startswith("postgresql://"):
-        # psycopg3 dialect로 변경
+        # psycopg3 dialect 명시
         database_uri = database_uri.replace("postgresql://", "postgresql+psycopg://")
 
     SQLALCHEMY_DATABASE_URI = database_uri or "sqlite:///cleanbox.db"
