@@ -11,8 +11,6 @@ RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
     python3-dev \
-    chromium \
-    chromium-driver \
     && rm -rf /var/lib/apt/lists/*
 
 # 작업 디렉토리 설정
@@ -23,9 +21,12 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Chrome 환경 변수 설정
-ENV CHROME_BIN=/usr/bin/chromium
-ENV CHROMEDRIVER_PATH=/usr/bin/chromedriver
+# Playwright 브라우저 설치
+RUN playwright install chromium
+RUN playwright install-deps chromium
+
+# Playwright 환경 변수 설정
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 # 메모리 제한 및 성능 최적화 환경 변수
 ENV PYTHONUNBUFFERED=1

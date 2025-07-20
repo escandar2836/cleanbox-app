@@ -12,7 +12,10 @@ import requests
 from bs4 import BeautifulSoup
 
 # Local imports
-from .selenium_unsubscribe import SeleniumUnsubscribeService
+from .playwright_unsubscribe import (
+    PlaywrightUnsubscribeService,
+    process_unsubscribe_sync,
+)
 
 
 class AdvancedUnsubscribeService:
@@ -20,7 +23,7 @@ class AdvancedUnsubscribeService:
 
     def __init__(self):
         self.setup_logging()
-        self.selenium_service = SeleniumUnsubscribeService()
+        self.playwright_service = PlaywrightUnsubscribeService()
 
         # 타임아웃 설정
         self.timeouts = {
@@ -61,8 +64,8 @@ class AdvancedUnsubscribeService:
     def extract_unsubscribe_links(
         self, email_content: str, email_headers: Dict = None
     ) -> List[str]:
-        """이메일에서 구독해지 링크 추출 (Selenium 서비스 사용)"""
-        return self.selenium_service.extract_unsubscribe_links(
+        """이메일에서 구독해지 링크 추출 (Playwright 서비스 사용)"""
+        return self.playwright_service.extract_unsubscribe_links(
             email_content, email_headers
         )
 
@@ -134,14 +137,12 @@ class AdvancedUnsubscribeService:
             return False
 
     def process_unsubscribe_simple(self, unsubscribe_url: str) -> Dict:
-        """간단한 구독해지 처리 (Selenium 서비스 사용)"""
+        """간단한 구독해지 처리 (Playwright 서비스 사용)"""
         try:
             print(f"🔧 간단한 구독해지 처리 시작: {unsubscribe_url}")
 
-            # Selenium 서비스를 사용하여 처리
-            result = self.selenium_service.process_unsubscribe_with_selenium_ai(
-                unsubscribe_url
-            )
+            # Playwright 서비스를 사용하여 처리 (동기식 래퍼 사용)
+            result = process_unsubscribe_sync(unsubscribe_url)
 
             return result
 
@@ -185,7 +186,7 @@ class AdvancedUnsubscribeService:
     def process_unsubscribe_advanced(
         self, email_content: str, email_headers: Dict = None, user_email: str = None
     ) -> Dict:
-        """고급 구독해지 처리 (Selenium 서비스 사용)"""
+        """고급 구독해지 처리 (Playwright 서비스 사용)"""
         try:
             print(f"🔧 고급 구독해지 처리 시작")
 
@@ -215,9 +216,7 @@ class AdvancedUnsubscribeService:
             for i, link in enumerate(unsubscribe_links):
                 print(f"📝 링크 {i + 1}/{len(unsubscribe_links)} 처리: {link}")
 
-                result = self.selenium_service.process_unsubscribe_with_selenium_ai(
-                    link, user_email
-                )
+                result = process_unsubscribe_sync(link, user_email)
 
                 if result["success"]:
                     return {
@@ -246,10 +245,8 @@ class AdvancedUnsubscribeService:
     def process_unsubscribe_with_mechanicalsoup_ai(
         self, unsubscribe_url: str, user_email: str = None
     ) -> Dict:
-        """Selenium + AI를 활용한 범용 구독해지 처리 (기존 함수명 유지)"""
-        return self.selenium_service.process_unsubscribe_with_selenium_ai(
-            unsubscribe_url, user_email
-        )
+        """Playwright + AI를 활용한 범용 구독해지 처리 (기존 함수명 유지)"""
+        return process_unsubscribe_sync(unsubscribe_url, user_email)
 
     def test_unsubscribe_service(
         self, service_name: str, test_url: str, user_email: str = None
@@ -258,10 +255,8 @@ class AdvancedUnsubscribeService:
         try:
             print(f"🧪 구독해지 서비스 테스트 시작: {service_name}")
 
-            # Selenium 서비스를 사용하여 테스트
-            result = self.selenium_service.process_unsubscribe_with_selenium_ai(
-                test_url, user_email
-            )
+            # Playwright 서비스를 사용하여 테스트
+            result = process_unsubscribe_sync(test_url, user_email)
 
             return {
                 "service_name": service_name,
