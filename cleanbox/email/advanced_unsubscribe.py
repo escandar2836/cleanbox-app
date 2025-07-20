@@ -19,7 +19,7 @@ from .playwright_unsubscribe import (
 
 
 class AdvancedUnsubscribeService:
-    """고급 구독해지 서비스 (Selenium 기반)"""
+    """고급 구독해지 서비스 (Playwright 기반)"""
 
     def __init__(self):
         self.setup_logging()
@@ -427,17 +427,17 @@ class AdvancedUnsubscribeService:
 
     def get_statistics(self) -> Dict:
         """통계 정보 반환"""
-        selenium_stats = self.selenium_service.get_statistics()
+        playwright_stats = self.playwright_service.get_statistics()
 
         return {
             "total_attempts": self.stats["total_attempts"]
-            + selenium_stats["total_attempts"],
+            + playwright_stats["total_attempts"],
             "successful_unsubscribes": self.stats["successful_unsubscribes"]
-            + selenium_stats["successful_unsubscribes"],
+            + playwright_stats["successful_unsubscribes"],
             "failed_unsubscribes": self.stats["failed_unsubscribes"]
-            + selenium_stats["failed_unsubscribes"],
-            "success_rate": selenium_stats["success_rate"],
-            "average_processing_time": selenium_stats["average_processing_time"],
+            + playwright_stats["failed_unsubscribes"],
+            "success_rate": playwright_stats["success_rate"],
+            "average_processing_time": playwright_stats["average_processing_time"],
             "service_success_rates": self.stats["service_success_rates"],
             "error_counts": self.stats["error_counts"],
         }
@@ -472,15 +472,15 @@ class AdvancedUnsubscribeService:
     def monitor_system_health(self) -> Dict:
         """시스템 상태 모니터링"""
         try:
-            # Selenium 서비스 상태 확인
-            selenium_stats = self.selenium_service.get_statistics()
+            # Playwright 서비스 상태 확인
+            playwright_stats = self.playwright_service.get_statistics()
 
             return {
                 "status": "healthy",
-                "selenium_service": {
-                    "total_attempts": selenium_stats["total_attempts"],
-                    "success_rate": selenium_stats["success_rate"],
-                    "average_processing_time": selenium_stats[
+                "playwright_service": {
+                    "total_attempts": playwright_stats["total_attempts"],
+                    "success_rate": playwright_stats["success_rate"],
+                    "average_processing_time": playwright_stats[
                         "average_processing_time"
                     ],
                 },

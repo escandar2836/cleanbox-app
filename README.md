@@ -22,7 +22,7 @@ CleanBox는 이메일 관리와 함께 웹 스크래핑을 통한 구독 해지 
 
 - **Backend**: Flask, Python 3.11
 - **Database**: PostgreSQL
-- **Browser Automation**: Selenium
+- **Browser Automation**: Playwright
 - **Deployment**: Docker, Render
 - **Frontend**: Bootstrap, JavaScript
 
@@ -87,7 +87,7 @@ docker run -p 8000:8000 cleanbox-app
 1. **이메일 수신**: Gmail API를 통해 이메일 수신
 2. **자동 분류**: AI가 이메일을 카테고리별로 분류
 3. **구독해지 감지**: 구독해지 링크가 포함된 이메일 자동 감지
-4. **자동 처리**: Selenium을 사용한 자동 구독해지 실행
+4. **자동 처리**: Playwright를 사용한 자동 구독해지 실행
 
 ## 🔧 구독 해지 시스템
 

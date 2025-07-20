@@ -655,11 +655,14 @@ URL: {current_url}
 제목: {title}
 페이지 내용: {content[:2000]}
 
+중요: 재구독 버튼("다시 구독하기", "Resubscribe", "재구독")이 나타나면 구독해지가 성공한 것으로 판단하세요.
+
 분석 기준:
 1. 구독해지 완료 지표: "unsubscribed", "cancelled", "removed", "success", "complete", "thank you", "구독해지", "취소", "완료", "성공"
-2. 이미 구독해지됨 지표: "already unsubscribed", "already cancelled", "previously unsubscribed", "이미 구독해지", "이미 취소", "이미 해지"
-3. 오류 지표: "error", "failed", "invalid", "not found", "expired", "오류", "실패", "잘못된"
-4. 중립 지표: "confirm", "확인", "submit", "제출"
+2. 재구독 버튼 지표: "resubscribe", "다시 구독하기", "재구독", "subscribe again", "re-subscribe" (이것은 성공 지표입니다)
+3. 이미 구독해지됨 지표: "already unsubscribed", "already cancelled", "previously unsubscribed", "이미 구독해지", "이미 취소", "이미 해지"
+4. 오류 지표: "error", "failed", "invalid", "not found", "expired", "오류", "실패", "잘못된"
+5. 중립 지표: "confirm", "확인", "submit", "제출"
 
 분석 결과를 다음 형식으로 답변하세요:
 - 상태: "완료됨", "이미 해지됨", "완료되지 않음" 중 하나
@@ -684,6 +687,17 @@ URL: {current_url}
         """개선된 AI 응답 파싱"""
         try:
             response_lower = ai_response.lower()
+
+            # 재구독 버튼 지표 (성공 지표)
+            resubscribe_indicators = [
+                "resubscribe",
+                "다시 구독하기",
+                "재구독",
+                "subscribe again",
+                "re-subscribe",
+                "다시 구독",
+                "재구독하기",
+            ]
 
             # 완료 지표들 (가중치 높음)
             completion_indicators_high = [
@@ -774,7 +788,13 @@ URL: {current_url}
             # 점수 계산
             score = 0
 
-            # 이미 구독해지됨 지표 확인 (최우선)
+            # 재구독 버튼 지표 확인 (최우선 - 성공 지표)
+            for indicator in resubscribe_indicators:
+                if indicator in response_lower:
+                    score += 80
+                    break
+
+            # 이미 구독해지됨 지표 확인 (우선순위 높음)
             for indicator in already_unsubscribed_indicators:
                 if indicator in response_lower:
                     score += 50
@@ -1112,7 +1132,22 @@ URL: {current_url}
                 except Exception:
                     continue
 
-            # 5. 오류 메시지 확인 (실패 지표)
+            # 5. 재구독 버튼 확인 (성공 지표)
+            resubscribe_indicators = [
+                "resubscribe",
+                "다시 구독하기",
+                "재구독",
+                "subscribe again",
+                "re-subscribe",
+                "다시 구독",
+                "재구독하기",
+            ]
+
+            if any(indicator in content_lower for indicator in resubscribe_indicators):
+                print(f"📝 재구독 버튼 발견 - 구독해지 성공으로 인식")
+                return True
+
+            # 6. 오류 메시지 확인 (실패 지표)
             error_indicators = [
                 "error",
                 "failed",
@@ -1130,7 +1165,7 @@ URL: {current_url}
                 print(f"📝 오류 지표 발견")
                 return False
 
-            # 6. AI 기반 분석 (보조 지표)
+            # 7. AI 기반 분석 (보조 지표)
             try:
                 ai_result = await self._analyze_unsubscribe_completion_with_ai(page)
                 if ai_result["success"] and ai_result["confidence"] >= 60:
@@ -1470,9 +1505,9 @@ URL: {current_url}
                                 # 클릭 전 현재 URL 저장
                                 before_url = page.url
 
-                                # 클릭 실행 (짧은 타임아웃)
+                                # 클릭 실행 (타임아웃 증가)
                                 try:
-                                    await element.click(timeout=5000)
+                                    await element.click(timeout=15000)
                                 except Exception as click_error:
                                     print(
                                         f"⚠️ 클릭 실패, JavaScript로 재시도: {str(click_error)}"
@@ -1481,8 +1516,17 @@ URL: {current_url}
                                         "(element) => element.click()", element
                                     )
 
-                                # 짧은 대기
-                                await page.wait_for_timeout(2000)
+                                # 네트워크 요청 완료 대기
+                                try:
+                                    await page.wait_for_load_state(
+                                        "networkidle", timeout=10000
+                                    )
+                                    print("📝 네트워크 요청 완료 대기 성공")
+                                except Exception as e:
+                                    print(
+                                        f"⚠️ 네트워크 대기 실패, 기본 대기로 전환: {str(e)}"
+                                    )
+                                    await page.wait_for_timeout(5000)
 
                                 # URL 변경 확인
                                 after_url = page.url
@@ -1531,8 +1575,15 @@ URL: {current_url}
                         print(f"📝 구독해지 링크 발견: {href} - 텍스트: '{link_text}'")
 
                         # 링크 클릭
-                        await link.click(timeout=5000)
-                        await page.wait_for_timeout(2000)
+                        await link.click(timeout=15000)
+
+                        # 네트워크 요청 완료 대기
+                        try:
+                            await page.wait_for_load_state("networkidle", timeout=10000)
+                            print("📝 링크 클릭 후 네트워크 요청 완료 대기 성공")
+                        except Exception as e:
+                            print(f"⚠️ 네트워크 대기 실패, 기본 대기로 전환: {str(e)}")
+                            await page.wait_for_timeout(5000)
 
                         # 성공 확인
                         if await self._check_basic_success_indicators(page):
@@ -1743,11 +1794,11 @@ URL: {current_url}
 
                         # 네트워크 요청 완료 대기
                         try:
-                            await page.wait_for_load_state("networkidle", timeout=10000)
+                            await page.wait_for_load_state("networkidle", timeout=15000)
                             print("📝 네트워크 요청 완료 대기 성공")
                         except Exception as e:
                             print(f"⚠️ 네트워크 대기 실패, 기본 대기로 전환: {str(e)}")
-                            await page.wait_for_timeout(2000)
+                            await page.wait_for_timeout(5000)
 
                         # AI 기반 구독해지 완료 판단
                         print("🤖 AI 기반 구독해지 완료 분석 시작...")
