@@ -589,56 +589,320 @@ def bulk_actions():
         processed_count = 0
 
         if action == "delete":
-            # 대량 삭제
+            # 대량 삭제 (개선된 버전)
+            print(f"🔍 대량 삭제 시작 - 선택된 이메일 수: {len(email_ids)}")
+
+            # 결과 수집을 위한 변수들
+            success_count = 0
+            failed_emails = []
+
             for email_id in email_ids:
                 try:
                     email_obj = Email.query.filter_by(
                         id=int(email_id), user_id=current_user.id
                     ).first()
-                    if email_obj:
-                        # Gmail에서 삭제
-                        gmail_service.delete_email(email_obj.gmail_id)
-                        # DB에서 삭제
-                        db.session.delete(email_obj)
-                        processed_count += 1
-                except Exception as e:
-                    print(f"이메일 삭제 실패 (ID: {email_id}): {str(e)}")
-                    continue
 
+                    if not email_obj:
+                        print(f"❌ 이메일 {email_id}를 찾을 수 없음")
+                        failed_emails.append(
+                            {
+                                "id": email_id,
+                                "subject": "알 수 없음",
+                                "error": "이메일을 찾을 수 없습니다",
+                                "error_type": "not_found",
+                            }
+                        )
+                        continue
+
+                    # Gmail에서 삭제
+                    gmail_service = GmailService(current_user.id, email_obj.account_id)
+                    gmail_service.delete_email(email_obj.gmail_id)
+
+                    # DB에서 삭제
+                    db.session.delete(email_obj)
+                    success_count += 1
+                    print(f"✅ 이메일 {email_id} 삭제 성공")
+
+                except Exception as e:
+                    error_msg = str(e)
+                    print(f"❌ 이메일 삭제 실패 (ID: {email_id}): {error_msg}")
+
+                    # 에러 타입 분류
+                    error_type = "unknown"
+                    if "404" in error_msg and "not found" in error_msg.lower():
+                        error_type = "not_found"
+                        error_details = "이미 삭제되었거나 메시지를 찾을 수 없습니다"
+                    elif "403" in error_msg:
+                        error_type = "forbidden"
+                        error_details = "삭제 권한이 없습니다"
+                    elif "401" in error_msg:
+                        error_type = "unauthorized"
+                        error_details = "인증에 실패했습니다"
+                    elif "500" in error_msg:
+                        error_type = "server_error"
+                        error_details = "서버 오류가 발생했습니다"
+                    elif (
+                        "network" in error_msg.lower()
+                        or "connection" in error_msg.lower()
+                    ):
+                        error_type = "network_error"
+                        error_details = "네트워크 연결 오류"
+                    else:
+                        error_details = error_msg
+
+                    failed_emails.append(
+                        {
+                            "id": email_id,
+                            "subject": email_obj.subject if email_obj else "알 수 없음",
+                            "error": error_details,
+                            "error_type": error_type,
+                        }
+                    )
+
+            # DB 커밋
             db.session.commit()
-            flash(f"{processed_count}개의 이메일을 삭제했습니다.", "success")
+
+            # 에러 타입별로 그룹화
+            error_groups = {}
+            for email in failed_emails:
+                error_type = email.get("error_type", "unknown")
+                if error_type not in error_groups:
+                    error_groups[error_type] = []
+                error_groups[error_type].append(email)
+
+            # 결과 메시지 생성
+            total_processed = success_count + len(failed_emails)
+            message_parts = []
+
+            # 성공 개수는 항상 표시 (0이어도)
+            message_parts.append(f"✅ 성공: {success_count}개")
+
+            # 에러 타입별로 실제 발생한 것만 표시
+            for error_type, emails in error_groups.items():
+                if emails:  # 실제 발생한 에러만 표시
+                    error_name = {
+                        "not_found": "이미 삭제됨",
+                        "forbidden": "권한 없음",
+                        "unauthorized": "인증 실패",
+                        "server_error": "서버 오류",
+                        "network_error": "네트워크 오류",
+                        "unknown": "알 수 없는 오류",
+                    }.get(error_type, error_type)
+
+                    message_parts.append(f"❌ {error_name}: {len(emails)}개")
+
+            result_message = f"삭제 완료 ({total_processed}개):\n" + "\n".join(
+                message_parts
+            )
+
+            print(f"🎉 대량 삭제 완료 - {result_message}")
+            flash(result_message, "info" if failed_emails else "success")
 
         elif action == "archive":
-            # 대량 아카이브
+            # 대량 아카이브 (개선된 버전)
+            print(f"🔍 대량 아카이브 시작 - 선택된 이메일 수: {len(email_ids)}")
+
+            # 결과 수집을 위한 변수들
+            success_count = 0
+            failed_emails = []
+
             for email_id in email_ids:
                 try:
                     email_obj = Email.query.filter_by(
                         id=int(email_id), user_id=current_user.id
                     ).first()
-                    if email_obj:
-                        gmail_service.archive_email(email_obj.gmail_id)
-                        processed_count += 1
-                except Exception as e:
-                    print(f"이메일 아카이브 실패 (ID: {email_id}): {str(e)}")
-                    continue
 
-            flash(f"{processed_count}개의 이메일을 아카이브했습니다.", "success")
+                    if not email_obj:
+                        print(f"❌ 이메일 {email_id}를 찾을 수 없음")
+                        failed_emails.append(
+                            {
+                                "id": email_id,
+                                "subject": "알 수 없음",
+                                "error": "이메일을 찾을 수 없습니다",
+                                "error_type": "not_found",
+                            }
+                        )
+                        continue
+
+                    gmail_service = GmailService(current_user.id, email_obj.account_id)
+                    gmail_service.archive_email(email_obj.gmail_id)
+                    success_count += 1
+                    print(f"✅ 이메일 {email_id} 아카이브 성공")
+
+                except Exception as e:
+                    error_msg = str(e)
+                    print(f"❌ 이메일 아카이브 실패 (ID: {email_id}): {error_msg}")
+
+                    # 에러 타입 분류
+                    error_type = "unknown"
+                    if "404" in error_msg and "not found" in error_msg.lower():
+                        error_type = "not_found"
+                        error_details = "이미 삭제되었거나 메시지를 찾을 수 없습니다"
+                    elif "403" in error_msg:
+                        error_type = "forbidden"
+                        error_details = "아카이브 권한이 없습니다"
+                    elif "401" in error_msg:
+                        error_type = "unauthorized"
+                        error_details = "인증에 실패했습니다"
+                    elif "500" in error_msg:
+                        error_type = "server_error"
+                        error_details = "서버 오류가 발생했습니다"
+                    elif (
+                        "network" in error_msg.lower()
+                        or "connection" in error_msg.lower()
+                    ):
+                        error_type = "network_error"
+                        error_details = "네트워크 연결 오류"
+                    else:
+                        error_details = error_msg
+
+                    failed_emails.append(
+                        {
+                            "id": email_id,
+                            "subject": email_obj.subject if email_obj else "알 수 없음",
+                            "error": error_details,
+                            "error_type": error_type,
+                        }
+                    )
+
+            # 에러 타입별로 그룹화
+            error_groups = {}
+            for email in failed_emails:
+                error_type = email.get("error_type", "unknown")
+                if error_type not in error_groups:
+                    error_groups[error_type] = []
+                error_groups[error_type].append(email)
+
+            # 결과 메시지 생성
+            total_processed = success_count + len(failed_emails)
+            message_parts = []
+
+            # 성공 개수는 항상 표시 (0이어도)
+            message_parts.append(f"✅ 성공: {success_count}개")
+
+            # 에러 타입별로 실제 발생한 것만 표시
+            for error_type, emails in error_groups.items():
+                if emails:  # 실제 발생한 에러만 표시
+                    error_name = {
+                        "not_found": "이미 삭제됨",
+                        "forbidden": "권한 없음",
+                        "unauthorized": "인증 실패",
+                        "server_error": "서버 오류",
+                        "network_error": "네트워크 오류",
+                        "unknown": "알 수 없는 오류",
+                    }.get(error_type, error_type)
+
+                    message_parts.append(f"❌ {error_name}: {len(emails)}개")
+
+            result_message = f"아카이브 완료 ({total_processed}개):\n" + "\n".join(
+                message_parts
+            )
+
+            print(f"🎉 대량 아카이브 완료 - {result_message}")
+            flash(result_message, "info" if failed_emails else "success")
 
         elif action == "mark_read":
-            # 대량 읽음 표시
+            # 대량 읽음 표시 (개선된 버전)
+            print(f"🔍 대량 읽음 표시 시작 - 선택된 이메일 수: {len(email_ids)}")
+
+            # 결과 수집을 위한 변수들
+            success_count = 0
+            failed_emails = []
+
             for email_id in email_ids:
                 try:
                     email_obj = Email.query.filter_by(
                         id=int(email_id), user_id=current_user.id
                     ).first()
-                    if email_obj:
-                        gmail_service.mark_as_read(email_obj.gmail_id)
-                        processed_count += 1
-                except Exception as e:
-                    print(f"이메일 읽음 표시 실패 (ID: {email_id}): {str(e)}")
-                    continue
 
-            flash(f"{processed_count}개의 이메일을 읽음으로 표시했습니다.", "success")
+                    if not email_obj:
+                        print(f"❌ 이메일 {email_id}를 찾을 수 없음")
+                        failed_emails.append(
+                            {
+                                "id": email_id,
+                                "subject": "알 수 없음",
+                                "error": "이메일을 찾을 수 없습니다",
+                                "error_type": "not_found",
+                            }
+                        )
+                        continue
+
+                    gmail_service = GmailService(current_user.id, email_obj.account_id)
+                    gmail_service.mark_as_read(email_obj.gmail_id)
+                    success_count += 1
+                    print(f"✅ 이메일 {email_id} 읽음 표시 성공")
+
+                except Exception as e:
+                    error_msg = str(e)
+                    print(f"❌ 이메일 읽음 표시 실패 (ID: {email_id}): {error_msg}")
+
+                    # 에러 타입 분류
+                    error_type = "unknown"
+                    if "404" in error_msg and "not found" in error_msg.lower():
+                        error_type = "not_found"
+                        error_details = "이미 삭제되었거나 메시지를 찾을 수 없습니다"
+                    elif "403" in error_msg:
+                        error_type = "forbidden"
+                        error_details = "읽음 표시 권한이 없습니다"
+                    elif "401" in error_msg:
+                        error_type = "unauthorized"
+                        error_details = "인증에 실패했습니다"
+                    elif "500" in error_msg:
+                        error_type = "server_error"
+                        error_details = "서버 오류가 발생했습니다"
+                    elif (
+                        "network" in error_msg.lower()
+                        or "connection" in error_msg.lower()
+                    ):
+                        error_type = "network_error"
+                        error_details = "네트워크 연결 오류"
+                    else:
+                        error_details = error_msg
+
+                    failed_emails.append(
+                        {
+                            "id": email_id,
+                            "subject": email_obj.subject if email_obj else "알 수 없음",
+                            "error": error_details,
+                            "error_type": error_type,
+                        }
+                    )
+
+            # 에러 타입별로 그룹화
+            error_groups = {}
+            for email in failed_emails:
+                error_type = email.get("error_type", "unknown")
+                if error_type not in error_groups:
+                    error_groups[error_type] = []
+                error_groups[error_type].append(email)
+
+            # 결과 메시지 생성
+            total_processed = success_count + len(failed_emails)
+            message_parts = []
+
+            # 성공 개수는 항상 표시 (0이어도)
+            message_parts.append(f"✅ 성공: {success_count}개")
+
+            # 에러 타입별로 실제 발생한 것만 표시
+            for error_type, emails in error_groups.items():
+                if emails:  # 실제 발생한 에러만 표시
+                    error_name = {
+                        "not_found": "이미 삭제됨",
+                        "forbidden": "권한 없음",
+                        "unauthorized": "인증 실패",
+                        "server_error": "서버 오류",
+                        "network_error": "네트워크 오류",
+                        "unknown": "알 수 없는 오류",
+                    }.get(error_type, error_type)
+
+                    message_parts.append(f"❌ {error_name}: {len(emails)}개")
+
+            result_message = f"읽음 표시 완료 ({total_processed}개):\n" + "\n".join(
+                message_parts
+            )
+
+            print(f"🎉 대량 읽음 표시 완료 - {result_message}")
+            flash(result_message, "info" if failed_emails else "success")
 
         elif action == "unsubscribe":
             # 대량 구독해지 (개선된 버전)
@@ -648,6 +912,7 @@ def bulk_actions():
             success_count = 0
             failed_emails = []
             personal_emails = []
+            already_unsubscribed_count = 0  # 이미 구독해지된 이메일 카운트 추가
 
             for email_id in email_ids:
                 try:
@@ -669,6 +934,7 @@ def bulk_actions():
 
                     if email_obj.is_unsubscribed:
                         print(f"⏭️ 이메일 {email_id}는 이미 구독해지됨")
+                        already_unsubscribed_count += 1  # 이미 구독해지된 이메일 카운트
                         continue
 
                     print(f"📝 이메일 {email_id} 구독해지 처리 중...")
@@ -699,40 +965,35 @@ def bulk_actions():
                                     "error_type": "personal_email",
                                 }
                             )
+                        elif error_type == "already_unsubscribed":
+                            # 이미 구독해지된 경우 (처리 중에 감지된 경우)
+                            already_unsubscribed_count += 1
+                            print(
+                                f"⏭️ 이메일 {email_id}는 처리 중에 이미 구독해지됨으로 감지됨"
+                            )
                         else:
-                            # 에러 타입을 더 구체적으로 분류
-                            specific_error_type = error_type
-                            if "timeout" in error_details.lower():
-                                specific_error_type = "timeout_error"
-                            elif (
-                                "network" in error_details.lower()
-                                or "connection" in error_details.lower()
-                            ):
-                                specific_error_type = "network_error"
-                            elif "processing" in error_details.lower():
-                                specific_error_type = "processing_error"
-
                             failed_emails.append(
                                 {
                                     "id": email_id,
                                     "subject": email_obj.subject,
                                     "sender": email_obj.sender,
                                     "error": error_details,
-                                    "error_type": specific_error_type,
+                                    "error_type": error_type,
                                 }
                             )
 
-                        print(f"❌ 이메일 {email_id} 구독해지 실패: {error_details}")
-
                 except Exception as e:
-                    error_msg = f"처리 중 오류 발생: {str(e)}"
-                    print(f"❌ 이메일 구독해지 실패 (ID: {email_id}): {error_msg}")
+                    print(f"❌ 이메일 {email_id} 처리 중 예외 발생: {str(e)}")
                     failed_emails.append(
-                        {"id": email_id, "subject": "알 수 없음", "error": error_msg}
+                        {
+                            "id": email_id,
+                            "subject": "알 수 없음",
+                            "error": f"처리 오류: {str(e)}",
+                            "error_type": "processing_error",
+                        }
                     )
-                    continue
 
-                    # 실패한 이메일들을 에러 타입별로 그룹화
+            # 에러 타입별로 그룹화
             error_groups = {}
             for email in failed_emails:
                 error_type = email.get("error_type", "unknown")
@@ -741,11 +1002,22 @@ def bulk_actions():
                 error_groups[error_type].append(email)
 
             # 결과 메시지 생성 (성공은 항상 표시, 실패는 존재할 때만)
-            total_processed = success_count + len(failed_emails) + len(personal_emails)
+            total_processed = (
+                success_count
+                + len(failed_emails)
+                + len(personal_emails)
+                + already_unsubscribed_count
+            )
             message_parts = []
 
             # 성공 개수는 항상 표시 (0이어도)
             message_parts.append(f"✅ 성공: {success_count}개")
+
+            # 이미 구독해지된 이메일은 존재할 때만 표시
+            if already_unsubscribed_count > 0:
+                message_parts.append(
+                    f"⏭️ 이미 구독해지됨: {already_unsubscribed_count}개"
+                )
 
             # 개인 이메일은 존재할 때만 표시
             if personal_emails:
@@ -760,6 +1032,7 @@ def bulk_actions():
                         "processing_error": "처리 오류",
                         "network_error": "네트워크 오류",
                         "timeout_error": "시간 초과",
+                        "already_unsubscribed": "이미 구독해지됨",
                         "unknown": "알 수 없는 오류",
                     }.get(error_type, error_type)
 
@@ -772,7 +1045,13 @@ def bulk_actions():
             print(f"🎉 대량 구독해지 완료 - {result_message}")
             flash(
                 result_message,
-                "info" if failed_emails or personal_emails else "success",
+                (
+                    "info"
+                    if failed_emails
+                    or personal_emails
+                    or already_unsubscribed_count > 0
+                    else "success"
+                ),
             )
 
         else:

@@ -103,4 +103,27 @@
         </div>
     </div>
 </div>
+
+<script>
+// 페이지 로드 시 캐시 무효화
+window.addEventListener('load', function() {
+    // 브라우저 캐시 무효화
+    if (window.performance && window.performance.navigation.type === window.performance.navigation.TYPE_BACK_FORWARD) {
+        location.reload(true);
+    }
+});
+
+// 폼 제출 후 페이지 새로고침
+document.addEventListener('DOMContentLoaded', function() {
+    const forms = document.querySelectorAll('form');
+    forms.forEach(form => {
+        form.addEventListener('submit', function() {
+            // 폼 제출 후 페이지 새로고침
+            setTimeout(function() {
+                location.reload(true);
+            }, 1000);
+        });
+    });
+});
+</script>
 {% endblock %} 

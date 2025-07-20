@@ -768,8 +768,39 @@ def _handle_add_account_callback(credentials, id_info):
         ).first()
 
         if existing_account:
-            flash("이미 연결된 Gmail 계정입니다.", "warning")
-            return redirect(url_for("auth.manage_accounts"))
+            # 계정이 비활성화 상태인지 확인
+            if not existing_account.is_active:
+                # 비활성화된 계정을 다시 활성화
+                existing_account.is_active = True
+                existing_account.account_name = id_info.get(
+                    "name", existing_account.account_name
+                )
+                db.session.commit()
+
+                flash(
+                    f"비활성화된 계정 {id_info['email']}이 다시 활성화되었습니다!",
+                    "success",
+                )
+
+                # 캐시 무효화를 위한 헤더 추가
+                response = redirect(url_for("auth.manage_accounts"))
+                response.headers["Cache-Control"] = (
+                    "no-cache, no-store, must-revalidate"
+                )
+                response.headers["Pragma"] = "no-cache"
+                response.headers["Expires"] = "0"
+
+                return response
+            else:
+                flash("이미 연결된 Gmail 계정입니다.", "warning")
+                response = redirect(url_for("auth.manage_accounts"))
+                # 캐시 무효화
+                response.headers["Cache-Control"] = (
+                    "no-cache, no-store, must-revalidate"
+                )
+                response.headers["Pragma"] = "no-cache"
+                response.headers["Expires"] = "0"
+                return response
 
         # 새 계정 생성
         account = UserAccount(
@@ -824,7 +855,14 @@ def _handle_add_account_callback(credentials, id_info):
         session.pop("adding_account", None)
 
         flash(f"Gmail 계정 {id_info['email']}이 성공적으로 연결되었습니다!", "success")
-        return redirect(url_for("auth.manage_accounts"))
+
+        # 캐시 무효화를 위한 헤더 추가
+        response = redirect(url_for("auth.manage_accounts"))
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+
+        return response
 
     except Exception as e:
         print(f"추가 계정 콜백 처리 에러: {str(e)}")
@@ -890,7 +928,14 @@ def remove_account(account_id):
     db.session.commit()
 
     flash(f"{account.account_email} 계정 연결이 해제되었습니다.", "success")
-    return redirect(url_for("auth.manage_accounts"))
+
+    # 캐시 무효화를 위한 헤더 추가
+    response = redirect(url_for("auth.manage_accounts"))
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+
+    return response
 
 
 @auth_bp.route("/logout")

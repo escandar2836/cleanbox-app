@@ -410,15 +410,26 @@ class PlaywrightUnsubscribeService:
                 await page.goto(unsubscribe_url, wait_until="domcontentloaded")
                 await page.wait_for_timeout(2000)  # 페이지 로딩 대기
 
-                # 2단계: 기본 구독해지 시도
-                print(f"📝 2단계: 기본 구독해지 시도")
+                # 2단계: 이미 구독해지됨 상태 확인
+                print(f"📝 2단계: 이미 구독해지됨 상태 확인")
+                if await self._check_already_unsubscribed(page):
+                    await self.cleanup_page()
+                    return {
+                        "success": True,
+                        "message": "이미 구독해지된 상태입니다.",
+                        "error_type": "already_unsubscribed",
+                        "processing_time": time.time() - start_time,
+                    }
+
+                # 3단계: 기본 구독해지 시도
+                print(f"📝 3단계: 기본 구독해지 시도")
                 basic_result = await self._try_basic_unsubscribe(page, user_email)
                 if basic_result["success"]:
                     await self.cleanup_page()
                     return self._finalize_success(basic_result, start_time)
 
-                # 3단계: 두 번째 페이지 처리
-                print(f"📝 3단계: 두 번째 페이지 처리")
+                # 4단계: 두 번째 페이지 처리
+                print(f"📝 4단계: 두 번째 페이지 처리")
                 second_result = await self._try_second_page_unsubscribe(
                     page, user_email
                 )
@@ -426,29 +437,41 @@ class PlaywrightUnsubscribeService:
                     await self.cleanup_page()
                     return self._finalize_success(second_result, start_time)
 
-                # 4단계: AI 분석 및 처리
-                print(f"📝 4단계: AI 분석 및 처리")
+                # 5단계: AI 분석 및 처리
+                print(f"📝 5단계: AI 분석 및 처리")
                 ai_result = await self._analyze_page_with_ai(page, user_email)
                 if ai_result["success"]:
                     await self.cleanup_page()
                     return self._finalize_success(ai_result, start_time)
 
-                # 모든 시도 실패
+                # 6단계: 최종 이미 구독해지됨 상태 확인
+                print(f"📝 6단계: 최종 이미 구독해지됨 상태 확인")
+                if await self._check_already_unsubscribed(page):
+                    await self.cleanup_page()
+                    return {
+                        "success": True,
+                        "message": "이미 구독해지된 상태입니다.",
+                        "error_type": "already_unsubscribed",
+                        "processing_time": time.time() - start_time,
+                    }
+
+                # 모든 방법 실패
                 await self.cleanup_page()
                 return self._finalize_failure(
-                    "모든 구독해지 방법이 실패했습니다", start_time
+                    "모든 구독해지 방법에서 실패했습니다.", start_time
                 )
 
             except Exception as e:
-                print(f"❌ Playwright 처리 중 오류: {str(e)}")
+                print(f"❌ Playwright + AI 구독해지 시도 실패: {str(e)}")
                 await self.cleanup_page()
                 retry_count += 1
+
                 if retry_count <= max_retries:
-                    print(f"⏳ {self.timeouts['retry_delay']/1000}초 후 재시도...")
-                    await asyncio.sleep(self.timeouts["retry_delay"] / 1000)
+                    print(f"🔄 재시도 중... ({retry_count}/{max_retries})")
+                    await asyncio.sleep(2)  # 재시도 전 대기
                 else:
                     return self._finalize_failure(
-                        f"Playwright 처리 실패: {str(e)}", start_time
+                        f"구독해지 처리 실패: {str(e)}", start_time
                     )
 
         return self._finalize_failure("최대 재시도 횟수 초과", start_time)
@@ -626,7 +649,7 @@ class PlaywrightUnsubscribeService:
 
             # 더 상세한 프롬프트 생성
             prompt = f"""
-다음 웹 페이지에서 구독해지가 성공적으로 완료되었는지 분석해주세요.
+다음 웹 페이지에서 구독해지 상태를 분석해주세요.
 
 URL: {current_url}
 제목: {title}
@@ -634,11 +657,12 @@ URL: {current_url}
 
 분석 기준:
 1. 구독해지 완료 지표: "unsubscribed", "cancelled", "removed", "success", "complete", "thank you", "구독해지", "취소", "완료", "성공"
-2. 오류 지표: "error", "failed", "invalid", "not found", "expired", "오류", "실패", "잘못된"
-3. 중립 지표: "confirm", "확인", "submit", "제출"
+2. 이미 구독해지됨 지표: "already unsubscribed", "already cancelled", "previously unsubscribed", "이미 구독해지", "이미 취소", "이미 해지"
+3. 오류 지표: "error", "failed", "invalid", "not found", "expired", "오류", "실패", "잘못된"
+4. 중립 지표: "confirm", "확인", "submit", "제출"
 
 분석 결과를 다음 형식으로 답변하세요:
-- 완료 여부: "완료됨" 또는 "완료되지 않음"
+- 상태: "완료됨", "이미 해지됨", "완료되지 않음" 중 하나
 - 신뢰도: 0-100 숫자
 - 이유: 간단한 설명
 """
@@ -694,6 +718,32 @@ URL: {current_url}
                 "successfully",
             ]
 
+            # 이미 구독해지됨 지표들
+            already_unsubscribed_indicators = [
+                "already unsubscribed",
+                "already cancelled",
+                "already removed",
+                "previously unsubscribed",
+                "previously cancelled",
+                "previously removed",
+                "이미 구독해지",
+                "이미 취소",
+                "이미 해지",
+                "이미 수신거부",
+                "이미 수신취소",
+                "이미 해지됨",
+                "이미 취소됨",
+                "이미 수신거부됨",
+                "이미 수신취소됨",
+                "이미 구독해지됨",
+                "이미 구독취소됨",
+                "이미 구독해지되었습니다",
+                "이미 취소되었습니다",
+                "이미 해지되었습니다",
+                "이미 수신거부되었습니다",
+                "이미 수신취소되었습니다",
+            ]
+
             # 실패 지표들
             failure_indicators = [
                 "완료되지 않음",
@@ -723,6 +773,12 @@ URL: {current_url}
 
             # 점수 계산
             score = 0
+
+            # 이미 구독해지됨 지표 확인 (최우선)
+            for indicator in already_unsubscribed_indicators:
+                if indicator in response_lower:
+                    score += 50
+                    break
 
             # 완료 지표 확인 (가중치 높음)
             for indicator in completion_indicators_high:
@@ -770,13 +826,28 @@ URL: {current_url}
             # 신뢰도 계산 (0-100)
             confidence = max(0, min(100, score + 50))
 
-            # 완료 여부 판단
+            # 상태 판단
+            is_already_unsubscribed = any(
+                indicator in response_lower
+                for indicator in already_unsubscribed_indicators
+            )
             is_completed = confidence >= 60 and not any(
                 indicator in response_lower for indicator in failure_indicators
             )
 
+            if is_already_unsubscribed:
+                status = "already_unsubscribed"
+                success = True
+            elif is_completed:
+                status = "completed"
+                success = True
+            else:
+                status = "not_completed"
+                success = False
+
             result = {
-                "success": is_completed,
+                "success": success,
+                "status": status,
                 "confidence": confidence,
                 "reason": ai_response,
                 "score": score,
@@ -785,7 +856,7 @@ URL: {current_url}
             }
 
             print(f"🤖 AI 구독해지 완료 분석:")
-            print(f"   - 완료 여부: {is_completed}")
+            print(f"   - 상태: {status}")
             print(f"   - 신뢰도: {confidence}%")
             print(f"   - 점수: {score}")
             print(f"   - 응답: {ai_response[:100]}...")
@@ -1072,6 +1143,54 @@ URL: {current_url}
 
         except Exception as e:
             print(f"⚠️ 성공 지표 확인 실패: {str(e)}")
+            return False
+
+    async def _check_already_unsubscribed(self, page: Page) -> bool:
+        """이미 구독해지된 상태인지 확인"""
+        try:
+            content = await page.content()
+            content_lower = content.lower()
+            current_url = page.url
+            title = await page.title()
+
+            # 이미 구독해지됨을 나타내는 지표들
+            already_unsubscribed_indicators = [
+                "already unsubscribed",
+                "already cancelled",
+                "already removed",
+                "previously unsubscribed",
+                "previously cancelled",
+                "previously removed",
+                "이미 구독해지",
+                "이미 취소",
+                "이미 해지",
+                "이미 수신거부",
+                "이미 수신취소",
+                "이미 해지됨",
+                "이미 취소됨",
+                "이미 수신거부됨",
+                "이미 수신취소됨",
+                "이미 구독해지됨",
+                "이미 구독취소됨",
+                "이미 구독해지되었습니다",
+                "이미 취소되었습니다",
+                "이미 해지되었습니다",
+                "이미 수신거부되었습니다",
+                "이미 수신취소되었습니다",
+            ]
+
+            # URL, 제목, 내용에서 이미 구독해지됨 지표 확인
+            all_text = f"{current_url} {title} {content_lower}"
+
+            for indicator in already_unsubscribed_indicators:
+                if indicator in all_text:
+                    print(f"📝 이미 구독해지됨 지표 발견: {indicator}")
+                    return True
+
+            return False
+
+        except Exception as e:
+            print(f"⚠️ 이미 구독해지됨 확인 실패: {str(e)}")
             return False
 
     async def _try_second_page_unsubscribe(

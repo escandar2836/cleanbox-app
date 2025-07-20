@@ -29,24 +29,36 @@ def list_categories():
         flash("로그인이 필요합니다.", "error")
         return redirect(url_for("auth.login"))
 
-    # 사용자의 활성 계정 확인
+    # 사용자의 활성 계정 확인 (최신 데이터)
     accounts = UserAccount.query.filter_by(
         user_id=current_user.id, is_active=True
     ).all()
 
     if not accounts:
         flash("연결된 Gmail 계정이 없습니다.", "warning")
-        return redirect(url_for("auth.manage_accounts"))
+        response = redirect(url_for("auth.manage_accounts"))
+        # 캐시 무효화
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
 
-    # 사용자의 활성 카테고리 목록
+    # 사용자의 활성 카테고리 목록 (최신 데이터)
     categories = Category.query.filter_by(user_id=current_user.id, is_active=True).all()
 
-    return render_template(
+    response = render_template(
         "category/manage.html",
         user=current_user,
         accounts=accounts,
         categories=categories,
     )
+
+    # 캐시 무효화
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+
+    return response
 
 
 @category_bp.route("/add", methods=["GET", "POST"])
