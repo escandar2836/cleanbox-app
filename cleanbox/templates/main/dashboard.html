@@ -155,67 +155,73 @@
     </div>
 </div>
 
+<!-- 새 이메일 처리 진행 중 모달 -->
+<div class="modal fade" id="processNewEmailsModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-robot text-primary"></i> 새 이메일 처리 중
+                </h5>
+            </div>
+            <div class="modal-body">
+                <div class="text-center">
+                    <div class="spinner-border text-primary mb-3" role="status">
+                        <span class="visually-hidden">처리 중...</span>
+                    </div>
+                    <h6 id="processNewEmailsMessage">새 이메일을 처리하고 있습니다...</h6>
+                    <div class="progress mt-3">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                             role="progressbar" style="width: 0%" id="processNewEmailsProgress">0%</div>
+                    </div>
+                    <div class="mt-3">
+                        <small class="text-muted" id="processNewEmailsDetails">
+                            계정별 처리 중...
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 // 새 이메일 처리 함수
 function processNewEmails() {
-    const button = event.target;
-    const originalText = button.innerHTML;
+    // 모달 표시
+    const modal = new bootstrap.Modal(document.getElementById('processNewEmailsModal'));
+    modal.show();
     
-    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 처리 중...';
-    button.disabled = true;
+    // 진행 상황 초기화
+    const progressBar = document.getElementById('processNewEmailsProgress');
+    const message = document.getElementById('processNewEmailsMessage');
+    const details = document.getElementById('processNewEmailsDetails');
     
-    const formData = new FormData();
+    progressBar.style.width = '0%';
+    progressBar.textContent = '0%';
+    message.textContent = '새 이메일을 처리하고 있습니다...';
+    details.textContent = '계정별 처리 중...';
     
-    fetch('/email/process-new', {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            // 새로운 이메일이 없는 경우 간단한 메시지 표시
-            if (data.no_new_emails) {
-                alert('새로운 이메일이 없습니다.');
-            } else {
-                // 계정별 결과 표시
-                let message = `새 이메일 처리 완료: ${data.processed}개 처리, ${data.classified}개 AI 분류`;
-                
-                if (data.account_results && data.account_results.length > 0) {
-                    message += '\n\n계정별 결과:';
-                    data.account_results.forEach(result => {
-                        if (result.status === 'success') {
-                            message += `\n• ${result.account}: ${result.processed}개 처리, ${result.classified}개 분류`;
-                        } else if (result.status === 'no_new_emails') {
-                            message += `\n• ${result.account}: 새 이메일 없음`;
-                        } else {
-                            message += `\n• ${result.account}: 오류 - ${result.error}`;
-                        }
-                    });
-                }
-                
-                alert(message);
-                
-                // 신규 이메일이 처리된 경우 알림 표시
-                if (data.redirect_url && data.redirect_url.includes('new_emails_processed=true')) {
-                    if (confirm('새로운 이메일이 처리되었습니다!\n\n이메일 목록을 확인하시겠습니까?')) {
-                        window.location.href = data.redirect_url;
-                    }
-                } else {
-                    // 페이지 새로고침 (새 이메일이 있을 때만)
-                    location.reload();
-                }
-            }
-        } else {
-            alert('새 이메일 처리 실패: ' + data.message);
-        }
-    })
-    .catch(error => {
-        alert('새 이메일 처리 중 오류가 발생했습니다: ' + error);
-    })
-    .finally(() => {
-        button.innerHTML = originalText;
-        button.disabled = false;
-    });
+    // 진행 상황 시뮬레이션
+    let progress = 0;
+    const progressInterval = setInterval(() => {
+        progress += Math.random() * 10;
+        if (progress > 90) progress = 90;
+        
+        progressBar.style.width = progress + '%';
+        progressBar.textContent = Math.round(progress) + '%';
+    }, 500);
+    
+    // 폼 생성 및 제출
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/email/process-new';
+    document.body.appendChild(form);
+    
+    // 2초 후 폼 제출 (모달 표시 시간)
+    setTimeout(() => {
+        form.submit();
+    }, 2000);
 }
 
 // 웹훅 상태 확인 및 자동 재설정 함수

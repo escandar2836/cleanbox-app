@@ -299,26 +299,31 @@ def process_new_emails():
 
         # 결과 반환
         if total_processed == 0:
-            return jsonify({"success": True, "no_new_emails": True})
+            flash("새로운 이메일이 없습니다.", "info")
+            return redirect(url_for("email.list_emails"))
 
-        # 신규 이메일이 처리된 경우 알림 URL 파라미터 추가
-        redirect_url = url_for("email.list_emails")
-        if new_emails_processed:
-            redirect_url += "?new_emails_processed=true"
+        # 성공 메시지 생성
+        success_message = f"새 이메일 처리 완료: {total_processed}개 처리, {total_classified}개 AI 분류"
 
-        return jsonify(
-            {
-                "success": True,
-                "processed": total_processed,
-                "classified": total_classified,
-                "account_results": account_results,
-                "redirect_url": redirect_url,
-            }
-        )
+        if account_results and len(account_results) > 0:
+            success_message += "\n\n계정별 결과:"
+            for result in account_results:
+                if result["status"] == "success":
+                    success_message += f"\n• {result['account']}: {result['processed']}개 처리, {result['classified']}개 분류"
+                elif result["status"] == "no_new_emails":
+                    success_message += f"\n• {result['account']}: 새 이메일 없음"
+                else:
+                    success_message += (
+                        f"\n• {result['account']}: 오류 - {result['error']}"
+                    )
+
+        flash(success_message, "success")
+        return redirect(url_for("email.list_emails"))
 
     except Exception as e:
         print(f"❌ 새 이메일 처리 중 오류: {str(e)}")
-        return jsonify({"success": False, "message": str(e)})
+        flash(f"새 이메일 처리 중 오류가 발생했습니다: {str(e)}", "error")
+        return redirect(url_for("email.list_emails"))
 
 
 @email_bp.route("/<int:email_id>/read")
