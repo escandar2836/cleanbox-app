@@ -383,15 +383,15 @@ def classify_email(email_id):
             if category_id == 0:  # 미분류
                 category_id = None
 
-        gmail_service = GmailService(current_user.id)
-        success = gmail_service.update_email_category(email_obj.gmail_id, category_id)
+        # 직접 데이터베이스 업데이트
+        email_obj.category_id = category_id
+        email_obj.updated_at = datetime.utcnow()
+        db.session.commit()
 
-        if success:
-            return jsonify({"success": True, "message": "이메일이 분류되었습니다."})
-        else:
-            return jsonify({"success": False, "message": "이메일 분류에 실패했습니다."})
+        return jsonify({"success": True, "message": "이메일이 분류되었습니다."})
 
     except Exception as e:
+        db.session.rollback()
         return jsonify({"success": False, "message": f"오류: {str(e)}"})
 
 
