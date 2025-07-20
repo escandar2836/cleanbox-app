@@ -454,7 +454,7 @@ class PlaywrightUnsubscribeService:
         return self._finalize_failure("최대 재시도 횟수 초과", start_time)
 
     async def _try_basic_unsubscribe(self, page: Page, user_email: str = None) -> Dict:
-        """기본 구독해지 시도 (Playwright 최적화)"""
+        """기본 구독해지 시도 (AI 기반 완료 판단 적용)"""
         try:
             # 구독해지 관련 요소들 찾기
             selectors = [
@@ -538,19 +538,44 @@ class PlaywrightUnsubscribeService:
                                         f"📝 URL 변경 감지: {before_url} → {after_url}"
                                     )
 
-                                # 페이지 내용 확인
-                                page_content = await page.content()
-                                if (
-                                    "unsubscribe" in page_content.lower()
-                                    and "complete" in page_content.lower()
-                                ):
-                                    print("📝 구독해지 완료 페이지 감지")
-                                    return {"success": True, "message": "구독해지 성공"}
+                                # AI 기반 구독해지 완료 판단
+                                print("🤖 AI 기반 구독해지 완료 분석 시작...")
+                                ai_result = (
+                                    await self._analyze_unsubscribe_completion_with_ai(
+                                        page
+                                    )
+                                )
 
-                                return {
-                                    "success": True,
-                                    "message": "구독해지 시도 완료",
-                                }
+                                if (
+                                    ai_result["success"]
+                                    and ai_result["confidence"] >= 70
+                                ):
+                                    print(
+                                        f"🤖 AI 분석으로 구독해지 완료 확인 (신뢰도: {ai_result['confidence']}%)"
+                                    )
+                                    return {
+                                        "success": True,
+                                        "message": f"구독해지 성공 (AI 신뢰도: {ai_result['confidence']}%)",
+                                        "ai_confidence": ai_result["confidence"],
+                                        "ai_reason": ai_result["reason"],
+                                    }
+                                else:
+                                    print(
+                                        f"🤖 AI 분석 결과: 구독해지 미완료 (신뢰도: {ai_result['confidence']}%)"
+                                    )
+                                    # 기존 방식으로도 확인
+                                    if await self._check_basic_success_indicators(page):
+                                        print("📝 기본 지표로 성공 확인")
+                                        return {
+                                            "success": True,
+                                            "message": "구독해지 성공",
+                                        }
+                                    else:
+                                        print("📝 구독해지 미완료로 판단")
+                                        return {
+                                            "success": False,
+                                            "message": "구독해지 미완료",
+                                        }
 
                 except Exception as e:
                     print(f"⚠️ 선택자 {selector} 처리 중 오류: {str(e)}")
@@ -561,52 +586,116 @@ class PlaywrightUnsubscribeService:
         except Exception as e:
             return {"success": False, "message": f"기본 구독해지 실패: {str(e)}"}
 
-    async def _check_post_request_success(self, page: Page) -> bool:
-        """POST 요청 성공 여부 확인"""
+    async def _analyze_unsubscribe_completion_with_ai(self, page: Page) -> Dict:
+        """AI를 사용한 구독해지 완료 분석 (간단한 방식)"""
         try:
-            # 현재 URL 확인
+            # 페이지 내용 추출
+            content = await page.content()
             current_url = page.url
-            print(f"📝 현재 URL: {current_url}")
+            current_title = await page.title()
 
-            # 페이지 제목 확인
-            title = await page.title()
-            print(f"📝 페이지 제목: {title}")
+            # 간단한 프롬프트 생성
+            prompt = f"""
+다음 웹 페이지에서 구독해지가 완료되었는지 판단해주세요.
 
-            # 페이지 소스에서 성공 메시지 확인
-            page_content = await page.content()
-            page_source = page_content.lower()
+URL: {current_url}
+제목: {current_title}
+내용: {content[:1000]}
 
-            # 구독해지 완료 관련 키워드
-            success_indicators = [
-                "unsubscribe complete",
-                "구독해지 완료",
-                "subscription cancelled",
-                "구독이 취소되었습니다",
-                "you have been unsubscribed",
-                "구독해지되었습니다",
-                "thank you for unsubscribing",
-                "구독해지해 주셔서 감사합니다",
+구독해지가 완료되었으면 "완료됨", 아니면 "완료되지 않음"으로만 답변하세요.
+"""
+
+            # OpenAI API 호출
+            ai_response = await self._call_simple_ai_api(prompt)
+
+            return self._parse_simple_completion_result(ai_response)
+
+        except Exception as e:
+            print(f"⚠️ AI 구독해지 완료 분석 실패: {str(e)}")
+            return {"success": False, "confidence": 0, "reason": str(e)}
+
+    def _parse_simple_completion_result(self, ai_response: str) -> Dict:
+        """간단한 AI 응답 파싱"""
+        try:
+            # 응답에서 완료 여부 판단
+            response_lower = ai_response.lower()
+
+            # 완료 지표들
+            completion_indicators = [
+                "완료됨",
+                "완료",
+                "성공",
+                "success",
+                "complete",
+                "completed",
+                "구독해지됨",
+                "unsubscribed",
+                "cancelled",
+                "취소됨",
+                "감사합니다",
+                "thank you",
+                "성공적으로",
+                "successfully",
             ]
 
-            for indicator in success_indicators:
-                if indicator in page_source:
-                    print(f"📝 성공 지표 발견: {indicator}")
-                    return True
+            # 실패 지표들
+            failure_indicators = [
+                "완료되지 않음",
+                "실패",
+                "오류",
+                "error",
+                "failed",
+                "다시 시도",
+                "retry",
+                "잘못된",
+                "invalid",
+            ]
 
-            # URL에서 성공 확인
-            if any(
-                keyword in current_url.lower()
-                for keyword in ["complete", "success", "thank", "unsubscribed"]
-            ):
-                print(f"📝 URL에서 성공 확인: {current_url}")
+            # 완료 여부 판단
+            is_completed = any(
+                indicator in response_lower for indicator in completion_indicators
+            )
+            is_failed = any(
+                indicator in response_lower for indicator in failure_indicators
+            )
+
+            # 신뢰도 계산 (간단한 방식)
+            confidence = 80 if is_completed and not is_failed else 20
+
+            result = {
+                "success": is_completed,
+                "confidence": confidence,
+                "reason": ai_response,
+                "indicators": [],
+                "suggested_action": "",
+            }
+
+            print(f"🤖 AI 구독해지 완료 분석:")
+            print(f"   - 완료 여부: {is_completed}")
+            print(f"   - 신뢰도: {confidence}%")
+            print(f"   - 응답: {ai_response}")
+
+            return result
+
+        except Exception as e:
+            print(f"⚠️ AI 응답 파싱 실패: {str(e)}")
+            return {"success": False, "confidence": 0, "reason": f"파싱 오류: {str(e)}"}
+
+    async def _check_post_request_success(self, page: Page) -> bool:
+        """POST 요청 성공 여부 확인 (AI 기반 개선)"""
+        try:
+            # 기존 방식으로 먼저 확인
+            basic_result = await self._check_basic_success_indicators(page)
+            if basic_result:
+                print("📝 기본 지표로 성공 확인")
                 return True
 
-            # 제목에서 성공 확인
-            if any(
-                keyword in title.lower()
-                for keyword in ["complete", "success", "unsubscribed", "cancelled"]
-            ):
-                print(f"📝 제목에서 성공 확인: {title}")
+            # AI 기반 분석으로 추가 확인
+            print("🤖 AI 기반 구독해지 완료 분석 시작...")
+            ai_result = await self._analyze_unsubscribe_completion_with_ai(page)
+
+            if ai_result["success"] and ai_result["confidence"] >= 70:
+                print(f"🤖 AI 분석으로 성공 확인 (신뢰도: {ai_result['confidence']}%)")
                 return True
 
             return False
@@ -615,10 +704,172 @@ class PlaywrightUnsubscribeService:
             print(f"⚠️ POST 요청 확인 중 오류: {str(e)}")
             return False
 
+    async def _analyze_page_for_next_action(self, page: Page) -> Dict:
+        """페이지 분석하여 다음 액션 결정"""
+        try:
+            ai_result = await self._analyze_unsubscribe_completion_with_ai(page)
+
+            if ai_result["success"]:
+                # 구독해지가 완료된 경우 성공
+                return {
+                    "action": "success",
+                    "message": "구독해지가 완료되었습니다",
+                    "confidence": ai_result["confidence"],
+                }
+            else:
+                # 구독해지가 완료되지 않은 경우 실패
+                return {
+                    "action": "error",
+                    "message": "구독해지 중 오류가 발생했습니다",
+                    "confidence": ai_result["confidence"],
+                }
+
+        except Exception as e:
+            return {
+                "action": "error",
+                "message": f"페이지 분석 실패: {str(e)}",
+                "confidence": 0,
+            }
+
+    async def _call_simple_ai_api(self, prompt: str) -> str:
+        """간단한 OpenAI API 호출"""
+        try:
+            client = openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+
+            response = client.chat.completions.create(
+                model="gpt-4",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "웹 페이지가 구독해지 완료 페이지인지 판단하는 AI입니다. '완료됨' 또는 '완료되지 않음'으로만 답변하세요.",
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                max_tokens=100,
+                temperature=0.1,
+            )
+
+            content = response.choices[0].message.content
+            print(f"🤖 AI 응답: {content}")
+            return content
+
+        except Exception as e:
+            print(f"⚠️ OpenAI API 호출 실패: {str(e)}")
+            return "완료되지 않음"
+
+    def _parse_simple_completion_result(self, ai_response: str) -> Dict:
+        """간단한 AI 응답 파싱"""
+        try:
+            # 응답에서 완료 여부 판단
+            response_lower = ai_response.lower()
+
+            # 완료 지표들
+            completion_indicators = [
+                "완료됨",
+                "완료",
+                "성공",
+                "success",
+                "complete",
+                "completed",
+                "구독해지됨",
+                "unsubscribed",
+                "cancelled",
+                "취소됨",
+                "감사합니다",
+                "thank you",
+                "성공적으로",
+                "successfully",
+            ]
+
+            # 실패 지표들
+            failure_indicators = [
+                "완료되지 않음",
+                "실패",
+                "오류",
+                "error",
+                "failed",
+                "다시 시도",
+                "retry",
+                "잘못된",
+                "invalid",
+            ]
+
+            # 완료 여부 판단
+            is_completed = any(
+                indicator in response_lower for indicator in completion_indicators
+            )
+            is_failed = any(
+                indicator in response_lower for indicator in failure_indicators
+            )
+
+            # 신뢰도 계산 (간단한 방식)
+            confidence = 80 if is_completed and not is_failed else 20
+
+            result = {
+                "success": is_completed,
+                "confidence": confidence,
+                "reason": ai_response,
+                "indicators": [],
+                "suggested_action": "",
+            }
+
+            print(f"🤖 AI 구독해지 완료 분석:")
+            print(f"   - 완료 여부: {is_completed}")
+            print(f"   - 신뢰도: {confidence}%")
+            print(f"   - 응답: {ai_response}")
+
+            return result
+
+        except Exception as e:
+            print(f"⚠️ AI 응답 파싱 실패: {str(e)}")
+            return {"success": False, "confidence": 0, "reason": f"파싱 오류: {str(e)}"}
+
+    async def _check_basic_success_indicators(self, page: Page) -> bool:
+        """기본 성공 지표 확인 (기존 로직)"""
+        try:
+            current_url = page.url
+            title = await page.title()
+            page_content = await page.content()
+            page_source = page_content.lower()
+
+            # 기존 성공 지표들
+            success_indicators = [
+                "unsubscribe complete",
+                "구독해지 완료",
+                "subscription cancelled",
+                "구독이 취소되었습니다",
+                "you have been unsubscribed",
+                "구독해지되었습니다",
+            ]
+
+            for indicator in success_indicators:
+                if indicator in page_source:
+                    print(f"📝 성공 지표 발견: {indicator}")
+                    return True
+
+            # URL/제목 확인
+            if any(
+                keyword in current_url.lower()
+                for keyword in ["complete", "success", "thank"]
+            ):
+                return True
+
+            if any(
+                keyword in title.lower()
+                for keyword in ["complete", "success", "unsubscribed"]
+            ):
+                return True
+
+            return False
+
+        except Exception as e:
+            print(f"⚠️ 기본 지표 확인 중 오류: {str(e)}")
+            return False
+
     async def _try_second_page_unsubscribe(
         self, page: Page, user_email: str = None
     ) -> Dict:
-        """두 번째 페이지 구독해지 처리"""
+        """두 번째 페이지 구독해지 처리 (AI 기반 완료 판단 적용)"""
         try:
             # 두 번째 페이지에서 구독해지 관련 버튼/링크 찾기
             second_page_selectors = [
@@ -677,20 +928,70 @@ class PlaywrightUnsubscribeService:
                                 or "submit" in selector.lower()
                             ):
                                 print(f"📝 두 번째 페이지 요소 클릭: {element_text}")
-                                await element.click()
-                                await page.wait_for_timeout(3000)  # 클릭 후 대기
 
-                                # POST 요청 처리 확인
-                                if await self._check_post_request_success(page):
+                                # 클릭 전 현재 URL 저장
+                                before_url = page.url
+
+                                # 클릭 실행
+                                await element.click()
+
+                                # 네트워크 요청 완료 대기
+                                try:
+                                    await page.wait_for_load_state(
+                                        "networkidle", timeout=10000
+                                    )
+                                    print("📝 네트워크 요청 완료 대기 성공")
+                                except Exception as e:
+                                    print(
+                                        f"⚠️ 네트워크 대기 실패, 기본 대기로 전환: {str(e)}"
+                                    )
+                                    await page.wait_for_timeout(3000)
+
+                                # URL 변경 확인
+                                after_url = page.url
+                                if before_url != after_url:
+                                    print(
+                                        f"📝 URL 변경 감지: {before_url} → {after_url}"
+                                    )
+
+                                # AI 기반 구독해지 완료 판단
+                                print("🤖 AI 기반 구독해지 완료 분석 시작...")
+                                ai_result = (
+                                    await self._analyze_unsubscribe_completion_with_ai(
+                                        page
+                                    )
+                                )
+
+                                if (
+                                    ai_result["success"]
+                                    and ai_result["confidence"] >= 70
+                                ):
+                                    print(
+                                        f"🤖 AI 분석으로 구독해지 완료 확인 (신뢰도: {ai_result['confidence']}%)"
+                                    )
                                     return {
                                         "success": True,
-                                        "message": "두 번째 페이지 구독해지 성공 (POST 요청 확인됨)",
+                                        "message": f"두 번째 페이지 구독해지 성공 (AI 신뢰도: {ai_result['confidence']}%)",
+                                        "ai_confidence": ai_result["confidence"],
+                                        "ai_reason": ai_result["reason"],
                                     }
                                 else:
-                                    return {
-                                        "success": True,
-                                        "message": "두 번째 페이지 구독해지 성공",
-                                    }
+                                    print(
+                                        f"🤖 AI 분석 결과: 구독해지 미완료 (신뢰도: {ai_result['confidence']}%)"
+                                    )
+                                    # 기존 방식으로도 확인
+                                    if await self._check_basic_success_indicators(page):
+                                        print("📝 기본 지표로 성공 확인")
+                                        return {
+                                            "success": True,
+                                            "message": "두 번째 페이지 구독해지 성공",
+                                        }
+                                    else:
+                                        print("📝 구독해지 미완료로 판단")
+                                        return {
+                                            "success": False,
+                                            "message": "두 번째 페이지 구독해지 미완료",
+                                        }
 
                 except Exception as e:
                     print(f"⚠️ 두 번째 페이지 선택자 {selector} 처리 중 오류: {str(e)}")
@@ -866,7 +1167,7 @@ class PlaywrightUnsubscribeService:
     async def _execute_ai_instructions(
         self, page: Page, ai_response: Dict, user_email: str = None
     ) -> Dict:
-        """AI 지시 실행"""
+        """AI 지시 실행 (AI 기반 완료 판단 적용)"""
         try:
             action = ai_response.get("action", "none")
             target = ai_response.get("target", "")
@@ -886,12 +1187,45 @@ class PlaywrightUnsubscribeService:
                     element_text = await element.text_content()
                     if target.lower() in element_text.lower():
                         print(f"📝 AI 지시에 따른 링크 클릭: {element_text}")
+
+                        # 클릭 전 현재 URL 저장
+                        before_url = page.url
+
+                        # 클릭 실행
                         await element.click()
-                        await page.wait_for_timeout(2000)
-                        return {
-                            "success": True,
-                            "message": "AI 지시에 따른 링크 클릭 완료",
-                        }
+
+                        # 네트워크 요청 완료 대기
+                        try:
+                            await page.wait_for_load_state("networkidle", timeout=10000)
+                            print("📝 네트워크 요청 완료 대기 성공")
+                        except Exception as e:
+                            print(f"⚠️ 네트워크 대기 실패, 기본 대기로 전환: {str(e)}")
+                            await page.wait_for_timeout(2000)
+
+                        # AI 기반 구독해지 완료 판단
+                        print("🤖 AI 기반 구독해지 완료 분석 시작...")
+                        ai_result = await self._analyze_unsubscribe_completion_with_ai(
+                            page
+                        )
+
+                        if ai_result["success"] and ai_result["confidence"] >= 70:
+                            print(
+                                f"🤖 AI 분석으로 구독해지 완료 확인 (신뢰도: {ai_result['confidence']}%)"
+                            )
+                            return {
+                                "success": True,
+                                "message": f"AI 지시에 따른 링크 클릭 완료 (AI 신뢰도: {ai_result['confidence']}%)",
+                                "ai_confidence": ai_result["confidence"],
+                                "ai_reason": ai_result["reason"],
+                            }
+                        else:
+                            print(
+                                f"🤖 AI 분석 결과: 구독해지 미완료 (신뢰도: {ai_result['confidence']}%)"
+                            )
+                            return {
+                                "success": True,
+                                "message": "AI 지시에 따른 링크 클릭 완료",
+                            }
 
             elif action == "button_click":
                 # 버튼 클릭 처리
@@ -900,12 +1234,45 @@ class PlaywrightUnsubscribeService:
                     element_text = await element.text_content()
                     if target.lower() in element_text.lower():
                         print(f"📝 AI 지시에 따른 버튼 클릭: {element_text}")
+
+                        # 클릭 전 현재 URL 저장
+                        before_url = page.url
+
+                        # 클릭 실행
                         await element.click()
-                        await page.wait_for_timeout(2000)
-                        return {
-                            "success": True,
-                            "message": "AI 지시에 따른 버튼 클릭 완료",
-                        }
+
+                        # 네트워크 요청 완료 대기
+                        try:
+                            await page.wait_for_load_state("networkidle", timeout=10000)
+                            print("📝 네트워크 요청 완료 대기 성공")
+                        except Exception as e:
+                            print(f"⚠️ 네트워크 대기 실패, 기본 대기로 전환: {str(e)}")
+                            await page.wait_for_timeout(2000)
+
+                        # AI 기반 구독해지 완료 판단
+                        print("🤖 AI 기반 구독해지 완료 분석 시작...")
+                        ai_result = await self._analyze_unsubscribe_completion_with_ai(
+                            page
+                        )
+
+                        if ai_result["success"] and ai_result["confidence"] >= 70:
+                            print(
+                                f"🤖 AI 분석으로 구독해지 완료 확인 (신뢰도: {ai_result['confidence']}%)"
+                            )
+                            return {
+                                "success": True,
+                                "message": f"AI 지시에 따른 버튼 클릭 완료 (AI 신뢰도: {ai_result['confidence']}%)",
+                                "ai_confidence": ai_result["confidence"],
+                                "ai_reason": ai_result["reason"],
+                            }
+                        else:
+                            print(
+                                f"🤖 AI 분석 결과: 구독해지 미완료 (신뢰도: {ai_result['confidence']}%)"
+                            )
+                            return {
+                                "success": True,
+                                "message": "AI 지시에 따른 버튼 클릭 완료",
+                            }
 
             elif action == "form_submit":
                 # 폼 제출 처리
@@ -925,12 +1292,45 @@ class PlaywrightUnsubscribeService:
                     for button in submit_buttons:
                         button_text = await button.text_content()
                         print(f"📝 AI 지시에 따른 폼 제출: {button_text}")
+
+                        # 제출 전 현재 URL 저장
+                        before_url = page.url
+
+                        # 폼 제출
                         await button.click()
-                        await page.wait_for_timeout(2000)
-                        return {
-                            "success": True,
-                            "message": "AI 지시에 따른 폼 제출 완료",
-                        }
+
+                        # 네트워크 요청 완료 대기
+                        try:
+                            await page.wait_for_load_state("networkidle", timeout=10000)
+                            print("📝 네트워크 요청 완료 대기 성공")
+                        except Exception as e:
+                            print(f"⚠️ 네트워크 대기 실패, 기본 대기로 전환: {str(e)}")
+                            await page.wait_for_timeout(2000)
+
+                        # AI 기반 구독해지 완료 판단
+                        print("🤖 AI 기반 구독해지 완료 분석 시작...")
+                        ai_result = await self._analyze_unsubscribe_completion_with_ai(
+                            page
+                        )
+
+                        if ai_result["success"] and ai_result["confidence"] >= 70:
+                            print(
+                                f"🤖 AI 분석으로 구독해지 완료 확인 (신뢰도: {ai_result['confidence']}%)"
+                            )
+                            return {
+                                "success": True,
+                                "message": f"AI 지시에 따른 폼 제출 완료 (AI 신뢰도: {ai_result['confidence']}%)",
+                                "ai_confidence": ai_result["confidence"],
+                                "ai_reason": ai_result["reason"],
+                            }
+                        else:
+                            print(
+                                f"🤖 AI 분석 결과: 구독해지 미완료 (신뢰도: {ai_result['confidence']}%)"
+                            )
+                            return {
+                                "success": True,
+                                "message": "AI 지시에 따른 폼 제출 완료",
+                            }
 
             return {"success": False, "message": "AI 지시를 실행할 수 없습니다"}
 
