@@ -10,24 +10,18 @@ CleanBox는 이메일 관리와 함께 웹 스크래핑을 통한 구독 해지 
 - 웹훅을 통한 실시간 이메일 알림
 - 구독 해지 이메일 자동 감지
 
-### 구독 해지 자동화 (신규 기능)
+### 구독 해지 자동화
 - **Selenium** 기반 headless 브라우저 자동화
-- **Playwright** 기반 특정 서비스 전용 자동화
-- 지원 서비스:
-  - Netflix
-  - Spotify  
-  - YouTube Premium
-  - Amazon Prime
-  - Disney+
-  - Hulu
-- 웹 인터페이스를 통한 간편한 구독 해지
-- 비동기 작업 처리로 안정적인 실행
+- 이메일에서 구독해지 링크 자동 추출
+- JavaScript 지원으로 동적 콘텐츠 처리
+- AI 연동으로 지능형 페이지 분석
+- 다단계 구독해지 플로우 지원
 
 ## 🛠️ 기술 스택
 
 - **Backend**: Flask, Python 3.11
 - **Database**: PostgreSQL
-- **Browser Automation**: Selenium, Playwright
+- **Browser Automation**: Selenium
 - **Deployment**: Docker, Render
 - **Frontend**: Bootstrap, JavaScript
 
@@ -49,23 +43,20 @@ source venv/bin/activate  # Windows: venv\Scripts\activate
 
 3. **의존성 설치**
 ```bash
+# 프로덕션용
 pip install -r requirements.txt
+
+# 개발용 (테스트 포함)
+pip install -r requirements-dev.txt
 ```
 
-4. **브라우저 드라이버 설치**
-```bash
-# Selenium용 ChromeDriver (자동 설치됨)
-# Playwright 브라우저 설치
-playwright install --with-deps chromium
-```
-
-5. **환경 변수 설정**
+4. **환경 변수 설정**
 ```bash
 cp env.example .env
 # .env 파일을 편집하여 필요한 환경 변수 설정
 ```
 
-6. **데이터베이스 초기화**
+5. **데이터베이스 초기화**
 ```bash
 python app.py
 ```
@@ -88,27 +79,14 @@ docker run -p 8000:8000 cleanbox-app
 
 1. 브라우저에서 `http://localhost:8000` 접속
 2. 로그인 후 대시보드에서 이메일 관리 기능 사용
-3. 구독 해지 기능은 `/unsubscribe` 페이지에서 사용 가능
+3. 구독 해지 기능은 이메일 카테고리에서 자동 처리
 
-### API 사용
+### 이메일 기반 구독 해지
 
-#### 구독 해지 API
-```bash
-# 구독 해지 요청
-curl -X POST http://localhost:8000/api/unsubscribe \
-  -H "Content-Type: application/json" \
-  -d '{
-    "service": "netflix",
-    "email": "user@example.com",
-    "password": "password123"
-  }'
-
-# 작업 상태 확인
-curl http://localhost:8000/api/unsubscribe/status/task_1
-
-# 지원 서비스 목록
-curl http://localhost:8000/api/unsubscribe/services
-```
+1. **이메일 수신**: Gmail API를 통해 이메일 수신
+2. **자동 분류**: AI가 이메일을 카테고리별로 분류
+3. **구독해지 감지**: 구독해지 링크가 포함된 이메일 자동 감지
+4. **자동 처리**: Selenium을 사용한 자동 구독해지 실행
 
 ## 🔧 구독 해지 시스템
 
@@ -117,11 +95,14 @@ curl http://localhost:8000/api/unsubscribe/services
 - **JavaScript 지원**: 동적 콘텐츠 및 SPA 처리
 - **AI 연동**: OpenAI API를 통한 지능형 페이지 분석
 - **다단계 처리**: 복잡한 구독해지 플로우 지원
+- **에러 처리**: 실패 시 재시도 및 로깅
 
-### Playwright 기반 시스템
-- **특정 서비스**: Netflix, Spotify 등 주요 서비스 전용
-- **로그인 기반**: 사용자 계정으로 직접 로그인
-- **비동기 처리**: 안정적인 브라우저 자동화
+### 주요 기능
+- **링크 추출**: 이메일 헤더 및 본문에서 구독해지 링크 자동 추출
+- **페이지 분석**: AI를 통한 페이지 구조 분석
+- **자동 클릭**: 구독해지 버튼/링크 자동 클릭
+- **폼 처리**: 이메일 입력 및 폼 제출 자동화
+- **결과 확인**: 구독해지 성공/실패 결과 확인
 
 ## 📊 모니터링 및 로깅
 
