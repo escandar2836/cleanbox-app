@@ -158,7 +158,9 @@ class AdvancedUnsubscribeService:
         except:
             return False
 
-    def process_unsubscribe_with_selenium(self, unsubscribe_url: str) -> Dict:
+    def process_unsubscribe_with_selenium(
+        self, unsubscribe_url: str, user_email: str = None
+    ) -> Dict:
         """Selenium을 사용한 고급 구독해지 처리 (재시도 로직 포함)"""
         result = {"success": False, "message": "", "steps": []}
         max_retries = 3
@@ -182,7 +184,9 @@ class AdvancedUnsubscribeService:
                 time.sleep(3)  # 페이지 로딩 대기
 
                 # 구독해지 버튼/링크 찾기 및 클릭
-                unsubscribe_found = self._find_and_click_unsubscribe_elements()
+                unsubscribe_found = self._find_and_click_unsubscribe_elements(
+                    user_email
+                )
 
                 if unsubscribe_found:
                     result["success"] = True
@@ -229,8 +233,8 @@ class AdvancedUnsubscribeService:
 
         return result
 
-    def _find_and_click_unsubscribe_elements(self) -> bool:
-        """구독해지 요소 찾기 및 클릭"""
+    def _find_and_click_unsubscribe_elements(self, user_email: str = None) -> bool:
+        """구독해지 요소 찾기 및 클릭 (개선된 버전)"""
         unsubscribe_selectors = [
             # 버튼
             "button[contains(text(), 'Unsubscribe')]",
@@ -286,10 +290,10 @@ class AdvancedUnsubscribeService:
             except (TimeoutException, NoSuchElementException):
                 continue
 
-        # 폼 제출 시도
-        return self._try_form_submission()
+        # 폼 제출 시도 (사용자 이메일 전달)
+        return self._try_form_submission(user_email)
 
-    def _try_form_submission(self) -> bool:
+    def _try_form_submission(self, user_email: str = None) -> bool:
         """폼 제출 시도 (AI 에이전트 기능 강화)"""
         try:
             # 구독해지 관련 폼 찾기
@@ -302,8 +306,8 @@ class AdvancedUnsubscribeService:
                 unsubscribe_keywords = ["unsubscribe", "opt-out", "cancel", "구독해지"]
                 if any(keyword in form_html for keyword in unsubscribe_keywords):
 
-                    # AI 에이전트: 폼 필드 자동 작성
-                    self._fill_form_fields_ai(form)
+                    # AI 에이전트: 폼 필드 자동 작성 (사용자 이메일 전달)
+                    self._fill_form_fields_ai(form, user_email)
 
                     # 폼 내의 submit 버튼 찾기
                     submit_buttons = form.find_elements(
@@ -326,8 +330,8 @@ class AdvancedUnsubscribeService:
 
         return False
 
-    def _fill_form_fields_ai(self, form) -> None:
-        """AI 에이전트: 폼 필드 자동 작성"""
+    def _fill_form_fields_ai(self, form, user_email: str = None) -> None:
+        """AI 에이전트: 폼 필드 자동 작성 (개선된 버전)"""
         try:
             # CSRF 토큰 자동 처리
             self._handle_csrf_token(form)
@@ -340,9 +344,14 @@ class AdvancedUnsubscribeService:
 
             for email_input in email_inputs:
                 if not email_input.get_attribute("value"):
-                    # 이메일 주소 추출 시도 (현재는 기본값 사용)
-                    email_input.send_keys("user@example.com")
-                    self.logger.info("이메일 필드 자동 작성")
+                    # 실제 사용자 이메일 주소 사용 (개선)
+                    if user_email:
+                        email_input.send_keys(user_email)
+                        self.logger.info(f"이메일 필드 자동 작성: {user_email}")
+                    else:
+                        # 기본값 사용 (하지만 로그로 표시)
+                        email_input.send_keys("user@example.com")
+                        self.logger.info("이메일 필드 자동 작성 (기본값 사용)")
 
             # 체크박스 처리 (구독해지 관련)
             checkboxes = form.find_elements(By.CSS_SELECTOR, "input[type='checkbox']")
@@ -578,12 +587,13 @@ class AdvancedUnsubscribeService:
         return None
 
     def process_unsubscribe_advanced(
-        self, email_content: str, email_headers: Dict = None
+        self, email_content: str, email_headers: Dict = None, user_email: str = None
     ) -> Dict:
-        """고급 구독해지 처리 (자동 방법 선택)"""
+        """고급 구독해지 처리 (자동 방법 선택) - 개선된 버전"""
         print(f"🔍 AdvancedUnsubscribeService.process_unsubscribe_advanced 시작")
         print(f"📝 이메일 내용 길이: {len(email_content)}")
         print(f"📝 이메일 헤더: {email_headers}")
+        print(f"📝 사용자 이메일: {user_email}")
 
         result = {"success": False, "message": "", "steps": [], "progress": 0}
 
@@ -642,7 +652,9 @@ class AdvancedUnsubscribeService:
                 return result
 
             # 먼저 간단한 방법 시도
-            result["steps"].append("📡 간단한 HTTP 요청 시도...")
+            result["steps"].append(
+                f"📡 간단한 HTTP 요청 시도... ({i + 1}/{len(unsubscribe_links)})"
+            )
             print(f"📝 간단한 HTTP 요청 시도: {unsubscribe_url}")
             simple_result = self.process_unsubscribe_simple(unsubscribe_url)
             print(f"📝 간단한 HTTP 요청 결과: {simple_result}")
@@ -651,7 +663,9 @@ class AdvancedUnsubscribeService:
             if not simple_result["success"]:
                 result["steps"].append("🤖 Selenium 브라우저 자동화 시도...")
                 print(f"📝 Selenium 브라우저 자동화 시도: {unsubscribe_url}")
-                simple_result = self.process_unsubscribe_with_selenium(unsubscribe_url)
+                simple_result = self.process_unsubscribe_with_selenium(
+                    unsubscribe_url, user_email
+                )
                 print(f"📝 Selenium 처리 결과: {simple_result}")
 
             if simple_result["success"]:
@@ -669,8 +683,11 @@ class AdvancedUnsubscribeService:
 
         # 모든 링크 실패
         result["steps"].append("❌ 모든 구독해지 링크에서 실패했습니다")
-        result["message"] = "모든 구독해지 링크에서 실패했습니다"
+        result["message"] = (
+            "모든 구독해지 링크에서 실패했습니다. 수동으로 구독해지하시거나 나중에 다시 시도해주세요."
+        )
         result["progress"] = 100
+        print(f"❌ 모든 구독해지 링크 실패 - 총 {len(unsubscribe_links)}개 링크 시도")
         return result
 
     def _handle_website_specific_logic(self, url: str) -> Dict:

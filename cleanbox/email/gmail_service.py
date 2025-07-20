@@ -417,15 +417,19 @@ class GmailService:
             raise Exception(f"이메일 삭제 실패: {error}")
 
     def process_unsubscribe(self, email_obj) -> Dict:
-        """고급 구독해지 처리"""
+        """고급 구독해지 처리 (개선된 버전)"""
         print(f"🔍 GmailService.process_unsubscribe 시작 - 이메일 ID: {email_obj.id}")
         print(f"📝 이메일 정보 - 제목: {email_obj.subject}, 발신자: {email_obj.sender}")
 
         try:
-            # 고급 구독해지 서비스 사용
+            # 사용자 이메일 주소 가져오기
+            user_email = self._get_user_email()
+            print(f"📝 사용자 이메일 주소: {user_email}")
+
+            # 고급 구독해지 서비스 사용 (사용자 이메일 전달)
             print(f"📝 AdvancedUnsubscribeService 호출 시작")
             result = self.advanced_unsubscribe.process_unsubscribe_advanced(
-                email_obj.content, getattr(email_obj, "headers", {})
+                email_obj.content, getattr(email_obj, "headers", {}), user_email
             )
             print(f"📝 AdvancedUnsubscribeService 결과: {result}")
 
@@ -446,6 +450,20 @@ class GmailService:
                 "message": f"구독해지 처리 실패: {str(e)}",
                 "steps": [f"오류 발생: {str(e)}"],
             }
+
+    def _get_user_email(self) -> str:
+        """사용자 이메일 주소 가져오기"""
+        try:
+            # 현재 계정의 이메일 주소 가져오기
+            account = UserAccount.query.filter_by(id=self.account_id).first()
+            if account:
+                return account.account_email
+
+            # 기본값 반환
+            return "user@example.com"
+        except Exception as e:
+            print(f"❌ 사용자 이메일 주소 가져오기 실패: {str(e)}")
+            return "user@example.com"
 
     def setup_gmail_watch(self, topic_name: str) -> bool:
         """Gmail 웹훅 설정"""
