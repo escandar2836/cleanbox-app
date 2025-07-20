@@ -259,7 +259,7 @@ class GmailService:
         return "본문을 추출할 수 없습니다."
 
     def save_email_to_db(self, email_data: Dict) -> Email:
-        """이메일을 DB에 저장"""
+        """이메일을 DB에 저장 (개선된 버전)"""
         try:
             # 이미 저장된 이메일인지 확인 (계정별로)
             existing_email = Email.query.filter_by(
@@ -271,6 +271,35 @@ class GmailService:
             if existing_email:
                 return existing_email
 
+            # 발신자 정보 추출
+            sender = email_data.get("sender") or "알 수 없는 발신자"
+
+            # 새로운 이메일인 경우 발신자별 구독해지 상태 확인
+            # 최근 7일 이내에 같은 발신자로부터 새 이메일이 들어오면 구독해지 상태 재설정
+            from datetime import datetime, timedelta
+
+            recent_threshold = datetime.utcnow() - timedelta(days=7)
+
+            # 같은 발신자로부터 최근에 새 이메일이 들어왔는지 확인
+            recent_same_sender = Email.query.filter(
+                Email.user_id == self.user_id,
+                Email.sender == sender,
+                Email.created_at > recent_threshold,
+                Email.is_unsubscribed == True,
+            ).first()
+
+            # 새로운 이메일이 들어오면 같은 발신자의 구독해지 상태 재설정
+            if recent_same_sender:
+                print(
+                    f"🔄 새로운 이메일 감지 - 발신자 '{sender}'의 구독해지 상태 재설정"
+                )
+                Email.query.filter(
+                    Email.user_id == self.user_id,
+                    Email.sender == sender,
+                    Email.is_unsubscribed == True,
+                ).update({"is_unsubscribed": False})
+                db.session.commit()
+
             # 새 이메일 생성 (기본값 처리)
             email_obj = Email(
                 user_id=self.user_id,
@@ -278,7 +307,7 @@ class GmailService:
                 gmail_id=email_data["gmail_id"],
                 thread_id=email_data.get("thread_id"),
                 subject=email_data.get("subject") or "제목 없음",
-                sender=email_data.get("sender") or "알 수 없는 발신자",
+                sender=sender,
                 content=email_data.get("body") or "본문 없음",
                 summary=email_data.get("snippet", ""),
                 received_at=self._parse_date(email_data.get("date")),
@@ -458,6 +487,13 @@ class GmailService:
                 email_obj.updated_at = datetime.utcnow()
                 db.session.commit()
                 print(f"✅ DB 업데이트 완료")
+            else:
+                # 에러 타입과 상세 정보를 결과에 추가
+                result["error_type"] = result.get("error_type", "unknown")
+                result["error_details"] = result.get("error_details", "")
+                result["is_personal_email"] = result.get("is_personal_email", False)
+                if "failed_links" in result:
+                    result["failed_links"] = result["failed_links"]
 
             return result
 
@@ -466,6 +502,8 @@ class GmailService:
             return {
                 "success": False,
                 "message": f"구독해지 처리 실패: {str(e)}",
+                "error_type": "system_error",
+                "error_details": f"시스템 오류: {str(e)}",
                 "steps": [f"오류 발생: {str(e)}"],
             }
 

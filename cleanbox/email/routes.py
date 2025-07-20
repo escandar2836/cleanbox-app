@@ -20,6 +20,30 @@ email_bp = Blueprint("email", __name__)
 def list_emails():
     """이메일 목록 페이지 (모든 계정 통합)"""
     try:
+        # 새 이메일 처리 알림 확인
+        new_emails_notification = None
+        notification_file = f"notifications/{current_user.id}_new_emails.txt"
+
+        if os.path.exists(notification_file):
+            try:
+                with open(notification_file, "r") as f:
+                    content = f.read().strip()
+                    if content:
+                        timestamp_str, count_str = content.split(",")
+                        notification_time = datetime.fromisoformat(timestamp_str)
+
+                        # 1시간 이내의 알림만 표시
+                        if datetime.utcnow() - notification_time < timedelta(hours=1):
+                            new_emails_notification = {
+                                "count": int(count_str),
+                                "timestamp": notification_time,
+                            }
+
+                # 알림 파일 삭제 (한 번만 표시)
+                os.remove(notification_file)
+            except Exception as e:
+                print(f"알림 파일 처리 실패: {str(e)}")
+
         # 모든 활성 계정 가져오기
         accounts = UserAccount.query.filter_by(
             user_id=current_user.id, is_active=True
@@ -28,7 +52,12 @@ def list_emails():
         if not accounts:
             flash("연결된 계정이 없습니다.", "error")
             return render_template(
-                "email/list.html", user=current_user, emails=[], stats={}, accounts=[]
+                "email/list.html",
+                user=current_user,
+                emails=[],
+                stats={},
+                accounts=[],
+                new_emails_notification=new_emails_notification,
             )
 
         # 토큰 상태 확인 및 갱신 시도
@@ -104,6 +133,7 @@ def list_emails():
             emails=emails,
             stats=stats,
             accounts=accounts,
+            new_emails_notification=new_emails_notification,
         )
 
     except Exception as e:
@@ -1036,7 +1066,7 @@ def bulk_actions():
 @email_bp.route("/<int:email_id>/unsubscribe")
 @login_required
 def unsubscribe_email(email_id):
-    """개별 이메일 구독해지"""
+    """개별 이메일 구독해지 (개선된 버전)"""
     print(f"🔍 개별 구독해지 시작 - 이메일 ID: {email_id}")
     try:
         # 이메일 조회
@@ -1049,9 +1079,31 @@ def unsubscribe_email(email_id):
                 404,
             )
 
-        print(f"📝 이메일 {email_id} 조회 성공 - 제목: {email.subject}")
+        print(
+            f"📝 이메일 {email_id} 조회 성공 - 제목: {email.subject}, 발신자: {email.sender}"
+        )
 
-        # 이미 구독해지된 이메일인지 확인
+        # 새로운 이메일인지 확인 (최근 7일 이내)
+        from datetime import datetime, timedelta
+
+        recent_threshold = datetime.utcnow() - timedelta(days=7)
+        is_recent_email = email.created_at and email.created_at > recent_threshold
+
+        # 같은 발신자로부터 최근에 새 이메일이 들어왔는지 확인
+        recent_same_sender = Email.query.filter(
+            Email.user_id == current_user.id,
+            Email.sender == email.sender,
+            Email.created_at > recent_threshold,
+            Email.id != email_id,
+        ).first()
+
+        # 새로운 이메일이거나 같은 발신자로부터 최근에 새 이메일이 들어온 경우 구독해지 상태 재설정
+        if is_recent_email or recent_same_sender:
+            print(f"🔄 새로운 이메일 감지 - 구독해지 상태 재설정")
+            email.is_unsubscribed = False
+            db.session.commit()
+
+        # 이미 구독해지된 이메일인지 확인 (재설정 후)
         if email.is_unsubscribed:
             print(f"⏭️ 이메일 {email_id}는 이미 구독해지됨")
             return jsonify(

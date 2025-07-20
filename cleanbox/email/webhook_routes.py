@@ -261,11 +261,32 @@ def process_new_emails_for_account(account):
         )
 
         # 처리 결과 반환
-        return {
+        result = {
             "processed_count": processed_count,
             "classified_count": classified_count,
             "archived_count": archived_count,
         }
+
+        # 새 이메일이 처리된 경우 세션 플래그 설정 (Redis나 세션 스토리지 사용)
+        if processed_count > 0:
+            try:
+                # 사용자별로 새 이메일 처리 알림 플래그 설정
+                # 실제 구현에서는 Redis나 데이터베이스를 사용하는 것이 좋습니다
+                logger.info(
+                    f"새 이메일 처리됨 - 사용자: {account.user_id}, 처리된 이메일: {processed_count}개"
+                )
+
+                # 간단한 파일 기반 알림 시스템 (실제로는 Redis 사용 권장)
+                notification_file = f"notifications/{account.user_id}_new_emails.txt"
+                os.makedirs("notifications", exist_ok=True)
+
+                with open(notification_file, "w") as f:
+                    f.write(f"{datetime.utcnow().isoformat()},{processed_count}")
+
+            except Exception as e:
+                logger.error(f"알림 플래그 설정 실패: {str(e)}")
+
+        return result
 
     except Exception as e:
         logger.error(f"웹훅 이메일 처리 중 오류: {str(e)}")

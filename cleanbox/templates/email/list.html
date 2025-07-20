@@ -350,28 +350,25 @@
     </div>
 </div>
 
-<!-- 신규 이메일 처리 알림 모달 -->
-<div class="modal fade" id="newEmailNotificationModal" tabindex="-1">
+<!-- 새 이메일 처리 알림 모달 -->
+{% if new_emails_notification %}
+<div class="modal fade" id="newEmailNotificationModal" tabindex="-1" aria-labelledby="newEmailNotificationModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header bg-success text-white">
-                <h5 class="modal-title">
-                    <i class="fas fa-envelope"></i> 새 이메일 처리 완료
+                <h5 class="modal-title" id="newEmailNotificationModalLabel">
+                    <i class="fas fa-envelope-open"></i> 새 이메일 처리 완료
                 </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <div class="text-center">
-                    <i class="fas fa-check-circle text-success fa-3x mb-3"></i>
-                    <h6>새로운 이메일이 처리되었습니다!</h6>
-                    <p class="text-muted">최신 이메일 목록을 보시려면 페이지를 새로고침하세요.</p>
-                </div>
+                <p><strong>{{ new_emails_notification.count }}개의 새로운 이메일</strong>이 처리되었습니다.</p>
+                <p class="text-muted small">처리 시간: {{ new_emails_notification.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+                <p>페이지를 새로고침하여 최신 상태를 확인하세요.</p>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">나중에</button>
-                <button type="button" class="btn btn-success" onclick="location.reload()">
-                    <i class="fas fa-sync-alt"></i> 새로고침
-                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">닫기</button>
+                <button type="button" class="btn btn-primary" onclick="location.reload()">새로고침</button>
             </div>
         </div>
     </div>
@@ -953,40 +950,41 @@ function setupWebhook() {
 }
 
 </script>
-{% endblock %} 
-        form.submit();
-    } else {
-        console.log('❌ 사용자가 취소했습니다');
+
+<!-- 새 이메일 처리 알림 모달 -->
+{% if new_emails_notification %}
+<div class="modal fade" id="newEmailNotificationModal" tabindex="-1" aria-labelledby="newEmailNotificationModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title" id="newEmailNotificationModalLabel">
+                    <i class="fas fa-envelope-open"></i> 새 이메일 처리 완료
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p><strong>{{ new_emails_notification.count }}개의 새로운 이메일</strong>이 처리되었습니다.</p>
+                <p class="text-muted small">처리 시간: {{ new_emails_notification.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+                <p>페이지를 새로고침하여 최신 상태를 확인하세요.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">닫기</button>
+                <button type="button" class="btn btn-primary" onclick="location.reload()">새로고침</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// 페이지 로드 시 새 이메일 알림 모달 자동 표시
+document.addEventListener('DOMContentLoaded', function() {
+    const notificationModal = document.getElementById('newEmailNotificationModal');
+    if (notificationModal) {
+        const modal = new bootstrap.Modal(notificationModal);
+        modal.show();
     }
-}
-
-// 웹훅 재설정 함수
-function setupWebhook() {
-    const button = event.target;
-    const originalText = button.innerHTML;
-    
-    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 설정 중...';
-    button.disabled = true;
-    
-    fetch('{{ url_for("email.setup_webhook") }}', {
-        method: 'POST'
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            showAlert('success', data.message);
-        } else {
-            showAlert('error', data.message);
-        }
-    })
-    .catch(error => {
-        showAlert('error', '웹훅 설정 중 오류가 발생했습니다.');
-    })
-    .finally(() => {
-        button.innerHTML = originalText;
-        button.disabled = false;
-    });
-}
-
+});
 </script>
+{% endif %}
+
 {% endblock %} 

@@ -195,7 +195,8 @@ class AdvancedUnsubscribeService:
                 return {
                     "success": False,
                     "message": "개인 이메일로 감지되어 구독해지 처리를 건너뜁니다.",
-                    "reason": "personal_email",
+                    "error_type": "personal_email",
+                    "is_personal_email": True,
                 }
 
             # 2. 구독해지 링크 추출
@@ -207,12 +208,14 @@ class AdvancedUnsubscribeService:
                 return {
                     "success": False,
                     "message": "구독해지 링크를 찾을 수 없습니다.",
-                    "reason": "no_unsubscribe_links",
+                    "error_type": "no_unsubscribe_link",
+                    "error_details": "이메일에서 구독해지 링크를 찾을 수 없습니다.",
                 }
 
             print(f"📝 발견된 구독해지 링크: {unsubscribe_links}")
 
             # 3. 각 링크에 대해 구독해지 시도
+            failed_links = []
             for i, link in enumerate(unsubscribe_links):
                 print(f"📝 링크 {i + 1}/{len(unsubscribe_links)} 처리: {link}")
 
@@ -225,12 +228,22 @@ class AdvancedUnsubscribeService:
                         "processed_url": link,
                         "processing_time": result.get("processing_time", 0),
                     }
+                else:
+                    failed_links.append(
+                        {
+                            "link_number": i + 1,
+                            "url": link,
+                            "error": result.get("message", "알 수 없는 오류"),
+                        }
+                    )
 
             # 모든 링크 실패
             return {
                 "success": False,
                 "message": "모든 구독해지 링크에서 실패했습니다.",
-                "reason": "all_links_failed",
+                "error_type": "all_links_failed",
+                "error_details": f"{len(failed_links)}개의 구독해지 링크를 시도했지만 모두 실패했습니다.",
+                "failed_links": failed_links,
                 "attempted_links": unsubscribe_links,
             }
 
