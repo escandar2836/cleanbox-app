@@ -19,6 +19,14 @@
             border-radius: 15px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
+        .flash-message-container {
+            margin-top: 1rem;
+            margin-bottom: 1rem;
+        }
+        .flash-message-container .alert {
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
     </style>
 </head>
 <body>
@@ -77,20 +85,22 @@
         </div>
     </nav>
 
-    <!-- 메인 컨텐츠 -->
-    <main class="container mt-4">
-        <!-- 플래시 메시지 -->
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
+    <!-- 플래시 메시지 (독립적인 row) -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="container flash-message-container">
                 {% for category, message in messages %}
                     <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
                         {{ message }}
                         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                     </div>
                 {% endfor %}
-            {% endif %}
-        {% endwith %}
+            </div>
+        {% endif %}
+    {% endwith %}
 
+    <!-- 메인 컨텐츠 -->
+    <main class="container mt-4">
         {% block content %}{% endblock %}
     </main>
 
