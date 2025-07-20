@@ -230,7 +230,28 @@ class AIClassifier:
 
     def _call_openai_api(self, prompt: str) -> Optional[str]:
         try:
-            client = openai.OpenAI(api_key=self.api_key)
+            # API 키 검증
+            if not self.api_key:
+                print("OpenAI API 키가 설정되지 않았습니다.")
+                return None
+
+            # OpenAI 클라이언트 초기화 (안전한 방식)
+            try:
+                client = openai.OpenAI(api_key=self.api_key)
+            except TypeError as e:
+                if "proxies" in str(e):
+                    # proxies 매개변수 문제인 경우, 환경변수에서 제거
+                    import os
+
+                    if "HTTP_PROXY" in os.environ:
+                        del os.environ["HTTP_PROXY"]
+                    if "HTTPS_PROXY" in os.environ:
+                        del os.environ["HTTPS_PROXY"]
+                    client = openai.OpenAI(api_key=self.api_key)
+                else:
+                    raise e
+
+            # API 호출
             completion = client.chat.completions.create(
                 model=self.model,
                 messages=[
