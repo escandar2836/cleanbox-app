@@ -696,16 +696,29 @@ def bulk_actions():
                                     "subject": email_obj.subject,
                                     "sender": email_obj.sender,
                                     "error": "개인 이메일로 감지됨",
+                                    "error_type": "personal_email",
                                 }
                             )
                         else:
+                            # 에러 타입을 더 구체적으로 분류
+                            specific_error_type = error_type
+                            if "timeout" in error_details.lower():
+                                specific_error_type = "timeout_error"
+                            elif (
+                                "network" in error_details.lower()
+                                or "connection" in error_details.lower()
+                            ):
+                                specific_error_type = "network_error"
+                            elif "processing" in error_details.lower():
+                                specific_error_type = "processing_error"
+
                             failed_emails.append(
                                 {
                                     "id": email_id,
                                     "subject": email_obj.subject,
                                     "sender": email_obj.sender,
                                     "error": error_details,
-                                    "error_type": error_type,
+                                    "error_type": specific_error_type,
                                 }
                             )
 
@@ -719,20 +732,40 @@ def bulk_actions():
                     )
                     continue
 
-            # 결과 메시지 생성
+                    # 실패한 이메일들을 에러 타입별로 그룹화
+            error_groups = {}
+            for email in failed_emails:
+                error_type = email.get("error_type", "unknown")
+                if error_type not in error_groups:
+                    error_groups[error_type] = []
+                error_groups[error_type].append(email)
+
+            # 결과 메시지 생성 (상세 버전)
             total_processed = success_count + len(failed_emails) + len(personal_emails)
             message_parts = []
 
             if success_count > 0:
-                message_parts.append(f"✅ {success_count}개 성공")
+                message_parts.append(f"✅ 성공: {success_count}개")
 
             if personal_emails:
-                message_parts.append(f"📧 {len(personal_emails)}개 개인 이메일")
+                message_parts.append(f"📧 개인 이메일: {len(personal_emails)}개")
 
-            if failed_emails:
-                message_parts.append(f"❌ {len(failed_emails)}개 실패")
+            # 에러 타입별로 그룹화된 실패 정보 추가
+            for error_type, emails in error_groups.items():
+                error_name = {
+                    "no_unsubscribe_link": "구독해지 링크 없음",
+                    "all_links_failed": "모든 링크 실패",
+                    "processing_error": "처리 오류",
+                    "network_error": "네트워크 오류",
+                    "timeout_error": "시간 초과",
+                    "unknown": "알 수 없는 오류",
+                }.get(error_type, error_type)
 
-            result_message = f"처리 완료: {' | '.join(message_parts)}"
+                message_parts.append(f"❌ {error_name}: {len(emails)}개")
+
+            result_message = (
+                f"처리 완료 ({total_processed}개): {' | '.join(message_parts)}"
+            )
 
             print(f"🎉 대량 구독해지 완료 - {result_message}")
             flash(
@@ -748,6 +781,7 @@ def bulk_actions():
                 "failed_emails": failed_emails,
                 "personal_emails": personal_emails,
                 "total_processed": total_processed,
+                "error_groups": error_groups,  # 에러 타입별 그룹화 정보 추가
             }
 
         else:
