@@ -581,6 +581,9 @@ function performBulkAction(action, emailIds) {
                 `;
             }
             
+            // Flash 스타일 메시지 표시
+            showFlashMessage(data.message, data.failed_count > 0 ? 'warning' : 'success');
+            
             // 2초 후 페이지 새로고침
             setTimeout(() => {
                 const modal = bootstrap.Modal.getInstance(document.getElementById('bulkProcessingModal'));

@@ -701,7 +701,7 @@ def bulk_actions():
             )
 
             print(f"🎉 대량 삭제 완료 - {result_message}")
-            flash(result_message, "info" if failed_emails else "success")
+            # AJAX 요청에서는 Flash 메시지 사용하지 않음 (클라이언트에서 직접 표시)
 
             # JSON 응답 반환 (클라이언트에서 처리)
             return jsonify(
@@ -817,7 +817,7 @@ def bulk_actions():
             )
 
             print(f"🎉 대량 아카이브 완료 - {result_message}")
-            flash(result_message, "info" if failed_emails else "success")
+            # AJAX 요청에서는 Flash 메시지 사용하지 않음 (클라이언트에서 직접 표시)
 
             # JSON 응답 반환 (클라이언트에서 처리)
             return jsonify(
@@ -932,7 +932,7 @@ def bulk_actions():
             )
 
             print(f"🎉 대량 읽음 표시 완료 - {result_message}")
-            flash(result_message, "info" if failed_emails else "success")
+            # AJAX 요청에서는 Flash 메시지 사용하지 않음 (클라이언트에서 직접 표시)
 
             # JSON 응답 반환 (클라이언트에서 처리)
             return jsonify(
@@ -1125,7 +1125,7 @@ def bulk_actions():
             )
 
             print(f"🎉 대량 구독해지 완료 - {result_message}")
-            flash(result_message, "info" if failed_senders else "success")
+            # AJAX 요청에서는 Flash 메시지 사용하지 않음 (클라이언트에서 직접 표시)
 
             # JSON 응답 반환 (클라이언트에서 처리)
             return jsonify(

@@ -152,6 +152,30 @@
             });
         }, 5000);
     });
+    
+    // Flash 스타일 메시지 표시 함수
+    function showFlashMessage(message, type = 'info') {
+        const alertClass = type === 'error' ? 'danger' : type;
+        const iconClass = type === 'danger' ? 'exclamation-triangle' : 'info-circle';
+        
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `alert alert-${alertClass} alert-dismissible fade show`;
+        alertDiv.style.cssText = 'position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 300px; max-width: 500px;';
+        alertDiv.innerHTML = `
+            <i class="fas fa-${iconClass}"></i>
+            <span style="white-space: pre-line;">${message}</span>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        
+        document.body.appendChild(alertDiv);
+        
+        // 5초 후 자동 제거
+        setTimeout(() => {
+            if (alertDiv.parentNode) {
+                alertDiv.remove();
+            }
+        }, 5000);
+    }
     </script>
     
     {% block scripts %}{% endblock %}
