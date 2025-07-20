@@ -182,6 +182,94 @@
     </div>
 </div>
 
+<!-- 구독 해지 모달 -->
+<div class="modal fade" id="unsubscribeModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-unlink text-warning"></i> 구독 해지 처리 중
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="unsubscribeContent">
+                    <div class="text-center">
+                        <div class="spinner-border text-warning" role="status">
+                            <span class="visually-hidden">구독 해지 중...</span>
+                        </div>
+                        <p class="mt-2">AI가 구독 해지 링크를 찾아 처리하고 있습니다...</p>
+                        <div class="progress mt-3">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                 role="progressbar" style="width: 0%" id="unsubscribeProgress">0%</div>
+                        </div>
+                        <div class="mt-3" id="unsubscribeSteps">
+                            <small class="text-muted">초기화 중...</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bulk 처리 진행 중 모달 -->
+<div class="modal fade" id="bulkProcessingModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-cogs text-primary"></i> <span id="bulkActionTitle">대량 처리 중</span>
+                </h5>
+            </div>
+            <div class="modal-body">
+                <div class="text-center">
+                    <div class="spinner-border text-primary mb-3" role="status">
+                        <span class="visually-hidden">처리 중...</span>
+                    </div>
+                    <h6 id="bulkProcessingMessage">이메일을 처리하고 있습니다...</h6>
+                    <div class="progress mt-3">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                             role="progressbar" style="width: 0%" id="bulkProgress">0%</div>
+                    </div>
+                    <div class="mt-3">
+                        <small class="text-muted" id="bulkProcessingDetails">
+                            처리 중인 이메일: <span id="currentEmailCount">0</span> / <span id="totalEmailCount">0</span>
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 신규 이메일 처리 알림 모달 -->
+<div class="modal fade" id="newEmailNotificationModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-envelope"></i> 새 이메일 처리 완료
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="text-center">
+                    <i class="fas fa-check-circle text-success fa-3x mb-3"></i>
+                    <h6>새로운 이메일이 처리되었습니다!</h6>
+                    <p class="text-muted">최신 이메일 목록을 보시려면 페이지를 새로고침하세요.</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">나중에</button>
+                <button type="button" class="btn btn-success" onclick="location.reload()">
+                    <i class="fas fa-sync-alt"></i> 새로고침
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 // 대량 작업 관련 함수들
 function updateBulkActions() {
@@ -220,26 +308,8 @@ function bulkMarkAsRead() {
     if (emailIds.length === 0) return;
     
     if (confirm(`${emailIds.length}개의 이메일을 읽음으로 표시하시겠습니까?`)) {
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = '{{ url_for("email.bulk_actions") }}';
-        
-        const actionInput = document.createElement('input');
-        actionInput.type = 'hidden';
-        actionInput.name = 'action';
-        actionInput.value = 'mark_read';
-        form.appendChild(actionInput);
-        
-        emailIds.forEach(id => {
-            const input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = 'email_ids';
-            input.value = id;
-            form.appendChild(input);
-        });
-        
-        document.body.appendChild(form);
-        form.submit();
+        showBulkProcessingModal('읽음 표시', emailIds.length);
+        performBulkAction('mark_read', emailIds);
     }
 }
 
@@ -248,26 +318,8 @@ function bulkArchive() {
     if (emailIds.length === 0) return;
     
     if (confirm(`${emailIds.length}개의 이메일을 아카이브하시겠습니까?`)) {
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = '{{ url_for("email.bulk_actions") }}';
-        
-        const actionInput = document.createElement('input');
-        actionInput.type = 'hidden';
-        actionInput.name = 'action';
-        actionInput.value = 'archive';
-        form.appendChild(actionInput);
-        
-        emailIds.forEach(id => {
-            const input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = 'email_ids';
-            input.value = id;
-            form.appendChild(input);
-        });
-        
-        document.body.appendChild(form);
-        form.submit();
+        showBulkProcessingModal('아카이브', emailIds.length);
+        performBulkAction('archive', emailIds);
     }
 }
 
@@ -276,69 +328,78 @@ function bulkDelete() {
     if (emailIds.length === 0) return;
     
     if (confirm(`${emailIds.length}개의 이메일을 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다.`)) {
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = '{{ url_for("email.bulk_actions") }}';
-        
-        const actionInput = document.createElement('input');
-        actionInput.type = 'hidden';
-        actionInput.name = 'action';
-        actionInput.value = 'delete';
-        form.appendChild(actionInput);
-        
-        emailIds.forEach(id => {
-            const input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = 'email_ids';
-            input.value = id;
-            form.appendChild(input);
-        });
-        
-        document.body.appendChild(form);
-        form.submit();
+        showBulkProcessingModal('삭제', emailIds.length);
+        performBulkAction('delete', emailIds);
     }
 }
 
 function bulkUnsubscribe() {
     const emailIds = getSelectedEmailIds();
-    console.log('🔍 [category.html] bulkUnsubscribe() 호출됨');
-    console.log('📧 선택된 이메일 ID들:', emailIds);
-    console.log('📊 선택된 이메일 개수:', emailIds.length);
-    
-    if (emailIds.length === 0) {
-        console.log('⚠️ 선택된 이메일이 없습니다');
-        return;
-    }
+    if (emailIds.length === 0) return;
     
     if (confirm(`${emailIds.length}개의 이메일에서 구독 해지를 시도하시겠습니까?`)) {
-        console.log('✅ 사용자 확인 완료, 폼 생성 시작');
-        
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = '{{ url_for("email.bulk_actions") }}';
-        
-        const actionInput = document.createElement('input');
-        actionInput.type = 'hidden';
-        actionInput.name = 'action';
-        actionInput.value = 'unsubscribe';
-        form.appendChild(actionInput);
-        
-        emailIds.forEach((id, index) => {
-            const input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = 'email_ids';
-            input.value = id;
-            form.appendChild(input);
-            console.log(`📝 폼에 이메일 ID 추가 [${index + 1}]:`, id);
-        });
-        
-        console.log('🚀 폼 제출:', form.action);
-        document.body.appendChild(form);
-        form.submit();
-    } else {
-        console.log('❌ 사용자가 취소했습니다');
+        showBulkProcessingModal('구독 해지', emailIds.length);
+        performBulkAction('unsubscribe', emailIds);
     }
 }
+
+// Bulk 처리 모달 표시
+function showBulkProcessingModal(action, totalCount) {
+    const modal = new bootstrap.Modal(document.getElementById('bulkProcessingModal'));
+    const title = document.getElementById('bulkActionTitle');
+    const message = document.getElementById('bulkProcessingMessage');
+    const totalCountElement = document.getElementById('totalEmailCount');
+    
+    title.textContent = `${action} 중`;
+    message.textContent = `${totalCount}개의 이메일을 ${action}하고 있습니다...`;
+    totalCountElement.textContent = totalCount;
+    
+    modal.show();
+}
+
+// AJAX를 통한 bulk 처리
+function performBulkAction(action, emailIds) {
+    const formData = new FormData();
+    formData.append('action', action);
+    emailIds.forEach(id => formData.append('email_ids', id));
+    
+    fetch('{{ url_for("email.bulk_actions") }}', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.text())
+    .then(html => {
+        // 모달 닫기
+        const modal = bootstrap.Modal.getInstance(document.getElementById('bulkProcessingModal'));
+        modal.hide();
+        
+        // 페이지 새로고침
+        location.reload();
+    })
+    .catch(error => {
+        console.error('Bulk 처리 오류:', error);
+        alert('처리 중 오류가 발생했습니다: ' + error);
+        
+        // 모달 닫기
+        const modal = bootstrap.Modal.getInstance(document.getElementById('bulkProcessingModal'));
+        modal.hide();
+    });
+}
+
+// 신규 이메일 처리 알림 표시
+function showNewEmailNotification() {
+    const modal = new bootstrap.Modal(document.getElementById('newEmailNotificationModal'));
+    modal.show();
+}
+
+// 페이지 로드 시 신규 이메일 처리 확인
+document.addEventListener('DOMContentLoaded', function() {
+    // URL 파라미터에서 신규 이메일 처리 알림 확인
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('new_emails_processed') === 'true') {
+        showNewEmailNotification();
+    }
+});
 
 // AI 분석 함수
 function analyzeEmail(emailId) {

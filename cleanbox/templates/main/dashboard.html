@@ -195,8 +195,15 @@ function processNewEmails() {
                 
                 alert(message);
                 
-                // 페이지 새로고침 (새 이메일이 있을 때만)
-                location.reload();
+                // 신규 이메일이 처리된 경우 알림 표시
+                if (data.redirect_url && data.redirect_url.includes('new_emails_processed=true')) {
+                    if (confirm('새로운 이메일이 처리되었습니다!\n\n이메일 목록을 확인하시겠습니까?')) {
+                        window.location.href = data.redirect_url;
+                    }
+                } else {
+                    // 페이지 새로고침 (새 이메일이 있을 때만)
+                    location.reload();
+                }
             }
         } else {
             alert('새 이메일 처리 실패: ' + data.message);

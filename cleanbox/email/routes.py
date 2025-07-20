@@ -159,7 +159,7 @@ def category_emails(category_id):
 @email_bp.route("/process-new", methods=["POST"])
 @login_required
 def process_new_emails():
-    """가입 날짜 이후의 새 이메일 처리"""
+    """새 이메일 처리"""
     try:
         # 모든 활성 계정 가져오기
         accounts = UserAccount.query.filter_by(
@@ -172,133 +172,94 @@ def process_new_emails():
         total_processed = 0
         total_classified = 0
         account_results = []
-        all_accounts_no_emails = True  # 모든 계정에서 새 이메일이 없는지 확인
+        new_emails_processed = False  # 신규 이메일 처리 여부
 
-        # 사용자의 가입 날짜 이후의 이메일만 처리
-        after_date = current_user.first_service_access
-
-        # 모든 계정에 대해 새 이메일 처리
         for account in accounts:
             try:
-
+                print(f"🔍 계정 {account.account_email} 새 이메일 처리 시작")
                 gmail_service = GmailService(current_user.id, account.id)
-                ai_classifier = AIClassifier()
 
-                # 가입 날짜 이후의 이메일 가져오기
-                recent_emails = gmail_service.fetch_recent_emails(
-                    max_results=50, after_date=after_date
+                # 새 이메일 가져오기
+                new_emails = gmail_service.get_new_emails()
+                print(
+                    f"📧 계정 {account.account_email}에서 {len(new_emails)}개의 새 이메일 발견"
                 )
 
-                if not recent_emails:
+                if not new_emails:
                     account_results.append(
                         {
                             "account": account.account_email,
+                            "status": "no_new_emails",
                             "processed": 0,
                             "classified": 0,
-                            "status": "no_new_emails",
                         }
                     )
                     continue
 
-                # 이메일이 있으면 all_accounts_no_emails를 False로 설정
-                all_accounts_no_emails = False
+                # 새 이메일 처리
+                processed_count = 0
+                classified_count = 0
 
-                # 사용자 카테고리 가져오기 (AI 분류용 딕셔너리 형태로 변환)
-                category_objects = gmail_service.get_user_categories()
-                categories = [
-                    {
-                        "id": cat.id,
-                        "name": cat.name,
-                        "description": cat.description or "",
-                    }
-                    for cat in category_objects
-                ]
-
-                account_processed = 0
-                account_classified = 0
-
-                for email_data in recent_emails:
+                for email_data in new_emails:
                     try:
-                        # 이미 처리된 이메일인지 확인
-                        existing_email = Email.query.filter_by(
-                            user_id=current_user.id,
-                            account_id=account.id,
-                            gmail_id=email_data["gmail_id"],
-                        ).first()
-
-                        if existing_email:
-                            continue  # 이미 처리된 이메일은 건너뛰기
-
-                        # DB에 저장
+                        # 이메일을 DB에 저장
                         email_obj = gmail_service.save_email_to_db(email_data)
+                        processed_count += 1
 
-                        if email_obj:
-                            account_processed += 1
-                            total_processed += 1
+                        # AI 분류
+                        ai_classifier = AIClassifier()
+                        classification_result = ai_classifier.classify_email(
+                            email_obj.content, email_obj.subject, email_obj.sender
+                        )
 
-                            # AI 분류 및 요약 시도
-                            if categories:
-                                category_id, summary = (
-                                    ai_classifier.classify_and_summarize_email(
-                                        email_data["body"],
-                                        email_data["subject"],
-                                        email_data["sender"],
-                                        categories,
-                                    )
-                                )
-
-                                if category_id:
-                                    gmail_service.update_email_category(
-                                        email_data["gmail_id"], category_id
-                                    )
-                                    account_classified += 1
-                                    total_classified += 1
-
-                                # 요약 저장
-                                if (
-                                    summary
-                                    and summary
-                                    != "AI 처리를 사용할 수 없습니다. 수동으로 확인해주세요."
-                                ):
-                                    email_obj.summary = summary
-                                    db.session.commit()
+                        if classification_result["category_id"]:
+                            # 카테고리 업데이트
+                            gmail_service.update_email_category(
+                                email_obj.gmail_id, classification_result["category_id"]
+                            )
+                            classified_count += 1
 
                     except Exception as e:
+                        print(f"❌ 이메일 처리 실패: {str(e)}")
                         continue
+
+                total_processed += processed_count
+                total_classified += classified_count
+
+                if processed_count > 0:
+                    new_emails_processed = True  # 신규 이메일이 처리됨
 
                 account_results.append(
                     {
                         "account": account.account_email,
-                        "processed": account_processed,
-                        "classified": account_classified,
                         "status": "success",
+                        "processed": processed_count,
+                        "classified": classified_count,
                     }
                 )
 
+                print(
+                    f"✅ 계정 {account.account_email} 처리 완료 - 처리: {processed_count}개, 분류: {classified_count}개"
+                )
+
             except Exception as e:
+                print(f"❌ 계정 {account.account_email} 처리 실패: {str(e)}")
                 account_results.append(
                     {
                         "account": account.account_email,
-                        "processed": 0,
-                        "classified": 0,
                         "status": "error",
                         "error": str(e),
                     }
                 )
 
-        # 모든 계정에서 새 이메일이 없는 경우
-        if all_accounts_no_emails:
-            return jsonify(
-                {
-                    "success": True,
-                    "processed": 0,
-                    "classified": 0,
-                    "account_results": account_results,
-                    "no_new_emails": True,
-                    "message": "새로운 이메일이 없습니다.",
-                    "redirect": False,
-                }
-            )
+        # 결과 반환
+        if total_processed == 0:
+            return jsonify({"success": True, "no_new_emails": True})
+
+        # 신규 이메일이 처리된 경우 알림 URL 파라미터 추가
+        redirect_url = url_for("email.list_emails")
+        if new_emails_processed:
+            redirect_url += "?new_emails_processed=true"
 
         return jsonify(
             {
@@ -306,20 +267,13 @@ def process_new_emails():
                 "processed": total_processed,
                 "classified": total_classified,
                 "account_results": account_results,
-                "no_new_emails": False,
-                "message": f"새 이메일 처리 완료: {total_processed}개 처리, {total_classified}개 AI 분류",
-                "redirect": True,
+                "redirect_url": redirect_url,
             }
         )
 
     except Exception as e:
-        return jsonify(
-            {
-                "success": False,
-                "message": f"새 이메일 처리 중 오류: {str(e)}",
-                "redirect": False,
-            }
-        )
+        print(f"❌ 새 이메일 처리 중 오류: {str(e)}")
+        return jsonify({"success": False, "message": str(e)})
 
 
 @email_bp.route("/<int:email_id>/read")
