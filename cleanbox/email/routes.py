@@ -288,18 +288,38 @@ def process_new_emails():
 
         # 모든 계정에서 새 이메일이 없는 경우
         if all_accounts_no_emails:
-            flash("새로운 이메일이 없습니다.", "info")
-            return "", 204  # No Content 응답으로 현재 페이지 유지
+            return jsonify(
+                {
+                    "success": True,
+                    "processed": 0,
+                    "classified": 0,
+                    "account_results": account_results,
+                    "no_new_emails": True,
+                    "message": "새로운 이메일이 없습니다.",
+                    "redirect": False,
+                }
+            )
 
-        flash(
-            f"새 이메일 처리 완료: {total_processed}개 처리, {total_classified}개 AI 분류",
-            "success",
+        return jsonify(
+            {
+                "success": True,
+                "processed": total_processed,
+                "classified": total_classified,
+                "account_results": account_results,
+                "no_new_emails": False,
+                "message": f"새 이메일 처리 완료: {total_processed}개 처리, {total_classified}개 AI 분류",
+                "redirect": True,
+            }
         )
-        return redirect(url_for("email.list_emails"))
 
     except Exception as e:
-        flash(f"새 이메일 처리 중 오류: {str(e)}", "error")
-        return "", 204  # No Content 응답으로 현재 페이지 유지
+        return jsonify(
+            {
+                "success": False,
+                "message": f"새 이메일 처리 중 오류: {str(e)}",
+                "redirect": False,
+            }
+        )
 
 
 @email_bp.route("/<int:email_id>/read")
