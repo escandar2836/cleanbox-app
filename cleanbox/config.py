@@ -33,7 +33,7 @@ class Config:
     # PostgreSQL 연결을 위한 환경변수 설정
     if os.environ.get("DATABASE_URI") or os.environ.get("DATABASE_URL"):
         # psycopg3 사용을 위한 환경변수 설정
-        os.environ.setdefault("PSYCOPG_IMPL", "psycopg")
+        os.environ.setdefault("PSYCOPG_IMPL", "binary")
 
         # DATABASE_URI 처리 - psycopg3 dialect 명시
     database_uri = os.environ.get("DATABASE_URI") or os.environ.get("DATABASE_URL")
@@ -51,10 +51,6 @@ class Config:
         "pool_recycle": 300,
         "pool_size": 10,
         "max_overflow": 20,
-        "connect_args": {
-            "application_name": "cleanbox",
-            "connect_timeout": 10,
-        },
     }
 
     # Google OAuth 설정
