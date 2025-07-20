@@ -438,26 +438,14 @@ def analyze_email(email_id):
         ):
             email_obj.summary = summary
 
-        # AI 분석 성공 여부 확인
-        ai_analysis_success = (
-            summary
-            and summary != "AI 처리를 사용할 수 없습니다. 수동으로 확인해주세요."
-            and summary != "이메일 내용이 부족합니다."
-            and summary != "사용 가능한 카테고리가 없습니다."
-            and summary != "AI 분석 결과를 파싱할 수 없습니다. 수동으로 확인해주세요."
-        )
-
-        # AI 분석이 성공한 경우에만 아카이브 처리
-        if ai_analysis_success:
-            try:
-                gmail_service = GmailService(current_user.id, email_obj.account_id)
-                gmail_service.archive_email(email_obj.gmail_id)
-                email_obj.is_archived = True
-                print(f"✅ AI 분석 성공 - 이메일 아카이브 완료: {email_obj.subject}")
-            except Exception as e:
-                print(f"❌ 이메일 아카이브 실패: {str(e)}")
-        else:
-            print(f"⚠️ AI 분석 실패 - 아카이브 건너뛰기: {email_obj.subject}")
+        # AI 분석 완료 후 Gmail에서 아카이브 처리
+        try:
+            gmail_service = GmailService(current_user.id, email_obj.account_id)
+            gmail_service.archive_email(email_obj.gmail_id)
+            email_obj.is_archived = True
+            print(f"✅ 이메일 아카이브 완료: {email_obj.subject}")
+        except Exception as e:
+            print(f"❌ 이메일 아카이브 실패: {str(e)}")
 
         db.session.commit()
 

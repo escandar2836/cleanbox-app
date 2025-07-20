@@ -235,48 +235,23 @@ class AIClassifier:
                 print("OpenAI API 키가 설정되지 않았습니다.")
                 return None
 
-            # 환경변수 디버깅
-            import os
-
-            print("🔍 환경변수 확인:")
-            proxy_vars = ["HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"]
-            for var in proxy_vars:
-                if var in os.environ:
-                    print(f"   {var}: {os.environ[var]}")
-                else:
-                    print(f"   {var}: 설정되지 않음")
-
             # OpenAI 클라이언트 초기화 (안전한 방식)
             try:
-                # 환경변수에서 프록시 설정 제거
-                original_http_proxy = os.environ.pop("HTTP_PROXY", None)
-                original_https_proxy = os.environ.pop("HTTPS_PROXY", None)
-                original_http_proxy_lower = os.environ.pop("http_proxy", None)
-                original_https_proxy_lower = os.environ.pop("https_proxy", None)
-
-                print(f"🔧 프록시 설정 제거:")
-                print(f"   HTTP_PROXY: {original_http_proxy}")
-                print(f"   HTTPS_PROXY: {original_https_proxy}")
-                print(f"   http_proxy: {original_http_proxy_lower}")
-                print(f"   https_proxy: {original_https_proxy_lower}")
-
                 client = openai.OpenAI(api_key=self.api_key)
+            except TypeError as e:
+                if "proxies" in str(e):
+                    # proxies 매개변수 문제인 경우, 환경변수에서 제거
+                    import os
 
-                # 환경변수 복원
-                if original_http_proxy:
-                    os.environ["HTTP_PROXY"] = original_http_proxy
-                if original_https_proxy:
-                    os.environ["HTTPS_PROXY"] = original_https_proxy
-                if original_http_proxy_lower:
-                    os.environ["http_proxy"] = original_http_proxy_lower
-                if original_https_proxy_lower:
-                    os.environ["https_proxy"] = original_https_proxy_lower
+                    if "HTTP_PROXY" in os.environ:
+                        del os.environ["HTTP_PROXY"]
+                    if "HTTPS_PROXY" in os.environ:
+                        del os.environ["HTTPS_PROXY"]
+                    client = openai.OpenAI(api_key=self.api_key)
+                else:
+                    raise e
 
-            except Exception as e:
-                print(f"OpenAI 클라이언트 초기화 실패: {str(e)}")
-                return None
-
-            # API 호출
+            # API 호출 (최신 버전에 맞게 수정)
             completion = client.chat.completions.create(
                 model=self.model,
                 messages=[
