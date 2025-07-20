@@ -512,20 +512,45 @@ class PlaywrightUnsubscribeService:
                                 or "unsubscribe" in selector.lower()
                             ):
                                 print(f"📝 구독해지 요소 클릭: {element_text}")
-                                await element.click()
-                                await page.wait_for_timeout(3000)  # 클릭 후 대기
 
-                                # POST 요청 처리 확인
-                                if await self._check_post_request_success(page):
-                                    return {
-                                        "success": True,
-                                        "message": "기본 구독해지 성공 (POST 요청 확인됨)",
-                                    }
-                                else:
-                                    return {
-                                        "success": True,
-                                        "message": "기본 구독해지 성공",
-                                    }
+                                # 클릭 전 현재 URL 저장
+                                before_url = page.url
+
+                                # 클릭 실행
+                                await element.click()
+
+                                # 네트워크 요청 완료 대기
+                                try:
+                                    await page.wait_for_load_state(
+                                        "networkidle", timeout=10000
+                                    )
+                                    print("📝 네트워크 요청 완료 대기 성공")
+                                except Exception as e:
+                                    print(
+                                        f"⚠️ 네트워크 대기 실패, 기본 대기로 전환: {str(e)}"
+                                    )
+                                    await page.wait_for_timeout(3000)
+
+                                # URL 변경 확인
+                                after_url = page.url
+                                if before_url != after_url:
+                                    print(
+                                        f"📝 URL 변경 감지: {before_url} → {after_url}"
+                                    )
+
+                                # 페이지 내용 확인
+                                page_content = await page.content()
+                                if (
+                                    "unsubscribe" in page_content.lower()
+                                    and "complete" in page_content.lower()
+                                ):
+                                    print("📝 구독해지 완료 페이지 감지")
+                                    return {"success": True, "message": "구독해지 성공"}
+
+                                return {
+                                    "success": True,
+                                    "message": "구독해지 시도 완료",
+                                }
 
                 except Exception as e:
                     print(f"⚠️ 선택자 {selector} 처리 중 오류: {str(e)}")
@@ -541,24 +566,26 @@ class PlaywrightUnsubscribeService:
         try:
             # 현재 URL 확인
             current_url = page.url
+            print(f"📝 현재 URL: {current_url}")
+
+            # 페이지 제목 확인
+            title = await page.title()
+            print(f"📝 페이지 제목: {title}")
 
             # 페이지 소스에서 성공 메시지 확인
             page_content = await page.content()
             page_source = page_content.lower()
 
+            # 구독해지 완료 관련 키워드
             success_indicators = [
-                "success",
-                "성공",
-                "unsubscribed",
-                "구독해지됨",
-                "cancelled",
-                "취소됨",
-                "removed",
-                "제거됨",
-                "thank you",
-                "감사합니다",
-                "completed",
-                "완료",
+                "unsubscribe complete",
+                "구독해지 완료",
+                "subscription cancelled",
+                "구독이 취소되었습니다",
+                "you have been unsubscribed",
+                "구독해지되었습니다",
+                "thank you for unsubscribing",
+                "구독해지해 주셔서 감사합니다",
             ]
 
             for indicator in success_indicators:
@@ -566,9 +593,20 @@ class PlaywrightUnsubscribeService:
                     print(f"📝 성공 지표 발견: {indicator}")
                     return True
 
-            # URL 변경 확인
-            if "unsubscribe" in current_url and "success" in current_url:
+            # URL에서 성공 확인
+            if any(
+                keyword in current_url.lower()
+                for keyword in ["complete", "success", "thank", "unsubscribed"]
+            ):
                 print(f"📝 URL에서 성공 확인: {current_url}")
+                return True
+
+            # 제목에서 성공 확인
+            if any(
+                keyword in title.lower()
+                for keyword in ["complete", "success", "unsubscribed", "cancelled"]
+            ):
+                print(f"📝 제목에서 성공 확인: {title}")
                 return True
 
             return False
@@ -898,6 +936,51 @@ class PlaywrightUnsubscribeService:
 
         except Exception as e:
             return {"success": False, "message": f"AI 지시 실행 실패: {str(e)}"}
+
+    async def _try_form_submit(self, page: Page, user_email: str = None) -> Dict:
+        """폼 제출 전용 처리"""
+        try:
+            # 폼 찾기
+            forms = await page.query_selector_all("form")
+            for form in forms:
+                # 이메일 필드가 있다면 입력
+                if user_email:
+                    email_inputs = await form.query_selector_all(
+                        "input[type='email'], input[name*='email']"
+                    )
+                    for email_input in email_inputs:
+                        await email_input.fill(user_email)
+                        print(f"📝 이메일 입력: {user_email}")
+
+                # 제출 버튼 찾기
+                submit_buttons = await form.query_selector_all(
+                    "input[type='submit'], button[type='submit']"
+                )
+                for button in submit_buttons:
+                    button_text = await button.text_content()
+                    print(f"📝 폼 제출 버튼 발견: {button_text}")
+
+                    # 제출 전 URL 저장
+                    before_url = page.url
+
+                    # 폼 제출
+                    await button.click()
+
+                    # 네트워크 요청 완료 대기
+                    try:
+                        await page.wait_for_load_state("networkidle", timeout=10000)
+                        print("📝 폼 제출 후 네트워크 요청 완료")
+                    except:
+                        await page.wait_for_timeout(3000)
+
+                    # 결과 확인
+                    if await self._check_post_request_success(page):
+                        return {"success": True, "message": "폼 제출 성공"}
+
+            return {"success": False, "message": "폼 제출 실패"}
+
+        except Exception as e:
+            return {"success": False, "message": f"폼 제출 오류: {str(e)}"}
 
     def _finalize_success(self, result: Dict, start_time: float) -> Dict:
         """성공 결과 정리"""
