@@ -190,9 +190,6 @@ class SeleniumUnsubscribeService:
             driver.set_page_load_timeout(self.timeouts["page_load"])
             driver.implicitly_wait(self.timeouts["element_wait"])
 
-            # 메모리 사용량 모니터링
-            self._log_memory_usage("Chrome 드라이버 초기화 후")
-
             return driver
         except Exception as e:
             print(f"❌ Chrome 드라이버 초기화 실패: {str(e)}")
@@ -300,7 +297,6 @@ class SeleniumUnsubscribeService:
         self.log_unsubscribe_attempt(unsubscribe_url, user_email, start_time)
 
         # 초기 메모리 체크
-        self._log_memory_usage("처리 시작")
         if not self._check_memory_limit():
             return self._finalize_failure("메모리 부족으로 처리 중단", start_time)
 
@@ -898,11 +894,6 @@ class SeleniumUnsubscribeService:
             ),
         }
 
-    def _log_memory_usage(self, context: str = ""):
-        """메모리 사용량 로깅 (psutil 없이)"""
-        print(f"📊 메모리 모니터링 불가 ({context})")
-        self.logger.info(f"메모리 모니터링 불가 ({context})")
-
     def _cleanup_driver(self):
         """드라이버 정리 및 메모리 해제 (강화)"""
         if self.driver:
@@ -926,8 +917,6 @@ class SeleniumUnsubscribeService:
         for i in range(3):
             gc.collect()
             time.sleep(0.1)
-
-        self._log_memory_usage("드라이버 정리 후")
 
     def _check_memory_limit(self) -> bool:
         """메모리 제한 체크 (psutil 없이)"""
