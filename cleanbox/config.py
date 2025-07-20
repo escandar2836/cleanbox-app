@@ -35,11 +35,14 @@ class Config:
         # psycopg3 사용을 위한 환경변수 설정
         os.environ.setdefault("PSYCOPG_IMPL", "psycopg")
 
-    SQLALCHEMY_DATABASE_URI = (
-        os.environ.get("DATABASE_URI")
-        or os.environ.get("DATABASE_URL")
-        or "sqlite:///cleanbox.db"
-    )
+        # DATABASE_URI 처리 - psycopg3 dialect 명시
+    database_uri = os.environ.get("DATABASE_URI") or os.environ.get("DATABASE_URL")
+
+    if database_uri and database_uri.startswith("postgresql://"):
+        # psycopg3 dialect로 변경
+        database_uri = database_uri.replace("postgresql://", "postgresql+psycopg://")
+
+    SQLALCHEMY_DATABASE_URI = database_uri or "sqlite:///cleanbox.db"
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # PostgreSQL 연결 설정 (psycopg3 호환성)
@@ -50,6 +53,7 @@ class Config:
         "max_overflow": 20,
         "connect_args": {
             "application_name": "cleanbox",
+            "connect_timeout": 10,
         },
     }
 

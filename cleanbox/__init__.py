@@ -15,6 +15,8 @@ import os
 
 if os.environ.get("DATABASE_URI") or os.environ.get("DATABASE_URL"):
     os.environ.setdefault("PSYCOPG_IMPL", "psycopg")
+    # SQLAlchemy가 psycopg3를 사용하도록 강제
+    os.environ.setdefault("SQLALCHEMY_DATABASE_URI", "postgresql+psycopg://")
 
 # Local imports
 from .config import Config

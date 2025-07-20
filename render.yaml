@@ -9,6 +9,8 @@ services:
         value: 3.11.0
       - key: PSYCOPG_IMPL
         value: psycopg
+      - key: SQLALCHEMY_DATABASE_URI
+        value: postgresql+psycopg://
       - key: DATABASE_URI
         fromDatabase:
           name: cleanbox-db
