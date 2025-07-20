@@ -97,6 +97,48 @@ def create_app(config_class=Config):
         except Exception as e:
             print(f"❌ 스케줄된 웹훅 모니터링 중 오류: {str(e)}")
 
+    # 주기적 토큰 갱신 스케줄러 설정
+    @scheduler.task("interval", id="token_refresh", hours=1)
+    def scheduled_token_refresh():
+        """1시간마다 모든 사용자의 토큰 상태를 확인하고 갱신"""
+        try:
+            from .auth.routes import check_and_refresh_token
+            from .models import UserToken, UserAccount
+
+            print("🕐 스케줄된 토큰 갱신 시작...")
+
+            # 모든 활성 사용자 토큰 가져오기
+            user_tokens = (
+                UserToken.query.join(UserAccount)
+                .filter(UserAccount.is_active == True)
+                .all()
+            )
+
+            refreshed_count = 0
+            failed_count = 0
+
+            for user_token in user_tokens:
+                try:
+                    success = check_and_refresh_token(
+                        user_token.user_id, user_token.account_id
+                    )
+                    if success:
+                        refreshed_count += 1
+                    else:
+                        failed_count += 1
+                except Exception as e:
+                    print(
+                        f"❌ 토큰 갱신 실패: user_id={user_token.user_id}, account_id={user_token.account_id}, error={str(e)}"
+                    )
+                    failed_count += 1
+
+            print(
+                f"✅ 스케줄된 토큰 갱신 완료 - 갱신: {refreshed_count}개, 실패: {failed_count}개"
+            )
+
+        except Exception as e:
+            print(f"❌ 스케줄된 토큰 갱신 중 오류: {str(e)}")
+
     # 블루프린트 등록
     from .auth.routes import auth_bp
     from .main.routes import main_bp

@@ -1002,3 +1002,111 @@ def get_current_account_id():
         return first_account.id
 
     return None
+
+
+def refresh_user_token(user_id, account_id):
+    """사용자의 OAuth 토큰을 자동으로 갱신"""
+    try:
+        from google.oauth2.credentials import Credentials
+        from google.auth.transport.requests import Request
+        from google_auth_oauthlib.flow import Flow
+
+        # 사용자 토큰 가져오기
+        user_token = UserToken.query.filter_by(
+            user_id=user_id, account_id=account_id
+        ).first()
+
+        if not user_token:
+            print(
+                f"❌ 사용자 토큰을 찾을 수 없습니다: user_id={user_id}, account_id={account_id}"
+            )
+            return False
+
+        # 현재 토큰 정보 가져오기
+        tokens = user_token.get_tokens()
+
+        if not tokens.get("refresh_token"):
+            print(
+                f"❌ Refresh token이 없습니다: user_id={user_id}, account_id={account_id}"
+            )
+            return False
+
+        # Credentials 객체 생성
+        credentials = Credentials(
+            token=tokens.get("token"),
+            refresh_token=tokens.get("refresh_token"),
+            token_uri=tokens.get("token_uri"),
+            client_id=tokens.get("client_id"),
+            client_secret=tokens.get("client_secret"),
+            scopes=tokens.get("scopes", []),
+            expiry=tokens.get("expiry"),
+        )
+
+        # 토큰이 만료되었는지 확인
+        if credentials.expired and credentials.refresh_token:
+            print(f"🔄 토큰 갱신 시도: user_id={user_id}, account_id={account_id}")
+
+            # 토큰 갱신
+            credentials.refresh(Request())
+
+            # 갱신된 토큰 저장
+            user_token.set_tokens(credentials)
+            db.session.commit()
+
+            print(f"✅ 토큰 갱신 성공: user_id={user_id}, account_id={account_id}")
+            return True
+        else:
+            print(
+                f"ℹ️ 토큰이 아직 유효합니다: user_id={user_id}, account_id={account_id}"
+            )
+            return True
+
+    except Exception as e:
+        print(
+            f"❌ 토큰 갱신 실패: user_id={user_id}, account_id={account_id}, error={str(e)}"
+        )
+        return False
+
+
+def check_and_refresh_token(user_id, account_id):
+    """토큰 상태를 확인하고 필요시 갱신"""
+    try:
+        from google.oauth2.credentials import Credentials
+        from google.auth.transport.requests import Request
+
+        # 사용자 토큰 가져오기
+        user_token = UserToken.query.filter_by(
+            user_id=user_id, account_id=account_id
+        ).first()
+
+        if not user_token:
+            return False
+
+        # 현재 토큰 정보 가져오기
+        tokens = user_token.get_tokens()
+
+        if not tokens.get("refresh_token"):
+            return False
+
+        # Credentials 객체 생성
+        credentials = Credentials(
+            token=tokens.get("token"),
+            refresh_token=tokens.get("refresh_token"),
+            token_uri=tokens.get("token_uri"),
+            client_id=tokens.get("client_id"),
+            client_secret=tokens.get("client_secret"),
+            scopes=tokens.get("scopes", []),
+            expiry=tokens.get("expiry"),
+        )
+
+        # 토큰이 만료되었는지 확인
+        if credentials.expired and credentials.refresh_token:
+            return refresh_user_token(user_id, account_id)
+        else:
+            return True
+
+    except Exception as e:
+        print(
+            f"❌ 토큰 상태 확인 실패: user_id={user_id}, account_id={account_id}, error={str(e)}"
+        )
+        return False

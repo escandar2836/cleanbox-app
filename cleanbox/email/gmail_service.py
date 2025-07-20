@@ -49,6 +49,24 @@ class GmailService:
                 expiry=credentials_data.get("expiry"),
             )
 
+            # 토큰이 만료되었는지 확인하고 갱신 시도
+            if credentials.expired and credentials.refresh_token:
+                print(
+                    f"🔄 토큰이 만료되었습니다. 갱신을 시도합니다: user_id={self.user_id}, account_id={self.account_id}"
+                )
+
+                from google.auth.transport.requests import Request
+
+                credentials.refresh(Request())
+
+                # 갱신된 토큰 저장
+                from ..auth.routes import refresh_user_token
+
+                refresh_success = refresh_user_token(self.user_id, self.account_id)
+
+                if not refresh_success:
+                    raise Exception("토큰 갱신에 실패했습니다. 다시 로그인해주세요.")
+
             # Google API 클라이언트 빌드
             self.service = build("gmail", "v1", credentials=credentials)
         except Exception as e:

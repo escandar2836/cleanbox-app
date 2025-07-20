@@ -31,6 +31,21 @@ def list_emails():
                 "email/list.html", user=current_user, emails=[], stats={}, accounts=[]
             )
 
+        # 토큰 상태 확인 및 갱신 시도
+        for account in accounts:
+            try:
+                from ..auth.routes import check_and_refresh_token
+
+                token_valid = check_and_refresh_token(current_user.id, account.id)
+
+                if not token_valid:
+                    flash(
+                        f"계정 {account.account_email}의 인증이 만료되었습니다. 다시 로그인해주세요.",
+                        "warning",
+                    )
+            except Exception as e:
+                print(f"토큰 확인 실패: {str(e)}")
+
         # 모든 계정의 이메일 통합 조회 (생성 시간 기준 내림차순)
         emails = (
             Email.query.filter(
