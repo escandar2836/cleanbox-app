@@ -37,12 +37,12 @@ class SeleniumUnsubscribeService:
         self.setup_logging()
         self.driver = None
 
-        # 타임아웃 설정 (배포 환경에 맞게 조정)
+        # 타임아웃 설정 (Render 환경에 맞게 조정)
         self.timeouts = {
-            "page_load": 60,  # 30초 → 60초
-            "element_wait": 15,  # 10초 → 15초
-            "api_call": 30,  # 15초 → 30초
-            "retry_delay": 3,  # 2초 → 3초
+            "page_load": 30,  # 60초 → 30초
+            "element_wait": 10,  # 15초 → 10초
+            "api_call": 20,  # 30초 → 20초
+            "retry_delay": 2,  # 3초 → 2초
         }
 
     def setup_logging(self):
@@ -74,10 +74,10 @@ class SeleniumUnsubscribeService:
         }
 
     def _setup_chrome_driver(self) -> webdriver.Chrome:
-        """Chrome WebDriver 설정 (메모리 최적화 + JavaScript 활성화)"""
+        """Chrome WebDriver 설정 (Render 512MB + 0.1 CPU 최적화)"""
         chrome_options = Options()
 
-        # 메모리 사용량 최적화 (더 강화)
+        # Render 환경 최적화 (512MB RAM + 0.1 CPU)
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
@@ -87,14 +87,19 @@ class SeleniumUnsubscribeService:
         # JavaScript 활성화 (구독해지 버튼 렌더링을 위해)
         # chrome_options.add_argument("--disable-javascript")  # 제거
         chrome_options.add_argument("--headless")
-        chrome_options.add_argument("--window-size=1024,768")  # 해상도 더 줄임
+        chrome_options.add_argument("--window-size=640,480")  # 더 작은 해상도
+        chrome_options.add_argument(
+            "--max_old_space_size=64"
+        )  # 메모리 제한 (512MB의 12.5%)
+
+        # CPU 최적화 (0.1 CPU 환경)
+        chrome_options.add_argument("--single-process")  # 단일 프로세스
         chrome_options.add_argument("--disable-background-timer-throttling")
         chrome_options.add_argument("--disable-backgrounding-occluded-windows")
         chrome_options.add_argument("--disable-renderer-backgrounding")
         chrome_options.add_argument("--disable-features=TranslateUI")
         chrome_options.add_argument("--disable-ipc-flooding-protection")
         chrome_options.add_argument("--memory-pressure-off")
-        chrome_options.add_argument("--max_old_space_size=64")  # 메모리 제한 더 줄임
         chrome_options.add_argument("--disable-web-security")
         chrome_options.add_argument("--disable-features=VizDisplayCompositor")
         chrome_options.add_argument("--disable-software-rasterizer")
@@ -113,7 +118,60 @@ class SeleniumUnsubscribeService:
         chrome_options.add_argument("--no-default-browser-check")
         chrome_options.add_argument("--disable-background-networking")
         chrome_options.add_argument("--disable-sync-preferences")
+        chrome_options.add_argument("--disable-background-mode")
+        chrome_options.add_argument("--disable-background-downloads")
+
+        # 추가 CPU/메모리 최적화
+        chrome_options.add_argument("--disable-logging")
+        chrome_options.add_argument("--disable-dev-tools")
         chrome_options.add_argument("--disable-default-apps")
+        chrome_options.add_argument("--disable-popup-blocking")
+        chrome_options.add_argument("--disable-notifications")
+        chrome_options.add_argument("--disable-remote-fonts")
+        chrome_options.add_argument("--disable-smooth-scrolling")
+        chrome_options.add_argument("--disable-text-rendering")
+        chrome_options.add_argument("--disable-webgl")
+        chrome_options.add_argument("--disable-3d-apis")
+        chrome_options.add_argument("--disable-accelerated-2d-canvas")
+        chrome_options.add_argument("--disable-accelerated-jpeg-decoding")
+        chrome_options.add_argument("--disable-accelerated-mjpeg-decode")
+        chrome_options.add_argument("--disable-accelerated-video-decode")
+        chrome_options.add_argument("--disable-accelerated-video-encode")
+        chrome_options.add_argument("--disable-gpu-sandbox")
+        chrome_options.add_argument("--disable-software-rasterizer")
+        chrome_options.add_argument("--disable-threaded-compositing")
+        chrome_options.add_argument("--disable-threaded-scrolling")
+        chrome_options.add_argument("--disable-touch-drag-drop")
+        chrome_options.add_argument("--disable-touch-feedback")
+        chrome_options.add_argument("--disable-web-security")
+        chrome_options.add_argument("--disable-xss-auditor")
+        chrome_options.add_argument("--no-zygote")
+        chrome_options.add_argument("--disable-ipc-flooding-protection")
+        chrome_options.add_argument("--disable-renderer-backgrounding")
+        chrome_options.add_argument("--disable-background-timer-throttling")
+        chrome_options.add_argument("--disable-backgrounding-occluded-windows")
+        chrome_options.add_argument("--disable-features=TranslateUI")
+        chrome_options.add_argument("--disable-ipc-flooding-protection")
+        chrome_options.add_argument("--memory-pressure-off")
+        chrome_options.add_argument("--max_old_space_size=64")
+        chrome_options.add_argument("--disable-web-security")
+        chrome_options.add_argument("--disable-features=VizDisplayCompositor")
+        chrome_options.add_argument("--disable-software-rasterizer")
+        chrome_options.add_argument("--disable-threaded-animation")
+        chrome_options.add_argument("--disable-threaded-scrolling")
+        chrome_options.add_argument("--disable-checker-imaging")
+        chrome_options.add_argument("--disable-new-content-rendering-timeout")
+        chrome_options.add_argument("--disable-hang-monitor")
+        chrome_options.add_argument("--disable-prompt-on-repost")
+        chrome_options.add_argument("--disable-client-side-phishing-detection")
+        chrome_options.add_argument("--disable-component-update")
+        chrome_options.add_argument("--disable-default-apps")
+        chrome_options.add_argument("--disable-sync")
+        chrome_options.add_argument("--disable-translate")
+        chrome_options.add_argument("--no-first-run")
+        chrome_options.add_argument("--no-default-browser-check")
+        chrome_options.add_argument("--disable-background-networking")
+        chrome_options.add_argument("--disable-sync-preferences")
         chrome_options.add_argument("--disable-background-mode")
         chrome_options.add_argument("--disable-background-downloads")
         chrome_options.add_argument(
@@ -174,7 +232,7 @@ class SeleniumUnsubscribeService:
         for i, pattern in enumerate(patterns):
             matches = re.findall(pattern, email_content, re.IGNORECASE)
             if matches:
-                print(f"📝 패턴 {i + 1}에서 매치 발견: {matches}")
+                print(f"�� 패턴 {i + 1}에서 매치 발견: {matches}")
             unsubscribe_links.extend(matches)
 
         # 3. HTML 태그에서 링크 추출
@@ -325,17 +383,13 @@ class SeleniumUnsubscribeService:
             if not self._wait_for_dynamic_elements(timeout=15):
                 print(f"⚠️ 동적 요소를 찾을 수 없습니다")
 
-            # 2. 구독해지 관련 요소들 찾기 (더 포괄적으로)
+            # 2. 구독해지 관련 요소들 찾기 (표준 CSS 선택자만 사용)
             selectors = [
-                # 버튼 선택자
+                # 버튼 선택자 (표준 CSS)
                 "button[type='submit']",
                 "input[type='submit']",
-                "button:contains('Unsubscribe')",
-                "button:contains('구독해지')",
-                "button:contains('Cancel')",
-                "button:contains('Confirm')",
-                "button:contains('Remove')",
-                "button:contains('Opt-out')",
+                "button",
+                "input[type='button']",
                 # 링크 선택자
                 "a[href*='unsubscribe']",
                 "a[href*='opt-out']",
@@ -461,20 +515,16 @@ class SeleniumUnsubscribeService:
             if not self._wait_for_dynamic_elements(timeout=10):
                 print(f"⚠️ 두 번째 페이지에서 동적 요소를 찾을 수 없습니다")
 
-            # 현재 페이지에서 구독해지 관련 버튼/링크 찾기 (더 포괄적으로)
+            # 현재 페이지에서 구독해지 관련 버튼/링크 찾기 (표준 CSS 선택자만 사용)
             second_page_selectors = [
-                # 확인/제출 버튼
+                # 확인/제출 버튼 (표준 CSS)
                 "button[type='submit']",
                 "input[type='submit']",
-                "button:contains('Confirm')",
-                "button:contains('확인')",
-                "button:contains('Submit')",
-                "button:contains('제출')",
+                "button",
+                "input[type='button']",
                 # 구독해지 버튼
-                "button:contains('Unsubscribe')",
-                "button:contains('구독해지')",
-                "a:contains('Unsubscribe')",
-                "a:contains('구독해지')",
+                "a[href*='unsubscribe']",
+                "a[href*='opt-out']",
                 # 일반적인 버튼
                 ".confirm-button",
                 ".submit-button",
@@ -849,19 +899,9 @@ class SeleniumUnsubscribeService:
         }
 
     def _log_memory_usage(self, context: str = ""):
-        """메모리 사용량 로깅"""
-        try:
-            import psutil
-
-            process = psutil.Process()
-            memory_info = process.memory_info()
-            memory_mb = memory_info.rss / 1024 / 1024
-            print(f"📊 메모리 사용량 ({context}): {memory_mb:.1f} MB")
-            self.logger.info(f"메모리 사용량 ({context}): {memory_mb:.1f} MB")
-        except ImportError:
-            print(f"📊 메모리 모니터링 불가 ({context})")
-        except Exception as e:
-            print(f"⚠️ 메모리 모니터링 오류: {str(e)}")
+        """메모리 사용량 로깅 (psutil 없이)"""
+        print(f"📊 메모리 모니터링 불가 ({context})")
+        self.logger.info(f"메모리 모니터링 불가 ({context})")
 
     def _cleanup_driver(self):
         """드라이버 정리 및 메모리 해제 (강화)"""
@@ -890,21 +930,9 @@ class SeleniumUnsubscribeService:
         self._log_memory_usage("드라이버 정리 후")
 
     def _check_memory_limit(self) -> bool:
-        """메모리 제한 체크"""
-        try:
-            import psutil
-
-            process = psutil.Process()
-            memory_info = process.memory_info()
-            memory_mb = memory_info.rss / 1024 / 1024
-
-            # 300MB 제한 (더 낮게 설정)
-            if memory_mb > 300:
-                print(f"⚠️ 메모리 사용량 초과: {memory_mb:.1f} MB")
-                return False
-            return True
-        except:
-            return True  # 모니터링 불가시 계속 진행
+        """메모리 제한 체크 (psutil 없이)"""
+        # psutil 없이 항상 True 반환 (모니터링 불가)
+        return True
 
     def _wait_for_dynamic_elements(self, timeout: int = 10) -> bool:
         """동적 요소가 로드될 때까지 대기"""
