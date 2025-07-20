@@ -87,6 +87,15 @@
                             <button class="btn btn-info btn-sm" onclick="analyzeEmail({{ email.id }})">
                                 <i class="fas fa-robot"></i> AI 분석
                             </button>
+                            {% if not email.is_unsubscribed %}
+                            <button class="btn btn-danger btn-sm" onclick="unsubscribeEmail({{ email.id }})">
+                                <i class="fas fa-unlink"></i> 구독 해지
+                            </button>
+                            {% else %}
+                            <button class="btn btn-secondary btn-sm" disabled>
+                                <i class="fas fa-check"></i> 이미 해지됨
+                            </button>
+                            {% endif %}
                         </div>
                     </div>
                     
@@ -200,6 +209,29 @@
     </div>
 </div>
 
+<!-- 구독 해지 모달 -->
+<div class="modal fade" id="unsubscribeModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title"><i class="fas fa-unlink"></i> 구독 해지 진행</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="unsubscribeContent">
+                <div class="text-center">
+                    <div class="spinner-border text-warning" role="status">
+                        <span class="visually-hidden">구독 해지 중...</span>
+                    </div>
+                    <p class="mt-2">AI가 구독 해지 링크를 찾아 처리하고 있습니다...</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">닫기</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 // 카테고리 변경 함수
 function changeCategory(emailId, categoryId) {
@@ -275,6 +307,60 @@ function displayAnalysis(analysis) {
             ${categoryHtml}
         </div>
     `;
+}
+
+// 구독 해지 함수
+function unsubscribeEmail(emailId) {
+    if (!confirm('이 이메일의 구독을 해지하시겠습니까?\n\nAI가 자동으로 구독 해지 링크를 찾아 처리합니다.')) {
+        return;
+    }
+    
+    // 모달 표시
+    const modal = new bootstrap.Modal(document.getElementById('unsubscribeModal'));
+    modal.show();
+    
+    // 구독 해지 요청
+    fetch(`/email/${emailId}/unsubscribe`)
+        .then(response => response.json())
+        .then(data => {
+            const modalBody = document.getElementById('unsubscribeContent');
+            
+            if (data.success) {
+                modalBody.innerHTML = `
+                    <div class="text-center">
+                        <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+                        <h5 class="text-success">구독 해지 완료!</h5>
+                        <p>${data.message}</p>
+                        ${data.steps ? `<div class="mt-3"><strong>처리 단계:</strong><ul class="text-start">${data.steps.map(step => `<li>${step}</li>`).join('')}</ul></div>` : ''}
+                    </div>
+                `;
+                
+                // 페이지 새로고침으로 상태 업데이트
+                setTimeout(() => {
+                    location.reload();
+                }, 2000);
+            } else {
+                modalBody.innerHTML = `
+                    <div class="text-center">
+                        <i class="fas fa-exclamation-triangle fa-3x text-danger mb-3"></i>
+                        <h5 class="text-danger">구독 해지 실패</h5>
+                        <p>${data.message}</p>
+                        ${data.steps ? `<div class="mt-3"><strong>시도한 단계:</strong><ul class="text-start">${data.steps.map(step => `<li>${step}</li>`).join('')}</ul></div>` : ''}
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            const modalBody = document.getElementById('unsubscribeContent');
+            modalBody.innerHTML = `
+                <div class="text-center">
+                    <i class="fas fa-exclamation-triangle fa-3x text-danger mb-3"></i>
+                    <h5 class="text-danger">오류 발생</h5>
+                    <p>구독 해지 처리 중 오류가 발생했습니다.</p>
+                    <small class="text-muted">${error.message}</small>
+                </div>
+            `;
+        });
 }
 </script>
 {% endblock %} 

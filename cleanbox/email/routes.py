@@ -641,8 +641,25 @@ def bulk_actions():
             flash(f"{processed_count}개의 이메일을 읽음으로 표시했습니다.", "success")
 
         elif action == "unsubscribe":
-            # 구독해지 기능은 현재 지원하지 않습니다
-            flash("구독해지 기능은 현재 지원하지 않습니다.", "warning")
+            # 대량 구독해지
+            for email_id in email_ids:
+                try:
+                    email_obj = Email.query.filter_by(
+                        id=int(email_id), user_id=current_user.id
+                    ).first()
+                    if email_obj and not email_obj.is_unsubscribed:
+                        # 구독해지 처리
+                        gmail_service = GmailService(
+                            current_user.id, email_obj.account_id
+                        )
+                        result = gmail_service.process_unsubscribe(email_obj)
+                        if result["success"]:
+                            processed_count += 1
+                except Exception as e:
+                    print(f"이메일 구독해지 실패 (ID: {email_id}): {str(e)}")
+                    continue
+
+            flash(f"{processed_count}개의 이메일 구독을 해지했습니다.", "success")
 
         else:
             flash("지원하지 않는 작업입니다.", "error")
@@ -657,9 +674,69 @@ def bulk_actions():
 @email_bp.route("/<int:email_id>/unsubscribe")
 @login_required
 def unsubscribe_email(email_id):
-    """개별 이메일 구독해지 (현재 지원하지 않음)"""
-    flash("구독해지 기능은 현재 지원하지 않습니다.", "warning")
-    return redirect(url_for("email.list_emails"))
+    """개별 이메일 구독해지"""
+    try:
+        # 이메일 조회
+        email = Email.query.filter_by(id=email_id, user_id=current_user.id).first()
+
+        if not email:
+            return (
+                jsonify({"success": False, "message": "이메일을 찾을 수 없습니다."}),
+                404,
+            )
+
+        # 이미 구독해지된 이메일인지 확인
+        if email.is_unsubscribed:
+            return jsonify(
+                {
+                    "success": True,
+                    "message": "이미 구독해지된 이메일입니다.",
+                    "steps": ["이미 구독해지됨"],
+                }
+            )
+
+        # Gmail 서비스 초기화
+        gmail_service = GmailService(current_user.id, email.account_id)
+
+        # 구독해지 처리
+        result = gmail_service.process_unsubscribe(email)
+
+        # 결과 반환
+        if result["success"]:
+            return jsonify(
+                {
+                    "success": True,
+                    "message": "구독해지가 성공적으로 처리되었습니다.",
+                    "steps": result.get("steps", []),
+                    "email_id": email_id,
+                }
+            )
+        else:
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "message": result.get(
+                            "message", "구독해지 처리에 실패했습니다."
+                        ),
+                        "steps": result.get("steps", []),
+                        "email_id": email_id,
+                    }
+                ),
+                400,
+            )
+
+    except Exception as e:
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "message": f"구독해지 처리 중 오류가 발생했습니다: {str(e)}",
+                    "steps": [f"오류 발생: {str(e)}"],
+                }
+            ),
+            500,
+        )
 
 
 def process_missed_emails_for_account(
