@@ -641,8 +641,14 @@ def bulk_actions():
             flash(f"{processed_count}개의 이메일을 읽음으로 표시했습니다.", "success")
 
         elif action == "unsubscribe":
-            # 대량 구독해지
+            # 대량 구독해지 (개선된 버전)
             print(f"🔍 대량 구독해지 시작 - 선택된 이메일 수: {len(email_ids)}")
+
+            # 결과 수집을 위한 변수들
+            success_count = 0
+            failed_emails = []
+            personal_emails = []
+
             for email_id in email_ids:
                 try:
                     print(f"📝 이메일 {email_id} 처리 시작")
@@ -652,6 +658,13 @@ def bulk_actions():
 
                     if not email_obj:
                         print(f"❌ 이메일 {email_id}를 찾을 수 없음")
+                        failed_emails.append(
+                            {
+                                "id": email_id,
+                                "subject": "알 수 없음",
+                                "error": "이메일을 찾을 수 없습니다",
+                            }
+                        )
                         continue
 
                     if email_obj.is_unsubscribed:
@@ -667,21 +680,75 @@ def bulk_actions():
                     print(f"📝 process_unsubscribe 결과: {result}")
 
                     if result["success"]:
-                        processed_count += 1
+                        success_count += 1
                         print(
-                            f"✅ 이메일 {email_id} 구독해지 성공 - processed_count: {processed_count}"
+                            f"✅ 이메일 {email_id} 구독해지 성공 - success_count: {success_count}"
                         )
                     else:
-                        print(
-                            f"❌ 이메일 {email_id} 구독해지 실패: {result.get('message', '알 수 없는 오류')}"
-                        )
+                        # 실패 이유 분석
+                        error_type = result.get("error_type", "unknown")
+                        error_details = result.get("error_details", "알 수 없는 오류")
+
+                        if error_type == "personal_email":
+                            personal_emails.append(
+                                {
+                                    "id": email_id,
+                                    "subject": email_obj.subject,
+                                    "sender": email_obj.sender,
+                                    "error": "개인 이메일로 감지됨",
+                                }
+                            )
+                        else:
+                            failed_emails.append(
+                                {
+                                    "id": email_id,
+                                    "subject": email_obj.subject,
+                                    "sender": email_obj.sender,
+                                    "error": error_details,
+                                    "error_type": error_type,
+                                }
+                            )
+
+                        print(f"❌ 이메일 {email_id} 구독해지 실패: {error_details}")
 
                 except Exception as e:
-                    print(f"❌ 이메일 구독해지 실패 (ID: {email_id}): {str(e)}")
+                    error_msg = f"처리 중 오류 발생: {str(e)}"
+                    print(f"❌ 이메일 구독해지 실패 (ID: {email_id}): {error_msg}")
+                    failed_emails.append(
+                        {"id": email_id, "subject": "알 수 없음", "error": error_msg}
+                    )
                     continue
 
-            print(f"🎉 대량 구독해지 완료 - 성공: {processed_count}개")
-            flash(f"{processed_count}개의 이메일 구독을 해지했습니다.", "success")
+            # 결과 메시지 생성
+            total_processed = success_count + len(failed_emails) + len(personal_emails)
+            message_parts = []
+
+            if success_count > 0:
+                message_parts.append(f"✅ {success_count}개 성공")
+
+            if personal_emails:
+                message_parts.append(f"📧 {len(personal_emails)}개 개인 이메일")
+
+            if failed_emails:
+                message_parts.append(f"❌ {len(failed_emails)}개 실패")
+
+            result_message = f"처리 완료: {' | '.join(message_parts)}"
+
+            print(f"🎉 대량 구독해지 완료 - {result_message}")
+            flash(
+                result_message,
+                "info" if failed_emails or personal_emails else "success",
+            )
+
+            # 세션에 상세 결과 저장 (UI에서 사용)
+            from flask import session
+
+            session["bulk_unsubscribe_result"] = {
+                "success_count": success_count,
+                "failed_emails": failed_emails,
+                "personal_emails": personal_emails,
+                "total_processed": total_processed,
+            }
 
         else:
             flash("지원하지 않는 작업입니다.", "error")
@@ -743,22 +810,37 @@ def unsubscribe_email(email_id):
                 }
             )
         else:
-            print(
-                f"❌ 이메일 {email_id} 구독해지 실패: {result.get('message', '알 수 없는 오류')}"
-            )
-            return (
-                jsonify(
-                    {
-                        "success": False,
-                        "message": result.get(
-                            "message", "구독해지 처리에 실패했습니다."
-                        ),
-                        "steps": result.get("steps", []),
-                        "email_id": email_id,
-                    }
-                ),
-                400,
-            )
+            error_message = result.get("message", "구독해지 처리에 실패했습니다.")
+            error_type = result.get("error_type", "unknown")
+            error_details = result.get("error_details", "")
+
+            print(f"❌ 이메일 {email_id} 구독해지 실패: {error_message}")
+            print(f"📝 에러 타입: {error_type}")
+            print(f"📝 에러 상세: {error_details}")
+
+                    return (
+            jsonify(
+                {
+                    "success": False,
+                    "message": error_message,
+                    "error_type": error_type,
+                    "error_details": error_details,
+                    "steps": result.get("steps", []),
+                    "email_id": email_id,
+                    "is_personal_email": result.get("is_personal_email", False),
+                }
+            ),
+            400,
+        )
+
+
+@email_bp.route("/clear-bulk-result", methods=["POST"])
+@login_required
+def clear_bulk_result():
+    """대량 처리 결과 세션 클리어"""
+    from flask import session
+    session.pop("bulk_unsubscribe_result", None)
+    return jsonify({"success": True})
 
     except Exception as e:
         print(f"❌ 구독해지 처리 중 예외 발생: {str(e)}")

@@ -789,14 +789,33 @@ function unsubscribeEmail(emailId) {
                     `;
                 }
                 
-                // 실패 메시지
+                // 실패 메시지 (개선된 버전)
                 setTimeout(() => {
+                    // 에러 타입별 다른 메시지 표시
+                    let errorIcon = 'fas fa-exclamation-triangle';
+                    let errorTitle = '구독 해지 실패';
+                    let errorClass = 'text-danger';
+                    
+                    if (data.is_personal_email) {
+                        errorIcon = 'fas fa-user';
+                        errorTitle = '개인 이메일 감지';
+                        errorClass = 'text-info';
+                    } else if (data.error_type === 'no_unsubscribe_link') {
+                        errorIcon = 'fas fa-link-slash';
+                        errorTitle = '구독해지 링크 없음';
+                    } else if (data.error_type === 'all_links_failed') {
+                        errorIcon = 'fas fa-times-circle';
+                        errorTitle = '모든 링크 실패';
+                    }
+                    
                     modalBody.innerHTML = `
                         <div class="text-center">
-                            <i class="fas fa-exclamation-triangle fa-3x text-danger mb-3"></i>
-                            <h5 class="text-danger">구독 해지 실패</h5>
+                            <i class="${errorIcon} fa-3x ${errorClass} mb-3"></i>
+                            <h5 class="${errorClass}">${errorTitle}</h5>
                             <p>${data.message}</p>
+                            ${data.error_details ? `<div class="mt-2"><small class="text-muted">${data.error_details}</small></div>` : ''}
                             ${data.steps ? `<div class="mt-3"><strong>시도한 단계:</strong><ul class="text-start">${data.steps.map(step => `<li>${step}</li>`).join('')}</ul></div>` : ''}
+                            ${data.failed_links ? `<div class="mt-3"><strong>실패한 링크들:</strong><ul class="text-start">${data.failed_links.map(link => `<li>링크 ${link.link_number}: ${link.error}</li>`).join('')}</ul></div>` : ''}
                         </div>
                     `;
                 }, 1000);
@@ -884,6 +903,56 @@ function setupWebhook() {
         button.disabled = false;
     });
 }
+
+// 대량 구독해지 결과 표시 함수
+function showBulkUnsubscribeResult() {
+    // 세션에서 결과 가져오기 (서버에서 전달된 경우)
+    const resultData = {{ session.get('bulk_unsubscribe_result', 'null') | tojson }};
+    
+    if (resultData) {
+        let resultHtml = '<div class="alert alert-info">';
+        resultHtml += '<h6><i class="fas fa-chart-bar"></i> 대량 구독해지 결과</h6>';
+        resultHtml += `<p>총 ${resultData.total_processed}개 이메일 처리</p>`;
+        
+        if (resultData.success_count > 0) {
+            resultHtml += `<div class="text-success"><i class="fas fa-check"></i> ${resultData.success_count}개 성공</div>`;
+        }
+        
+        if (resultData.personal_emails && resultData.personal_emails.length > 0) {
+            resultHtml += `<div class="text-info mt-2"><i class="fas fa-user"></i> ${resultData.personal_emails.length}개 개인 이메일</div>`;
+            resultHtml += '<ul class="small text-muted">';
+            resultData.personal_emails.forEach(email => {
+                resultHtml += `<li>${email.subject} (${email.sender})</li>`;
+            });
+            resultHtml += '</ul>';
+        }
+        
+        if (resultData.failed_emails && resultData.failed_emails.length > 0) {
+            resultHtml += `<div class="text-danger mt-2"><i class="fas fa-times"></i> ${resultData.failed_emails.length}개 실패</div>`;
+            resultHtml += '<ul class="small text-muted">';
+            resultData.failed_emails.forEach(email => {
+                resultHtml += `<li>${email.subject} (${email.sender}): ${email.error}</li>`;
+            });
+            resultHtml += '</ul>';
+        }
+        
+        resultHtml += '</div>';
+        
+        // 결과를 페이지 상단에 표시
+        const container = document.querySelector('.container');
+        const alertDiv = document.createElement('div');
+        alertDiv.innerHTML = resultHtml;
+        container.insertBefore(alertDiv, container.firstChild);
+        
+        // 세션 데이터 클리어
+        fetch('{{ url_for("email.clear_bulk_result") }}', { method: 'POST' });
+    }
+}
+
+// 페이지 로드 시 대량 처리 결과 표시
+document.addEventListener('DOMContentLoaded', function() {
+    showBulkUnsubscribeResult();
+});
 
 
 </script>

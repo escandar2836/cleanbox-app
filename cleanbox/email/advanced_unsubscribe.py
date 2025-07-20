@@ -158,6 +158,86 @@ class AdvancedUnsubscribeService:
         except:
             return False
 
+    def _detect_personal_email(
+        self, email_content: str, email_headers: Dict = None
+    ) -> bool:
+        """개인 이메일 감지"""
+        try:
+            # 1. 발신자 도메인 확인
+            if email_headers:
+                from_header = email_headers.get("From", "").lower()
+                personal_domains = [
+                    "gmail.com",
+                    "naver.com",
+                    "daum.net",
+                    "outlook.com",
+                    "hotmail.com",
+                    "yahoo.com",
+                    "icloud.com",
+                    "me.com",
+                ]
+
+                for domain in personal_domains:
+                    if domain in from_header:
+                        print(f"📝 개인 도메인 감지: {domain}")
+                        return True
+
+            # 2. 이메일 내용 분석
+            content_lower = email_content.lower()
+
+            # 마케팅 관련 키워드가 없는지 확인
+            marketing_keywords = [
+                "unsubscribe",
+                "opt-out",
+                "구독해지",
+                "수신거부",
+                "marketing",
+                "promotion",
+                "offer",
+                "deal",
+                "sale",
+                "newsletter",
+                "news letter",
+                "email preferences",
+                "manage subscription",
+                "subscription settings",
+            ]
+
+            has_marketing_content = any(
+                keyword in content_lower for keyword in marketing_keywords
+            )
+
+            # 개인적 내용 키워드 확인
+            personal_keywords = [
+                "hello",
+                "hi",
+                "dear",
+                "안녕하세요",
+                "안녕",
+                "best regards",
+                "sincerely",
+                "감사합니다",
+                "고맙습니다",
+                "personal",
+                "private",
+                "개인",
+            ]
+
+            has_personal_content = any(
+                keyword in content_lower for keyword in personal_keywords
+            )
+
+            # 구독해지 링크가 없고 개인적 내용이 있으면 개인 이메일로 판단
+            if not has_marketing_content and has_personal_content:
+                print(f"📝 개인 이메일로 감지됨 (내용 분석)")
+                return True
+
+            return False
+
+        except Exception as e:
+            print(f"❌ 개인 이메일 감지 중 오류: {str(e)}")
+            return False
+
     def process_unsubscribe_with_selenium(
         self, unsubscribe_url: str, user_email: str = None
     ) -> Dict:
@@ -595,11 +675,40 @@ class AdvancedUnsubscribeService:
         print(f"📝 이메일 헤더: {email_headers}")
         print(f"📝 사용자 이메일: {user_email}")
 
-        result = {"success": False, "message": "", "steps": [], "progress": 0}
+        result = {
+            "success": False,
+            "message": "",
+            "steps": [],
+            "progress": 0,
+            "error_type": None,  # 에러 타입 추가
+            "error_details": None,  # 상세 에러 정보 추가
+            "is_personal_email": False,  # 개인 이메일 여부
+        }
 
-        # 1단계: 구독해지 링크 추출
+        # 1단계: 개인 이메일 감지
+        result["steps"].append("🔍 이메일 유형 분석 중...")
+        result["progress"] = 5
+        print(f"📝 개인 이메일 감지 시작")
+
+        is_personal = self._detect_personal_email(email_content, email_headers)
+        result["is_personal_email"] = is_personal
+        print(f"📝 개인 이메일 여부: {is_personal}")
+
+        if is_personal:
+            result["steps"].append("📧 개인 이메일로 감지됨")
+            result["message"] = (
+                "이 이메일은 개인 발송자로 보입니다. 구독해지 링크가 없을 수 있습니다."
+            )
+            result["error_type"] = "personal_email"
+            result["error_details"] = (
+                "개인 이메일은 일반적으로 구독해지 기능이 없습니다."
+            )
+            result["progress"] = 100
+            return result
+
+        # 2단계: 구독해지 링크 추출
         result["steps"].append("🔍 이메일에서 구독해지 링크 검색 중...")
-        result["progress"] = 10
+        result["progress"] = 15
         print(f"📝 구독해지 링크 추출 시작")
 
         unsubscribe_links = self.extract_unsubscribe_links(email_content, email_headers)
@@ -609,6 +718,10 @@ class AdvancedUnsubscribeService:
 
         if not unsubscribe_links:
             result["message"] = "구독해지 링크를 찾을 수 없습니다"
+            result["error_type"] = "no_unsubscribe_link"
+            result["error_details"] = (
+                "이메일에서 구독해지 링크를 찾을 수 없습니다. 마케팅 이메일이 아니거나 링크가 숨겨져 있을 수 있습니다."
+            )
             result["steps"].append("❌ 구독해지 링크 추출 실패")
             result["progress"] = 100
             print(f"❌ 구독해지 링크를 찾을 수 없음")
@@ -676,15 +789,24 @@ class AdvancedUnsubscribeService:
                 result["progress"] = 100
                 return result
             else:
-                print(
-                    f"❌ 링크 {i + 1} 처리 실패: {simple_result.get('message', '알 수 없는 오류')}"
+                error_msg = simple_result.get("message", "알 수 없는 오류")
+                print(f"❌ 링크 {i + 1} 처리 실패: {error_msg}")
+                result["steps"].append(f"❌ 링크 {i + 1} 처리 실패: {error_msg}")
+                # 실패한 링크 정보 저장
+                if "failed_links" not in result:
+                    result["failed_links"] = []
+                result["failed_links"].append(
+                    {"url": unsubscribe_url, "error": error_msg, "link_number": i + 1}
                 )
-                result["steps"].append(f"❌ 링크 {i + 1} 처리 실패")
 
         # 모든 링크 실패
         result["steps"].append("❌ 모든 구독해지 링크에서 실패했습니다")
         result["message"] = (
             "모든 구독해지 링크에서 실패했습니다. 수동으로 구독해지하시거나 나중에 다시 시도해주세요."
+        )
+        result["error_type"] = "all_links_failed"
+        result["error_details"] = (
+            f"총 {len(unsubscribe_links)}개의 구독해지 링크를 시도했지만 모두 실패했습니다. 각 링크별 실패 이유를 확인해보세요."
         )
         result["progress"] = 100
         print(f"❌ 모든 구독해지 링크 실패 - 총 {len(unsubscribe_links)}개 링크 시도")
