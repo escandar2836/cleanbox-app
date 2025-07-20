@@ -1,6 +1,7 @@
 # Git 관련
 .git
 .gitignore
+.gitattributes
 
 # Python 관련
 __pycache__
@@ -28,6 +29,8 @@ coverage.xml
 venv/
 env/
 ENV/
+env.bak/
+venv.bak/
 
 # IDE 관련
 .vscode/
@@ -51,9 +54,8 @@ logs/
 
 # 테스트 관련
 tests/
-.pytest_cache/
-.coverage
-htmlcov/
+test_*.py
+*_test.py
 
 # 문서
 README.md
@@ -61,11 +63,25 @@ README.md
 docs/
 
 # 개발 도구
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 임시 파일
+*.tmp
+*.temp
+.cache/
+
+# Docker 관련
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# 배포 관련
+render.yaml
 .env
 .env.local
-.env.development
-.env.test
-.env.production
+.env.example
 
 # 기타
 node_modules/
