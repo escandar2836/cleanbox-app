@@ -594,6 +594,7 @@ def bulk_actions():
             # 결과 수집을 위한 변수들
             success_count = 0
             failed_emails = []
+            result_message = ""
 
             for email_id in email_ids:
                 try:
@@ -704,6 +705,7 @@ def bulk_actions():
             # 결과 수집을 위한 변수들
             success_count = 0
             failed_emails = []
+            result_message = ""
 
             for email_id in email_ids:
                 try:
@@ -1054,13 +1056,42 @@ def bulk_actions():
             )
 
         else:
-            flash("지원하지 않는 작업입니다.", "error")
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "message": "지원하지 않는 작업입니다.",
+                        "error_type": "unsupported_action",
+                    }
+                ),
+                400,
+            )
 
-        return redirect(request.referrer or url_for("email.list_emails"))
+        # JSON 응답 반환 (클라이언트에서 처리)
+        return jsonify(
+            {
+                "success": True,
+                "message": result_message,
+                "action": action,
+                "total_processed": len(email_ids),
+                "success_count": success_count if "success_count" in locals() else 0,
+                "failed_count": (
+                    len(failed_emails) if "failed_emails" in locals() else 0
+                ),
+            }
+        )
 
     except Exception as e:
-        flash(f"대량 작업 중 오류가 발생했습니다: {str(e)}", "error")
-        return redirect(request.referrer or url_for("email.list_emails"))
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "message": f"대량 작업 중 오류가 발생했습니다: {str(e)}",
+                    "error_type": "system_error",
+                }
+            ),
+            500,
+        )
 
 
 @email_bp.route("/<int:email_id>/unsubscribe")

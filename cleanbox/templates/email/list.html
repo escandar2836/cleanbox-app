@@ -461,32 +461,116 @@ function showBulkProcessingModal(action, totalCount) {
     modal.show();
 }
 
-// AJAX를 통한 bulk 처리
+// AJAX를 통한 bulk 처리 (개선된 버전)
 function performBulkAction(action, emailIds) {
     const formData = new FormData();
     formData.append('action', action);
     emailIds.forEach(id => formData.append('email_ids', id));
     
+    // 진행 상황 업데이트 함수
+    const updateProgress = (current, total, message) => {
+        const progressBar = document.getElementById('bulkProgress');
+        const currentCount = document.getElementById('currentEmailCount');
+        const totalCount = document.getElementById('totalEmailCount');
+        const processingMessage = document.getElementById('bulkProcessingMessage');
+        
+        const progress = Math.round((current / total) * 100);
+        progressBar.style.width = progress + '%';
+        progressBar.textContent = progress + '%';
+        currentCount.textContent = current;
+        totalCount.textContent = total;
+        processingMessage.textContent = message;
+    };
+    
+    // 초기 진행 상황 설정
+    updateProgress(0, emailIds.length, `${emailIds.length}개의 이메일을 ${action}하고 있습니다...`);
+    
+    // 진행 상황 시뮬레이션 (실제 처리 시간을 고려한 개선된 버전)
+    let currentProgress = 0;
+    const startTime = Date.now();
+    const estimatedTime = emailIds.length * 1000; // 이메일당 약 1초 예상
+    
+    const progressInterval = setInterval(() => {
+        const elapsed = Date.now() - startTime;
+        const timeBasedProgress = Math.min((elapsed / estimatedTime) * 100, 90);
+        
+        // 시간 기반 진행률과 랜덤 진행률을 조합
+        currentProgress = Math.min(currentProgress + Math.random() * 5, timeBasedProgress);
+        
+        updateProgress(
+            Math.round(currentProgress), 
+            emailIds.length, 
+            `${action} 처리 중... (${Math.round(currentProgress)}/${emailIds.length})`
+        );
+    }, 300);
+    
     fetch('{{ url_for("email.bulk_actions") }}', {
         method: 'POST',
         body: formData
     })
-    .then(response => response.text())
-    .then(html => {
-        // 모달 닫기
-        const modal = bootstrap.Modal.getInstance(document.getElementById('bulkProcessingModal'));
-        modal.hide();
+    .then(response => {
+        clearInterval(progressInterval);
+        updateProgress(emailIds.length, emailIds.length, `${action} 완료!`);
         
-        // 페이지 새로고침
-        location.reload();
+        return response.json();
+    })
+    .then(data => {
+        // 성공 메시지 표시
+        setTimeout(() => {
+            const modalBody = document.querySelector('#bulkProcessingModal .modal-body');
+            
+            if (data.success) {
+                modalBody.innerHTML = `
+                    <div class="text-center">
+                        <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+                        <h5 class="text-success">${action} 완료!</h5>
+                        <p>${data.message}</p>
+                        <div class="mt-3">
+                            <small class="text-muted">
+                                총 처리: ${data.total_processed}개 | 
+                                성공: ${data.success_count}개 | 
+                                실패: ${data.failed_count}개
+                            </small>
+                        </div>
+                    </div>
+                `;
+            } else {
+                modalBody.innerHTML = `
+                    <div class="text-center">
+                        <i class="fas fa-exclamation-triangle fa-3x text-danger mb-3"></i>
+                        <h5 class="text-danger">처리 실패</h5>
+                        <p>${data.message}</p>
+                    </div>
+                `;
+            }
+            
+            // 2초 후 페이지 새로고침
+            setTimeout(() => {
+                const modal = bootstrap.Modal.getInstance(document.getElementById('bulkProcessingModal'));
+                modal.hide();
+                location.reload();
+            }, 2000);
+        }, 1000);
     })
     .catch(error => {
+        clearInterval(progressInterval);
         console.error('Bulk 처리 오류:', error);
-        alert('처리 중 오류가 발생했습니다: ' + error);
         
-        // 모달 닫기
-        const modal = bootstrap.Modal.getInstance(document.getElementById('bulkProcessingModal'));
-        modal.hide();
+        // 오류 메시지 표시
+        const modalBody = document.querySelector('#bulkProcessingModal .modal-body');
+        modalBody.innerHTML = `
+            <div class="text-center">
+                <i class="fas fa-exclamation-triangle fa-3x text-danger mb-3"></i>
+                <h5 class="text-danger">처리 실패</h5>
+                <p>처리 중 오류가 발생했습니다: ${error.message}</p>
+            </div>
+        `;
+        
+        // 3초 후 모달 닫기
+        setTimeout(() => {
+            const modal = bootstrap.Modal.getInstance(document.getElementById('bulkProcessingModal'));
+            modal.hide();
+        }, 3000);
     });
 }
 
