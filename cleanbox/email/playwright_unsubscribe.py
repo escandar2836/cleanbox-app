@@ -477,27 +477,12 @@ class PlaywrightUnsubscribeService:
         return self._finalize_failure("최대 재시도 횟수 초과", start_time)
 
     async def _try_basic_unsubscribe(self, page: Page, user_email: str = None) -> Dict:
-        """기본 구독해지 처리 (개선된 버전)"""
+        """기본 구독해지 처리 (통합 JavaScript 기반)"""
         try:
             print(f"📝 기본 구독해지 처리 시작")
 
-            # 1단계: Form Action URL 처리 시도
-            form_result = await self._try_form_action_submit(page, user_email)
-            if form_result["success"]:
-                return form_result
-
-            # 2단계: 개선된 선택자로 처리 시도
-            selector_result = await self._try_enhanced_selectors(page, user_email)
-            if selector_result["success"]:
-                return selector_result
-
-            # 3단계: 링크 기반 처리 시도
-            link_result = await self._try_link_based_unsubscribe(page, user_email)
-            if link_result["success"]:
-                return link_result
-
-            # 4단계: 기존 방식 (하위 호환성)
-            return await self._try_legacy_unsubscribe(page, user_email)
+            # 통합 JavaScript 기반 구독해지 처리
+            return await self._try_javascript_submit(page, user_email)
 
         except Exception as e:
             return {"success": False, "message": f"기본 구독해지 실패: {str(e)}"}
@@ -588,6 +573,14 @@ class PlaywrightUnsubscribeService:
                                         f"📝 URL 변경 감지: {before_url} → {after_url}"
                                     )
 
+                                # 구독해지 완료 확인
+                                if await self._check_already_unsubscribed(page):
+                                    return {
+                                        "success": True,
+                                        "message": "기존 방식 클릭 후 구독해지 완료 확인",
+                                        "method": "legacy_completed",
+                                        "selector": selector,
+                                    }
                                 # AI 기반 구독해지 완료 판단
                                 print("🤖 AI 기반 구독해지 완료 분석 시작...")
                                 ai_result = (
@@ -1128,38 +1121,522 @@ JSON 형식으로 답변해주세요:
             print(f"⚠️ 이미 구독해지됨 확인 실패: {str(e)}")
             return False
 
-    async def _try_second_page_unsubscribe(
-        self, page: Page, user_email: str = None
-    ) -> Dict:
-        """두 번째 페이지 구독해지 처리 (다양한 케이스 지원)"""
+    async def _create_temp_page_from_response(
+        self, response_text: str
+    ) -> Optional[Page]:
+        """응답 내용을 임시 페이지로 생성"""
         try:
-            print(f"📝 두 번째 페이지 구독해지 처리 시작")
+            # 임시 HTML 페이지 생성
+            temp_html = f"""
+            <!DOCTYPE html>
+            <html>
+            <head><title>Response</title></head>
+            <body>{response_text}</body>
+            </html>
+            """
 
-            # 1단계: Form Action URL 처리 시도
-            form_result = await self._try_form_action_submit(page, user_email)
-            if form_result["success"]:
-                return form_result
+            # 새 페이지 생성
+            temp_page = await self.browser.new_page()
+            await temp_page.set_content(temp_html)
 
-            # 2단계: JavaScript 실행을 통한 처리 시도
-            js_result = await self._try_javascript_submit(page, user_email)
-            if js_result["success"]:
-                return js_result
+            return temp_page
 
-            # 3단계: 개선된 선택자로 처리 시도
-            selector_result = await self._try_enhanced_selectors(page, user_email)
-            if selector_result["success"]:
-                return selector_result
+        except Exception as e:
+            print(f"⚠️ 임시 페이지 생성 실패: {str(e)}")
+            return None
 
-            # 4단계: 링크 기반 처리 시도
-            link_result = await self._try_link_based_unsubscribe(page, user_email)
-            if link_result["success"]:
-                return link_result
+    async def _parse_post_response(self, response) -> Optional[Page]:
+        """POST 응답을 임시 페이지로 파싱"""
+        try:
+            content_type = response.headers.get("content-type", "")
+
+            if "text/html" in content_type:
+                # HTML 응답
+                response_text = await response.text()
+                return await self._create_temp_page_from_response(response_text)
+
+            elif "application/json" in content_type:
+                # JSON 응답
+                import json
+
+                json_data = await response.json()
+                response_text = json.dumps(json_data, indent=2)
+                return await self._create_temp_page_from_response(response_text)
+
+            else:
+                # 일반 텍스트 응답
+                response_text = await response.text()
+                return await self._create_temp_page_from_response(response_text)
+
+        except Exception as e:
+            print(f"⚠️ POST 응답 파싱 실패: {str(e)}")
+            return None
+
+    async def _check_response_with_temp_page(self, response) -> bool:
+        """임시 페이지로 응답 확인 (메모리 최적화)"""
+        temp_page = None
+        try:
+            temp_page = await self._parse_post_response(response)
+            if temp_page:
+                return await self._check_already_unsubscribed(temp_page)
+            return False
+        finally:
+            if temp_page:
+                await temp_page.close()
+
+    async def _detect_page_navigation(
+        self, page: Page, before_url: str, before_title: str = None
+    ) -> Dict:
+        """페이지 이동 감지 및 처리"""
+        try:
+            await page.wait_for_timeout(2000)  # 페이지 로딩 대기
+
+            after_url = page.url
+            after_title = await page.title()
+
+            # URL 변경 감지
+            url_changed = before_url != after_url
+            title_changed = before_title and before_title != after_title
+
+            if url_changed:
+                print(f"📝 URL 변경 감지: {before_url} → {after_url}")
+
+                # 새 페이지에서 구독해지 완료 확인
+                if await self._check_already_unsubscribed(page):
+                    return {
+                        "success": True,
+                        "message": "페이지 이동 후 구독해지 완료 확인",
+                        "method": "navigation_completed",
+                        "url_change": f"{before_url} → {after_url}",
+                    }
+
+                # 기본 성공 지표 확인
+                elif await self._check_basic_success_indicators(page):
+                    return {
+                        "success": True,
+                        "message": "페이지 이동 후 구독해지 성공",
+                        "method": "navigation_success",
+                        "url_change": f"{before_url} → {after_url}",
+                    }
+
+            elif title_changed:
+                print(f"📝 제목 변경 감지: {before_title} → {after_title}")
+
+                # 제목 변경 후 구독해지 완료 확인
+                if await self._check_already_unsubscribed(page):
+                    return {
+                        "success": True,
+                        "message": "제목 변경 후 구독해지 완료 확인",
+                        "method": "title_change_completed",
+                        "title_change": f"{before_title} → {after_title}",
+                    }
+
+            # 페이지 이동이 없었지만 구독해지 완료 확인
+            if await self._check_already_unsubscribed(page):
+                return {
+                    "success": True,
+                    "message": "페이지 이동 없이 구독해지 완료 확인",
+                    "method": "no_navigation_completed",
+                }
 
             return {
                 "success": False,
-                "message": "모든 구독해지 방법에서 실패했습니다.",
-                "reason": "all_methods_failed",
+                "message": "페이지 이동 감지됨 but 구독해지 미완료",
+                "method": "navigation_detected_but_incomplete",
+                "url_changed": url_changed,
+                "title_changed": title_changed,
             }
+
+        except Exception as e:
+            print(f"⚠️ 페이지 이동 감지 실패: {str(e)}")
+            return {
+                "success": False,
+                "message": f"페이지 이동 감지 실패: {str(e)}",
+                "method": "navigation_detection_failed",
+            }
+
+    async def _wait_for_network_idle_and_check(
+        self, page: Page, timeout: int = 10000
+    ) -> Dict:
+        """네트워크 요청 완료 대기 후 구독해지 확인"""
+        try:
+            # 네트워크 요청 완료 대기
+            await page.wait_for_load_state("networkidle", timeout=timeout)
+            print("📝 네트워크 요청 완료 대기 성공")
+
+            # 구독해지 완료 확인
+            if await self._check_already_unsubscribed(page):
+                return {
+                    "success": True,
+                    "message": "네트워크 요청 완료 후 구독해지 완료 확인",
+                    "method": "network_idle_completed",
+                }
+
+            return {
+                "success": False,
+                "message": "네트워크 요청 완료 but 구독해지 미완료",
+                "method": "network_idle_incomplete",
+            }
+
+        except Exception as e:
+            print(f"⚠️ 네트워크 대기 실패: {str(e)}")
+            # 네트워크 대기 실패 시 기본 대기로 전환
+            await page.wait_for_timeout(3000)
+
+            if await self._check_already_unsubscribed(page):
+                return {
+                    "success": True,
+                    "message": "기본 대기 후 구독해지 완료 확인",
+                    "method": "timeout_fallback_completed",
+                }
+
+            return {
+                "success": False,
+                "message": f"네트워크 대기 실패: {str(e)}",
+                "method": "network_wait_failed",
+            }
+
+    async def _detect_captcha(self, page: Page) -> bool:
+        """CAPTCHA 감지"""
+        try:
+            captcha_selectors = [
+                ".captcha",
+                ".recaptcha",
+                "[class*='captcha']",
+                "#captcha",
+                "[id*='captcha']",
+                ".g-recaptcha",
+                "[class*='recaptcha']",
+                "[id*='recaptcha']",
+                ".h-captcha",
+                "[class*='h-captcha']",
+                ".turnstile",
+                "[class*='turnstile']",
+                "iframe[src*='recaptcha']",
+                "iframe[src*='captcha']",
+                "iframe[src*='turnstile']",
+                "iframe[src*='hcaptcha']",
+            ]
+
+            for selector in captcha_selectors:
+                elements = await page.query_selector_all(selector)
+                if elements:
+                    print(f"📝 CAPTCHA 감지: {selector}")
+                    return True
+
+            # CAPTCHA 관련 텍스트 확인
+            content = await page.content()
+            content_lower = content.lower()
+
+            captcha_keywords = [
+                "captcha",
+                "recaptcha",
+                "turnstile",
+                "hcaptcha",
+                "로봇이 아닙니다",
+                "인간임을 확인",
+                "보안 확인",
+                "verify you are human",
+                "i am not a robot",
+            ]
+
+            for keyword in captcha_keywords:
+                if keyword in content_lower:
+                    print(f"📝 CAPTCHA 키워드 감지: {keyword}")
+                    return True
+
+            return False
+
+        except Exception as e:
+            print(f"⚠️ CAPTCHA 감지 실패: {str(e)}")
+            return False
+
+    async def _handle_captcha_required(self, page: Page) -> Dict:
+        """CAPTCHA 요구 시 처리"""
+        return {
+            "success": False,
+            "message": "CAPTCHA가 요구되어 자동 처리할 수 없습니다. 수동으로 처리해주세요.",
+            "error_type": "captcha_required",
+            "method": "captcha_detected",
+        }
+
+    async def _handle_email_confirmation(
+        self, page: Page, user_email: str = None
+    ) -> bool:
+        """이메일 확인 요구 처리"""
+        try:
+            if not user_email:
+                print("⚠️ 사용자 이메일이 없어 이메일 확인 처리 불가")
+                return False
+
+            # 이메일 입력 필드 감지
+            email_inputs = await page.query_selector_all(
+                "input[type='email'], input[name*='email'], input[placeholder*='email'], input[placeholder*='이메일']"
+            )
+
+            if email_inputs:
+                print(f"📝 이메일 입력 필드 발견: {len(email_inputs)}개")
+
+                for email_input in email_inputs:
+                    try:
+                        # 이메일 입력
+                        await email_input.fill(user_email)
+                        print(f"📝 이메일 입력: {user_email}")
+
+                        # 이메일 입력 후 제출 버튼 찾기
+                        submit_selectors = [
+                            "input[type='submit']",
+                            "button[type='submit']",
+                            "button",
+                            "[class*='submit']",
+                            "[class*='confirm']",
+                        ]
+
+                        for submit_selector in submit_selectors:
+                            submit_elements = await page.query_selector_all(
+                                submit_selector
+                            )
+                            for submit_element in submit_elements:
+                                if await submit_element.is_visible():
+                                    element_text = await submit_element.text_content()
+                                    print(f"📝 제출 버튼 클릭: {element_text}")
+
+                                    # 제출 버튼 클릭
+                                    await submit_element.click()
+
+                                    # 페이지 이동 또는 응답 대기
+                                    await page.wait_for_timeout(3000)
+
+                                    # 구독해지 완료 확인
+                                    if await self._check_already_unsubscribed(page):
+                                        print("✅ 이메일 확인 후 구독해지 완료")
+                                        return True
+
+                                    break
+
+                    except Exception as e:
+                        print(f"⚠️ 이메일 입력 처리 실패: {str(e)}")
+                        continue
+
+                return False
+
+            return False
+
+        except Exception as e:
+            print(f"⚠️ 이메일 확인 처리 실패: {str(e)}")
+            return False
+
+    async def _execute_complex_javascript(self, page: Page) -> bool:
+        """복잡한 JavaScript 로직 실행"""
+        try:
+            print("📝 복잡한 JavaScript 로직 실행 시도")
+
+            # JavaScript 함수 감지 및 실행
+            js_result = await page.evaluate(
+                """
+                () => {
+                    const functions = ['unsubscribe', 'confirmUnsubscribe', 'processUnsubscribe', 'handleUnsubscribe'];
+                    
+                    for (const funcName of functions) {
+                        if (typeof window[funcName] === 'function') {
+                            console.log('Found function:', funcName);
+                            try {
+                                window[funcName]();
+                                return { success: true, function: funcName };
+                            } catch (e) {
+                                console.error('Function execution failed:', e);
+                            }
+                        }
+                    }
+                    
+                    // Form submit 시도
+                    const forms = document.querySelectorAll('form');
+                    for (const form of forms) {
+                        if (form.action && form.action.toLowerCase().includes('unsubscribe')) {
+                            console.log('Found unsubscribe form');
+                            form.submit();
+                            return { success: true, method: 'form_submit' };
+                        }
+                    }
+                    
+                    // 버튼 클릭 시도
+                    const buttons = document.querySelectorAll('button, input[type="submit"], a');
+                    for (const button of buttons) {
+                        const text = button.textContent || button.value || '';
+                        if (text.toLowerCase().includes('unsubscribe') || 
+                            text.toLowerCase().includes('구독해지') ||
+                            text.toLowerCase().includes('취소') ||
+                            text.toLowerCase().includes('해지')) {
+                            console.log('Found unsubscribe button:', text);
+                            button.click();
+                            return { success: true, method: 'button_click', button: text };
+                        }
+                    }
+                    
+                    return { success: false, reason: 'no_method_found' };
+                }
+            """
+            )
+
+            if js_result.get("success"):
+                print(f"📝 JavaScript 실행 성공: {js_result}")
+
+                # 비동기 처리 대기
+                await page.wait_for_timeout(5000)
+
+                # 동적 콘텐츠 로딩 대기
+                try:
+                    await page.wait_for_function(
+                        """
+                        () => {
+                            return document.querySelector('.success-message') !== null ||
+                                   document.querySelector('.error-message') !== null ||
+                                   document.querySelector('[class*="success"]') !== null ||
+                                   document.querySelector('[class*="error"]') !== null ||
+                                   document.querySelector('[id*="success"]') !== null ||
+                                   document.querySelector('[id*="error"]') !== null;
+                        }
+                    """,
+                        timeout=10000,
+                    )
+                    print("📝 동적 콘텐츠 로딩 완료")
+                except Exception as e:
+                    print(f"⚠️ 동적 콘텐츠 대기 실패: {str(e)}")
+
+                return True
+            else:
+                print(f"⚠️ JavaScript 실행 실패: {js_result}")
+                return False
+
+        except Exception as e:
+            print(f"⚠️ 복잡한 JavaScript 실행 실패: {str(e)}")
+            return False
+
+    async def _wait_for_service_worker(self, page: Page) -> bool:
+        """Service Worker 등록 대기"""
+        try:
+            print("📝 Service Worker 등록 대기")
+
+            # Service Worker 등록 확인
+            sw_result = await page.evaluate(
+                """
+                () => {
+                    if ('serviceWorker' in navigator) {
+                        return navigator.serviceWorker.ready.then(() => {
+                            return { success: true, message: 'Service Worker ready' };
+                        }).catch(e => {
+                            return { success: false, error: e.message };
+                        });
+                    }
+                    return { success: false, message: 'Service Worker not supported' };
+                }
+            """
+            )
+
+            if sw_result.get("success"):
+                print("📝 Service Worker 등록 완료")
+                return True
+            else:
+                print(f"⚠️ Service Worker 등록 실패: {sw_result}")
+                return False
+
+        except Exception as e:
+            print(f"⚠️ Service Worker 대기 실패: {str(e)}")
+            return False
+
+    async def _detect_spa_navigation(self, page: Page, before_url: str) -> bool:
+        """SPA 네비게이션 감지"""
+        try:
+            print("📝 SPA 네비게이션 감지")
+
+            # History API 변경 감지
+            navigation_result = await page.wait_for_function(
+                """
+                (beforeUrl) => {
+                    return window.location.pathname !== beforeUrl ||
+                           window.location.search !== '' ||
+                           window.location.hash !== '';
+                }
+            """,
+                arg=before_url,
+                timeout=5000,
+            )
+
+            if navigation_result:
+                current_url = page.url
+                print(f"📝 SPA 네비게이션 감지: {before_url} → {current_url}")
+                return True
+
+            return False
+
+        except Exception as e:
+            print(f"⚠️ SPA 네비게이션 감지 실패: {str(e)}")
+            return False
+
+    async def _handle_multi_step_unsubscribe(
+        self, page: Page, user_email: str = None
+    ) -> Dict:
+        """다단계 구독해지 처리"""
+        try:
+            print("📝 다단계 구독해지 처리 시작")
+            steps = []
+
+            # 1단계: 확인 페이지 처리
+            print("📝 1단계: 확인 페이지 처리")
+            confirm_result = await self._try_javascript_submit(page, user_email)
+            if confirm_result["success"]:
+                steps.append("1단계 완료")
+                print("✅ 1단계 완료")
+
+                # 2단계: 완료 페이지 확인
+                print("📝 2단계: 완료 페이지 확인")
+                await page.wait_for_timeout(3000)  # 페이지 로딩 대기
+
+                final_result = await self._check_already_unsubscribed(page)
+                if final_result:
+                    steps.append("2단계 완료")
+                    print("✅ 2단계 완료")
+                    return {
+                        "success": True,
+                        "message": "다단계 구독해지 완료",
+                        "method": "multi_step_completed",
+                        "steps": steps,
+                    }
+                else:
+                    # 기본 성공 지표 확인
+                    if await self._check_basic_success_indicators(page):
+                        steps.append("2단계 완료 (기본 지표)")
+                        print("✅ 2단계 완료 (기본 지표)")
+                        return {
+                            "success": True,
+                            "message": "다단계 구독해지 완료 (기본 지표)",
+                            "method": "multi_step_basic_completed",
+                            "steps": steps,
+                        }
+
+            return {
+                "success": False,
+                "message": "다단계 구독해지 실패",
+                "method": "multi_step_failed",
+                "steps": steps,
+            }
+
+        except Exception as e:
+            return {
+                "success": False,
+                "message": f"다단계 구독해지 처리 실패: {str(e)}",
+                "method": "multi_step_error",
+            }
+
+    async def _try_second_page_unsubscribe(
+        self, page: Page, user_email: str = None
+    ) -> Dict:
+        """두 번째 페이지 구독해지 처리 (통합 JavaScript 기반)"""
+        try:
+            print(f"📝 두 번째 페이지 구독해지 처리 시작")
+
+            # 통합 JavaScript 기반 구독해지 처리
+            return await self._try_javascript_submit(page, user_email)
 
         except Exception as e:
             return {
@@ -1197,19 +1674,26 @@ JSON 형식으로 답변해주세요:
 
                         print(f"📝 Form 데이터: {form_data}")
 
-                        # POST 요청 실행
-                        if method.upper() == "POST":
-                            response = await page.request.post(action, data=form_data)
-                            print(f"📝 POST 요청 완료: {response.status}")
+                        # POST 요청 실행 (개선된 버전)
+                    if method.upper() == "POST":
+                        response = await page.request.post(action, data=form_data)
+                        print(f"📝 POST 요청 완료: {response.status}")
 
-                            if response.status in [200, 201, 302]:
-                                # 성공 확인
-                                if await self._check_basic_success_indicators(page):
-                                    return {
-                                        "success": True,
-                                        "message": "Form Action URL을 통한 구독해지 성공",
-                                        "method": "form_action_post",
-                                    }
+                        if response.status in [200, 201, 302]:
+                            # 응답 내용을 임시 페이지로 파싱하여 _check_already_unsubscribed 사용
+                            if await self._check_response_with_temp_page(response):
+                                return {
+                                    "success": True,
+                                    "message": "POST 응답에서 구독해지 완료 확인",
+                                    "method": "form_action_post_completed",
+                                }
+                            # 기본 성공 지표 확인 (페이지가 변경된 경우)
+                            elif await self._check_basic_success_indicators(page):
+                                return {
+                                    "success": True,
+                                    "message": "Form Action URL을 통한 구독해지 성공",
+                                    "method": "form_action_post",
+                                }
 
                         # GET 요청 실행
                         elif method.upper() == "GET":
@@ -1223,7 +1707,15 @@ JSON 형식으로 답변해주세요:
                             await page.goto(full_url, wait_until="domcontentloaded")
                             await page.wait_for_timeout(2000)
 
-                            if await self._check_basic_success_indicators(page):
+                            # 구독해지 완료 확인
+                            if await self._check_already_unsubscribed(page):
+                                return {
+                                    "success": True,
+                                    "message": "Form Action GET 후 구독해지 완료 확인",
+                                    "method": "form_action_get_completed",
+                                }
+                            # 기본 성공 지표 확인
+                            elif await self._check_basic_success_indicators(page):
                                 return {
                                     "success": True,
                                     "message": "Form Action URL을 통한 구독해지 성공",
@@ -1240,11 +1732,33 @@ JSON 형식으로 답변해주세요:
             return {"success": False, "message": f"Form Action URL 처리 실패: {str(e)}"}
 
     async def _try_javascript_submit(self, page: Page, user_email: str = None) -> Dict:
-        """JavaScript 실행을 통한 구독해지 처리"""
+        """통합 JavaScript 기반 구독해지 처리 (모든 방법 통합 + 개선된 기능)"""
         try:
-            print(f"📝 JavaScript 실행 처리 시도")
+            print(f"📝 통합 JavaScript 구독해지 처리 시작")
 
-            # 1. Form submit JavaScript 실행
+            # 0단계: CAPTCHA 감지 및 처리
+            if await self._detect_captcha(page):
+                return await self._handle_captcha_required(page)
+
+            # 1단계: 이메일 확인 요구 처리
+            if await self._handle_email_confirmation(page, user_email):
+                # 이메일 입력 후 구독해지 완료 확인
+                if await self._check_already_unsubscribed(page):
+                    return {
+                        "success": True,
+                        "message": "이메일 확인 후 구독해지 완료",
+                        "method": "email_confirmation_completed",
+                    }
+
+            # 2단계: Form Action URL 처리 (POST 응답 파싱 포함)
+            form_result = await self._try_form_action_submit(page, user_email)
+            if form_result["success"]:
+                return form_result
+
+            # 3단계: Service Worker 대기 (최신 웹사이트 지원)
+            await self._wait_for_service_worker(page)
+
+            # 4단계: Form submit JavaScript 실행
             forms = await page.query_selector_all("form")
             for form in forms:
                 try:
@@ -1252,58 +1766,160 @@ JSON 형식으로 답변해주세요:
                     if action and "unsubscribe" in action.lower():
                         print(f"📝 JavaScript Form submit 실행: {action}")
 
+                        # 클릭 전 상태 저장
+                        before_url = page.url
+                        before_title = await page.title()
+
                         # JavaScript로 form submit 실행
                         await page.evaluate("(form) => form.submit()", form)
-                        await page.wait_for_timeout(3000)
 
-                        if await self._check_basic_success_indicators(page):
-                            return {
-                                "success": True,
-                                "message": "JavaScript Form submit 성공",
-                                "method": "javascript_form_submit",
-                            }
+                        # SPA 네비게이션 감지
+                        if await self._detect_spa_navigation(page, before_url):
+                            if await self._check_already_unsubscribed(page):
+                                return {
+                                    "success": True,
+                                    "message": "SPA 네비게이션 후 구독해지 완료",
+                                    "method": "spa_navigation_completed",
+                                }
+
+                        # 페이지 이동 감지 및 처리
+                        navigation_result = await self._detect_page_navigation(
+                            page, before_url, before_title
+                        )
+                        if navigation_result["success"]:
+                            return navigation_result
+
+                        # 네트워크 요청 완료 대기 후 확인
+                        network_result = await self._wait_for_network_idle_and_check(
+                            page
+                        )
+                        if network_result["success"]:
+                            return network_result
 
                 except Exception as e:
                     print(f"⚠️ JavaScript Form submit 실패: {str(e)}")
                     continue
 
-            # 2. 클릭 이벤트 JavaScript 실행
-            click_selectors = [
+            # 5단계: 복잡한 JavaScript 로직 실행
+            if await self._execute_complex_javascript(page):
+                # 복잡한 JavaScript 실행 후 구독해지 완료 확인
+                if await self._check_already_unsubscribed(page):
+                    return {
+                        "success": True,
+                        "message": "복잡한 JavaScript 실행 후 구독해지 완료",
+                        "method": "complex_js_completed",
+                    }
+
+            # 6단계: 개선된 선택자로 클릭 처리
+            enhanced_selectors = [
                 "input[type='submit']",
                 "button[type='submit']",
                 "button",
                 ".unsubscribe-button",
                 "#unsubscribe",
                 "[class*='unsubscribe']",
+                "a[href*='unsubscribe']",
+                "a[href*='opt-out']",
+                ".confirm-button",
+                ".submit-button",
+                "[class*='confirm']",
+                "[class*='submit']",
             ]
 
-            for selector in click_selectors:
+            for selector in enhanced_selectors:
                 try:
                     elements = await page.query_selector_all(selector)
                     for element in elements:
                         is_visible = await element.is_visible()
-                        if is_visible:
-                            print(f"📝 JavaScript 클릭 실행: {selector}")
+                        is_enabled = await element.is_enabled()
+
+                        if is_visible and is_enabled:
+                            element_text = await element.text_content()
+
+                            # 재구독 버튼 확인 (클릭하면 안 됨!)
+                            resubscribe_keywords = [
+                                "resubscribe",
+                                "다시 구독하기",
+                                "재구독",
+                                "subscribe again",
+                                "re-subscribe",
+                                "다시 구독",
+                                "재구독하기",
+                            ]
+
+                            is_resubscribe_button = any(
+                                keyword in element_text.lower()
+                                for keyword in resubscribe_keywords
+                            )
+
+                            if is_resubscribe_button:
+                                print(
+                                    f"🎉 재구독 버튼 발견 - 구독해지 성공으로 인식 (클릭하지 않음)"
+                                )
+                                return {
+                                    "success": True,
+                                    "message": "재구독 버튼 발견으로 구독해지 성공 확인",
+                                    "method": "resubscribe_button_detected",
+                                    "button_text": element_text,
+                                }
+
+                            print(
+                                f"📝 JavaScript 클릭 실행: {selector} - 텍스트: '{element_text}'"
+                            )
+
+                            # 클릭 전 상태 저장
+                            before_url = page.url
+                            before_title = await page.title()
 
                             # JavaScript로 클릭 이벤트 실행
                             await page.evaluate("(element) => element.click()", element)
-                            await page.wait_for_timeout(3000)
 
-                            if await self._check_basic_success_indicators(page):
-                                return {
-                                    "success": True,
-                                    "message": "JavaScript 클릭 성공",
-                                    "method": "javascript_click",
-                                }
+                            # SPA 네비게이션 감지
+                            if await self._detect_spa_navigation(page, before_url):
+                                if await self._check_already_unsubscribed(page):
+                                    return {
+                                        "success": True,
+                                        "message": "SPA 네비게이션 후 구독해지 완료",
+                                        "method": "spa_navigation_completed",
+                                    }
+
+                            # 페이지 이동 감지 및 처리
+                            navigation_result = await self._detect_page_navigation(
+                                page, before_url, before_title
+                            )
+                            if navigation_result["success"]:
+                                return navigation_result
+
+                            # 네트워크 요청 완료 대기 후 확인
+                            network_result = (
+                                await self._wait_for_network_idle_and_check(page)
+                            )
+                            if network_result["success"]:
+                                return network_result
 
                 except Exception as e:
                     print(f"⚠️ JavaScript 클릭 실패: {str(e)}")
                     continue
 
-            return {"success": False, "message": "JavaScript 실행 처리 실패"}
+            # 7단계: 다단계 구독해지 처리
+            multi_step_result = await self._handle_multi_step_unsubscribe(
+                page, user_email
+            )
+            if multi_step_result["success"]:
+                return multi_step_result
+
+            # 8단계: 링크 기반 처리
+            link_result = await self._try_link_based_unsubscribe(page, user_email)
+            if link_result["success"]:
+                return link_result
+
+            return {"success": False, "message": "통합 JavaScript 구독해지 처리 실패"}
 
         except Exception as e:
-            return {"success": False, "message": f"JavaScript 실행 처리 실패: {str(e)}"}
+            return {
+                "success": False,
+                "message": f"통합 JavaScript 구독해지 처리 실패: {str(e)}",
+            }
 
     async def _try_enhanced_selectors(self, page: Page, user_email: str = None) -> Dict:
         """개선된 선택자로 구독해지 처리"""
@@ -1370,6 +1986,33 @@ JSON 형식으로 답변해주세요:
                                 f"📝 개선된 선택자 요소 발견: {selector} - 텍스트: '{element_text}'"
                             )
 
+                            # 재구독 버튼 확인 (클릭하면 안 됨!)
+                            resubscribe_keywords = [
+                                "resubscribe",
+                                "다시 구독하기",
+                                "재구독",
+                                "subscribe again",
+                                "re-subscribe",
+                                "다시 구독",
+                                "재구독하기",
+                            ]
+
+                            is_resubscribe_button = any(
+                                keyword in element_text.lower()
+                                for keyword in resubscribe_keywords
+                            )
+
+                            if is_resubscribe_button:
+                                print(
+                                    f"🎉 재구독 버튼 발견 - 구독해지 성공으로 인식 (클릭하지 않음)"
+                                )
+                                return {
+                                    "success": True,
+                                    "message": "재구독 버튼 발견으로 구독해지 성공 확인",
+                                    "method": "resubscribe_button_detected",
+                                    "button_text": element_text,
+                                }
+
                             # 구독해지 관련 키워드 확인
                             action_keywords = [
                                 "confirm",
@@ -1435,8 +2078,16 @@ JSON 형식으로 답변해주세요:
                                         f"📝 URL 변경 감지: {before_url} → {after_url}"
                                     )
 
-                                # 성공 확인
-                                if await self._check_basic_success_indicators(page):
+                                # 구독해지 완료 확인
+                                if await self._check_already_unsubscribed(page):
+                                    return {
+                                        "success": True,
+                                        "message": "개선된 선택자 클릭 후 구독해지 완료 확인",
+                                        "method": "enhanced_selectors_completed",
+                                        "selector": selector,
+                                    }
+                                # 기본 성공 지표 확인
+                                elif await self._check_basic_success_indicators(page):
                                     return {
                                         "success": True,
                                         "message": f"개선된 선택자로 구독해지 성공: {selector}",
@@ -1468,6 +2119,32 @@ JSON 형식으로 답변해주세요:
                     href = await link.get_attribute("href")
                     link_text = await link.text_content()
 
+                    # 재구독 링크 확인 (클릭하면 안 됨!)
+                    resubscribe_keywords = [
+                        "resubscribe",
+                        "다시 구독하기",
+                        "재구독",
+                        "subscribe again",
+                        "re-subscribe",
+                        "다시 구독",
+                        "재구독하기",
+                    ]
+
+                    is_resubscribe_link = any(
+                        keyword in link_text.lower() for keyword in resubscribe_keywords
+                    )
+
+                    if is_resubscribe_link:
+                        print(
+                            f"🎉 재구독 링크 발견 - 구독해지 성공으로 인식 (클릭하지 않음)"
+                        )
+                        return {
+                            "success": True,
+                            "message": "재구독 링크 발견으로 구독해지 성공 확인",
+                            "method": "resubscribe_link_detected",
+                            "link_text": link_text,
+                        }
+
                     if href and any(
                         keyword in href.lower()
                         for keyword in ["unsubscribe", "opt-out", "remove", "cancel"]
@@ -1485,8 +2162,16 @@ JSON 형식으로 답변해주세요:
                             print(f"⚠️ 네트워크 대기 실패, 기본 대기로 전환: {str(e)}")
                             await page.wait_for_timeout(5000)
 
-                        # 성공 확인
-                        if await self._check_basic_success_indicators(page):
+                        # 구독해지 완료 확인
+                        if await self._check_already_unsubscribed(page):
+                            return {
+                                "success": True,
+                                "message": "링크 클릭 후 구독해지 완료 확인",
+                                "method": "link_based_completed",
+                                "link": href,
+                            }
+                        # 기본 성공 지표 확인
+                        elif await self._check_basic_success_indicators(page):
                             return {
                                 "success": True,
                                 "message": f"링크 기반 구독해지 성공: {href}",
