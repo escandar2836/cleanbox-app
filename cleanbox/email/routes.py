@@ -412,7 +412,7 @@ def analyze_email(email_id):
 
         # AI 분류 및 요약 수행
         category_id, summary = ai_classifier.classify_and_summarize_email(
-            email_obj.body, email_obj.subject, email_obj.sender, categories
+            email_obj.content, email_obj.subject, email_obj.sender, categories
         )
 
         # 결과 업데이트
