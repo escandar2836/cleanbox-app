@@ -740,31 +740,33 @@ def bulk_actions():
                     error_groups[error_type] = []
                 error_groups[error_type].append(email)
 
-            # 결과 메시지 생성 (상세 버전)
+            # 결과 메시지 생성 (성공은 항상 표시, 실패는 존재할 때만)
             total_processed = success_count + len(failed_emails) + len(personal_emails)
             message_parts = []
 
-            if success_count > 0:
-                message_parts.append(f"✅ 성공: {success_count}개")
+            # 성공 개수는 항상 표시 (0이어도)
+            message_parts.append(f"✅ 성공: {success_count}개")
 
+            # 개인 이메일은 존재할 때만 표시
             if personal_emails:
                 message_parts.append(f"📧 개인 이메일: {len(personal_emails)}개")
 
-            # 에러 타입별로 그룹화된 실패 정보 추가
+            # 에러 타입별로 실제 발생한 것만 표시
             for error_type, emails in error_groups.items():
-                error_name = {
-                    "no_unsubscribe_link": "구독해지 링크 없음",
-                    "all_links_failed": "모든 링크 실패",
-                    "processing_error": "처리 오류",
-                    "network_error": "네트워크 오류",
-                    "timeout_error": "시간 초과",
-                    "unknown": "알 수 없는 오류",
-                }.get(error_type, error_type)
+                if emails:  # 실제 발생한 에러만 표시
+                    error_name = {
+                        "no_unsubscribe_link": "구독해지 링크 없음",
+                        "all_links_failed": "모든 링크 실패",
+                        "processing_error": "처리 오류",
+                        "network_error": "네트워크 오류",
+                        "timeout_error": "시간 초과",
+                        "unknown": "알 수 없는 오류",
+                    }.get(error_type, error_type)
 
-                message_parts.append(f"❌ {error_name}: {len(emails)}개")
+                    message_parts.append(f"❌ {error_name}: {len(emails)}개")
 
             result_message = (
-                f"처리 완료 ({total_processed}개): {' | '.join(message_parts)}"
+                f"처리 완료 ({total_processed}개): {'\n'.join(message_parts)}"
             )
 
             print(f"🎉 대량 구독해지 완료 - {result_message}")
@@ -772,17 +774,6 @@ def bulk_actions():
                 result_message,
                 "info" if failed_emails or personal_emails else "success",
             )
-
-            # 세션에 상세 결과 저장 (UI에서 사용)
-            from flask import session
-
-            session["bulk_unsubscribe_result"] = {
-                "success_count": success_count,
-                "failed_emails": failed_emails,
-                "personal_emails": personal_emails,
-                "total_processed": total_processed,
-                "error_groups": error_groups,  # 에러 타입별 그룹화 정보 추가
-            }
 
         else:
             flash("지원하지 않는 작업입니다.", "error")
