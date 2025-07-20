@@ -818,29 +818,20 @@ def unsubscribe_email(email_id):
             print(f"📝 에러 타입: {error_type}")
             print(f"📝 에러 상세: {error_details}")
 
-                    return (
-            jsonify(
-                {
-                    "success": False,
-                    "message": error_message,
-                    "error_type": error_type,
-                    "error_details": error_details,
-                    "steps": result.get("steps", []),
-                    "email_id": email_id,
-                    "is_personal_email": result.get("is_personal_email", False),
-                }
-            ),
-            400,
-        )
-
-
-@email_bp.route("/clear-bulk-result", methods=["POST"])
-@login_required
-def clear_bulk_result():
-    """대량 처리 결과 세션 클리어"""
-    from flask import session
-    session.pop("bulk_unsubscribe_result", None)
-    return jsonify({"success": True})
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "message": error_message,
+                        "error_type": error_type,
+                        "error_details": error_details,
+                        "steps": result.get("steps", []),
+                        "email_id": email_id,
+                        "is_personal_email": result.get("is_personal_email", False),
+                    }
+                ),
+                400,
+            )
 
     except Exception as e:
         print(f"❌ 구독해지 처리 중 예외 발생: {str(e)}")
@@ -854,6 +845,16 @@ def clear_bulk_result():
             ),
             500,
         )
+
+
+@email_bp.route("/clear-bulk-result", methods=["POST"])
+@login_required
+def clear_bulk_result():
+    """대량 처리 결과 세션 클리어"""
+    from flask import session
+
+    session.pop("bulk_unsubscribe_result", None)
+    return jsonify({"success": True})
 
 
 def process_missed_emails_for_account(
