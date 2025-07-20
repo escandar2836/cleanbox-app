@@ -821,6 +821,21 @@ function unsubscribeEmail(emailId) {
     console.log('📧 이메일 ID:', emailId);
     console.log('📧 이메일 ID 타입:', typeof emailId);
     
+    // Bootstrap 확인 및 개선된 처리
+    if (typeof bootstrap === 'undefined') {
+        console.error('❌ Bootstrap이 로드되지 않았습니다');
+        showFallbackAlert('Bootstrap이 로드되지 않았습니다. 페이지를 새로고침해주세요.', 'danger');
+        return;
+    }
+    
+    // 모달 요소 확인 및 개선된 처리
+    const modalElement = document.getElementById('unsubscribeModal');
+    if (!modalElement) {
+        console.error('❌ 구독 해지 모달을 찾을 수 없습니다');
+        showFallbackAlert('모달을 찾을 수 없습니다. 페이지를 새로고침해주세요.', 'danger');
+        return;
+    }
+    
     if (!confirm('이 이메일의 구독을 해지하시겠습니까?\n\nAI가 자동으로 구독 해지 링크를 찾아 처리합니다.')) {
         console.log('❌ 사용자가 취소했습니다');
         return;
@@ -828,132 +843,163 @@ function unsubscribeEmail(emailId) {
     
     console.log('✅ 사용자 확인 완료, 모달 표시');
     
-    // 모달 표시
-    const modal = new bootstrap.Modal(document.getElementById('unsubscribeModal'));
-    modal.show();
-    
-    // 진행 상황 표시 초기화
-    const modalBody = document.getElementById('unsubscribeContent');
-    modalBody.innerHTML = `
-        <div class="text-center">
-            <div class="spinner-border text-warning" role="status">
-                <span class="visually-hidden">구독 해지 중...</span>
-            </div>
-            <p class="mt-2">AI가 구독 해지 링크를 찾아 처리하고 있습니다...</p>
-            <div class="progress mt-3">
-                <div class="progress-bar progress-bar-striped progress-bar-animated" 
-                     role="progressbar" style="width: 0%" id="unsubscribeProgress">0%</div>
-            </div>
-            <div class="mt-3" id="unsubscribeSteps">
-                <small class="text-muted">초기화 중...</small>
-            </div>
-        </div>
-    `;
-    
-    // 구독 해지 요청
-    const requestUrl = `/email/${emailId}/unsubscribe`;
-    console.log('🚀 요청 URL:', requestUrl);
-    console.log('📡 fetch 요청 시작');
-    
-    fetch(requestUrl)
-        .then(response => response.json())
-        .then(data => {
-            const progressBar = document.getElementById('unsubscribeProgress');
-            const stepsDiv = document.getElementById('unsubscribeSteps');
-            
-            if (data.success) {
-                // 진행률 업데이트
-                if (data.progress) {
-                    progressBar.style.width = data.progress + '%';
-                    progressBar.textContent = data.progress + '%';
-                }
-                
-                // 단계 표시
-                if (data.steps && data.steps.length > 0) {
-                    stepsDiv.innerHTML = `
-                        <strong>처리 단계:</strong>
-                        <ul class="text-start mt-2">
-                            ${data.steps.map(step => `<li class="small">${step}</li>`).join('')}
-                        </ul>
-                    `;
-                }
-                
-                // 성공 메시지
-                setTimeout(() => {
-                    modalBody.innerHTML = `
-                        <div class="text-center">
-                            <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
-                            <h5 class="text-success">구독 해지 완료!</h5>
-                            <p>${data.message}</p>
-                            ${data.steps ? `<div class="mt-3"><strong>처리 단계:</strong><ul class="text-start">${data.steps.map(step => `<li>${step}</li>`).join('')}</ul></div>` : ''}
-                        </div>
-                    `;
-                    
-                    // 페이지 새로고침으로 상태 업데이트
-                    setTimeout(() => {
-                        location.reload();
-                    }, 2000);
-                }, 1000);
-            } else {
-                // 진행률 업데이트
-                if (data.progress) {
-                    progressBar.style.width = data.progress + '%';
-                    progressBar.textContent = data.progress + '%';
-                }
-                
-                // 단계 표시
-                if (data.steps && data.steps.length > 0) {
-                    stepsDiv.innerHTML = `
-                        <strong>시도한 단계:</strong>
-                        <ul class="text-start mt-2">
-                            ${data.steps.map(step => `<li class="small">${step}</li>`).join('')}
-                        </ul>
-                    `;
-                }
-                
-                // 실패 메시지 (개선된 버전)
-                setTimeout(() => {
-                    // 에러 타입별 다른 메시지 표시
-                    let errorIcon = 'fas fa-exclamation-triangle';
-                    let errorTitle = '구독 해지 실패';
-                    let errorClass = 'text-danger';
-                    
-                    if (data.is_personal_email) {
-                        errorIcon = 'fas fa-user';
-                        errorTitle = '개인 이메일 감지';
-                        errorClass = 'text-info';
-                    } else if (data.error_type === 'no_unsubscribe_link') {
-                        errorIcon = 'fas fa-link-slash';
-                        errorTitle = '구독해지 링크 없음';
-                    } else if (data.error_type === 'all_links_failed') {
-                        errorIcon = 'fas fa-times-circle';
-                        errorTitle = '모든 링크 실패';
-                    }
-                    
-                    modalBody.innerHTML = `
-                        <div class="text-center">
-                            <i class="${errorIcon} fa-3x ${errorClass} mb-3"></i>
-                            <h5 class="${errorClass}">${errorTitle}</h5>
-                            <p>${data.message}</p>
-                            ${data.error_details ? `<div class="mt-2"><small class="text-muted">${data.error_details}</small></div>` : ''}
-                            ${data.steps ? `<div class="mt-3"><strong>시도한 단계:</strong><ul class="text-start">${data.steps.map(step => `<li>${step}</li>`).join('')}</ul></div>` : ''}
-                            ${data.failed_links ? `<div class="mt-3"><strong>실패한 링크들:</strong><ul class="text-start">${data.failed_links.map(link => `<li>링크 ${link.link_number}: ${link.error}</li>`).join('')}</ul></div>` : ''}
-                        </div>
-                    `;
-                }, 1000);
+    try {
+        // 모달 표시
+        const modal = new bootstrap.Modal(modalElement);
+        modal.show();
+        
+        // 진행 상황 표시 초기화
+        const modalBody = modalElement.querySelector('.modal-body');
+        if (modalBody) {
+            modalBody.innerHTML = `
+                <div class="text-center">
+                    <div class="spinner-border text-warning" role="status">
+                        <span class="visually-hidden">구독 해지 중...</span>
+                    </div>
+                    <p class="mt-2">AI가 구독 해지 링크를 찾아 처리하고 있습니다...</p>
+                    <div class="progress mt-3">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                             role="progressbar" style="width: 0%" id="unsubscribeProgress">0%</div>
+                    </div>
+                    <div class="mt-3" id="unsubscribeSteps">
+                        <small class="text-muted">초기화 중...</small>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // 구독 해지 요청
+        const requestUrl = `/email/${emailId}/unsubscribe`;
+        console.log('🚀 요청 URL:', requestUrl);
+        console.log('📡 fetch 요청 시작');
+        
+        // 타임아웃 설정 (30초)
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
+        
+        fetch(requestUrl, {
+            signal: controller.signal
+        })
+        .then(response => {
+            clearTimeout(timeoutId);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
+            return response.json();
+        })
+        .then(data => {
+            handleUnsubscribeResult(data, modalElement);
         })
         .catch(error => {
-            const modalBody = document.getElementById('unsubscribeContent');
+            clearTimeout(timeoutId);
+            console.error('구독해지 요청 실패:', error);
+            
+            // 네트워크 오류인지 확인
+            if (error.name === 'AbortError') {
+                handleUnsubscribeError(new Error('요청 시간이 초과되었습니다. 다시 시도해주세요.'), modalElement);
+            } else if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                handleUnsubscribeError(new Error('네트워크 연결을 확인해주세요.'), modalElement);
+            } else {
+                handleUnsubscribeError(error, modalElement);
+            }
+        });
+    } catch (error) {
+        console.error('모달 표시 실패:', error);
+        showFallbackAlert('모달 표시 중 오류가 발생했습니다.', 'danger');
+    }
+}
+
+// 구독해지 결과 처리 함수
+function handleUnsubscribeResult(data, modalElement) {
+    const modalBody = modalElement.querySelector('.modal-body');
+    if (!modalBody) {
+        alert('모달 내용을 찾을 수 없습니다.');
+        return;
+    }
+    
+    const progressBar = document.getElementById('unsubscribeProgress');
+    const stepsDiv = document.getElementById('unsubscribeSteps');
+    
+    if (data.success) {
+        // 진행률 업데이트
+        if (data.progress && progressBar) {
+            progressBar.style.width = data.progress + '%';
+            progressBar.textContent = data.progress + '%';
+        }
+        
+        // 단계 표시
+        if (data.steps && data.steps.length > 0 && stepsDiv) {
+            stepsDiv.innerHTML = `
+                <strong>처리 단계:</strong>
+                <ul class="text-start mt-2">
+                    ${data.steps.map(step => `<li class="small">${step}</li>`).join('')}
+                </ul>
+            `;
+        }
+        
+        // 성공 메시지
+        setTimeout(() => {
+            modalBody.innerHTML = `
+                <div class="text-center">
+                    <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+                    <h5 class="text-success">구독 해지 완료!</h5>
+                    <p>${data.message}</p>
+                    ${data.steps ? `<div class="mt-3"><strong>처리 단계:</strong><ul class="text-start">${data.steps.map(step => `<li>${step}</li>`).join('')}</ul></div>` : ''}
+                </div>
+            `;
+            
+            // 페이지 새로고침으로 상태 업데이트
+            setTimeout(() => {
+                location.reload();
+            }, 2000);
+        }, 1000);
+    } else {
+        // 진행률 업데이트
+        if (data.progress && progressBar) {
+            progressBar.style.width = data.progress + '%';
+            progressBar.textContent = data.progress + '%';
+        }
+        
+        // 단계 표시
+        if (data.steps && data.steps.length > 0 && stepsDiv) {
+            stepsDiv.innerHTML = `
+                <strong>시도한 단계:</strong>
+                <ul class="text-start mt-2">
+                    ${data.steps.map(step => `<li class="small">${step}</li>`).join('')}
+                </ul>
+            `;
+        }
+        
+        // 실패 메시지
+        setTimeout(() => {
             modalBody.innerHTML = `
                 <div class="text-center">
                     <i class="fas fa-exclamation-triangle fa-3x text-danger mb-3"></i>
-                    <h5 class="text-danger">오류 발생</h5>
-                    <p>구독 해지 처리 중 오류가 발생했습니다.</p>
-                    <small class="text-muted">${error.message}</small>
+                    <h5 class="text-danger">구독 해지 실패</h5>
+                    <p>${data.message}</p>
+                    ${data.steps ? `<div class="mt-3"><strong>시도한 단계:</strong><ul class="text-start">${data.steps.map(step => `<li>${step}</li>`).join('')}</ul></div>` : ''}
                 </div>
             `;
-        });
+        }, 1000);
+    }
+}
+
+// 구독해지 오류 처리 함수
+function handleUnsubscribeError(error, modalElement) {
+    const modalBody = modalElement.querySelector('.modal-body');
+    if (!modalBody) {
+        alert('모달 내용을 찾을 수 없습니다.');
+        return;
+    }
+    
+    modalBody.innerHTML = `
+        <div class="text-center">
+            <i class="fas fa-exclamation-triangle fa-3x text-danger mb-3"></i>
+            <h5 class="text-danger">오류 발생</h5>
+            <p>구독 해지 처리 중 오류가 발생했습니다.</p>
+            <small class="text-muted">${error.message}</small>
+        </div>
+    `;
 }
 
 // 대량 구독 해지 함수
@@ -1024,6 +1070,26 @@ function setupWebhook() {
         button.innerHTML = originalText;
         button.disabled = false;
     });
+}
+
+// 폴백 알림 함수 (모달이 없을 때 사용)
+function showFallbackAlert(message, type = 'info') {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+    alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+    alertDiv.innerHTML = `
+        <i class="fas fa-${type === 'danger' ? 'exclamation-triangle' : 'info-circle'}"></i>
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    document.body.appendChild(alertDiv);
+    
+    // 5초 후 자동 제거
+    setTimeout(() => {
+        if (alertDiv.parentNode) {
+            alertDiv.remove();
+        }
+    }, 5000);
 }
 
 </script>
