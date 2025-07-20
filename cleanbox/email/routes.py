@@ -765,8 +765,8 @@ def bulk_actions():
 
                     message_parts.append(f"❌ {error_name}: {len(emails)}개")
 
-            result_message = (
-                f"처리 완료 ({total_processed}개): {'\n'.join(message_parts)}"
+            result_message = f"처리 완료 ({total_processed}개):\n" + "\n".join(
+                message_parts
             )
 
             print(f"🎉 대량 구독해지 완료 - {result_message}")
