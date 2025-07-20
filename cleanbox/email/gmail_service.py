@@ -678,3 +678,34 @@ class GmailService:
         except Exception as e:
             print(f"❌ 웹훅 상태 확인 실패: {self.account_id} - {e}")
             return False
+
+    def get_new_emails(self) -> List[Dict]:
+        """가입 날짜 이후의 새 이메일 가져오기"""
+        try:
+            # 사용자 계정 정보에서 가입 날짜 가져오기
+            account = UserAccount.query.filter_by(id=self.account_id).first()
+            if not account:
+                print(f"❌ 계정 정보를 찾을 수 없음: {self.account_id}")
+                return []
+
+            # 가입 날짜 이후의 이메일 가져오기
+            after_date = account.created_at
+            print(
+                f"🔍 새 이메일 검색 - 계정: {account.account_email}, 가입일: {after_date}"
+            )
+
+            # fetch_recent_emails 메서드를 사용하여 가입 날짜 이후의 이메일 가져오기
+            new_emails = self.fetch_recent_emails(
+                max_results=50, after_date=after_date  # 최대 50개
+            )
+
+            print(
+                f"📧 새 이메일 발견 - 계정: {account.account_email}, 개수: {len(new_emails)}"
+            )
+            return new_emails
+
+        except Exception as e:
+            print(
+                f"❌ 새 이메일 가져오기 실패 - 계정: {self.account_id}, 오류: {str(e)}"
+            )
+            return []
