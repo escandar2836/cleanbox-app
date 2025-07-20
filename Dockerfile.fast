@@ -30,7 +30,7 @@ RUN apt-get update && apt-get install -y \
 # Python 의존성 설치
 WORKDIR /app
 COPY requirements.txt .
-RUN pip install --no-cache-dir --user -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Playwright 브라우저 설치
 RUN playwright install chromium
@@ -62,12 +62,11 @@ RUN apt-get update && apt-get install -y \
     libxshmfence1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Python 사용자 설치 디렉토리 복사
-COPY --from=builder /root/.local /root/.local
+# Python 패키지 복사
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /ms-playwright /ms-playwright
 
 # 환경 변수 설정
-ENV PATH=/root/.local/bin:$PATH
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 ENV DISPLAY=:99
 

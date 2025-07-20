@@ -15,13 +15,21 @@ case $BUILD_TYPE in
         echo "📦 간단한 빌드"
         docker build -f Dockerfile.simple -t cleanbox-app:simple .
         ;;
+    "optimized")
+        echo "🚀 최적화된 빌드"
+        docker build -f Dockerfile.optimized -t cleanbox-app:optimized .
+        ;;
     "full")
         echo "🔧 전체 빌드"
         docker build -f Dockerfile -t cleanbox-app:full .
         ;;
     "test")
         echo "🧪 브라우저 설치 테스트"
-        docker run --rm cleanbox-app:simple python check_playwright.py
+        docker run --rm cleanbox-app:optimized python check_playwright.py
+        ;;
+    "fix")
+        echo "🔧 브라우저 설치 문제 해결"
+        docker run --rm -it cleanbox-app:optimized bash -c "chmod +x fix_playwright.sh && ./fix_playwright.sh"
         ;;
     *)
         echo "❌ 알 수 없는 빌드 타입: $BUILD_TYPE"

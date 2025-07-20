@@ -118,22 +118,65 @@ class PlaywrightUnsubscribeService:
     async def initialize_browser(self):
         """브라우저 초기화 (재사용 가능)"""
         if self.browser is None:
-            # 브라우저 경로 확인
+            # 브라우저 경로 확인 및 동적 탐지
             import os
+            import glob
 
             playwright_browsers_path = os.environ.get(
                 "PLAYWRIGHT_BROWSERS_PATH", "/ms-playwright"
             )
             print(f"📝 Playwright 브라우저 경로: {playwright_browsers_path}")
 
+            # Chrome 실행 파일 찾기
+            chrome_paths = [
+                os.path.join(
+                    playwright_browsers_path, "chromium-*/chrome-linux/chrome"
+                ),
+                os.path.join(
+                    playwright_browsers_path, "chromium-*/chrome-linux/chromium"
+                ),
+                "/usr/bin/chromium",
+                "/usr/bin/chromium-browser",
+                "/usr/bin/google-chrome",
+            ]
+
+            executable_path = None
+            for path_pattern in chrome_paths:
+                if "*" in path_pattern:
+                    # 와일드카드 패턴 처리
+                    matches = glob.glob(path_pattern)
+                    if matches:
+                        executable_path = matches[0]
+                        print(f"📝 Chrome 실행 파일 발견: {executable_path}")
+                        break
+                elif os.path.exists(path_pattern):
+                    executable_path = path_pattern
+                    print(f"📝 Chrome 실행 파일 발견: {executable_path}")
+                    break
+
+            if not executable_path:
+                print(
+                    "⚠️ Chrome 실행 파일을 찾을 수 없습니다. 자동 감지 모드로 진행합니다."
+                )
+
             playwright = await async_playwright().start()
-            self.browser = await playwright.chromium.launch(
-                headless=True,
-                args=self.browser_args,
-                chromium_sandbox=False,
-                executable_path=None,  # 자동 감지
-            )
-            print("✅ Playwright 브라우저 초기화 완료")
+            try:
+                self.browser = await playwright.chromium.launch(
+                    headless=True,
+                    args=self.browser_args,
+                    chromium_sandbox=False,
+                    executable_path=executable_path,
+                )
+                print("✅ Playwright 브라우저 초기화 완료")
+            except Exception as e:
+                print(f"❌ 브라우저 초기화 실패: {str(e)}")
+                # 재시도 (executable_path 없이)
+                self.browser = await playwright.chromium.launch(
+                    headless=True,
+                    args=self.browser_args,
+                    chromium_sandbox=False,
+                )
+                print("✅ Playwright 브라우저 초기화 완료 (재시도)")
 
         # 새 컨텍스트 생성 (기존 컨텍스트 재사용)
         if self.context is None:

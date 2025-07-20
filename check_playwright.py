@@ -62,29 +62,30 @@ def check_browser_path():
     )
     print(f"📝 PLAYWRIGHT_BROWSERS_PATH: {playwright_browsers_path}")
 
-    # 브라우저 실행 파일 경로 확인
-    chromium_path = os.path.join(
-        playwright_browsers_path, "chromium-1091/chrome-linux/chrome"
-    )
-    if os.path.exists(chromium_path):
-        print(f"✅ Chromium 실행 파일 발견: {chromium_path}")
-        return True
-    else:
-        print(f"❌ Chromium 실행 파일 없음: {chromium_path}")
+    # 브라우저 실행 파일 경로 확인 (와일드카드 패턴 포함)
+    import glob
 
-        # 다른 가능한 경로들 확인
-        possible_paths = [
-            os.path.join(playwright_browsers_path, "chromium-*/chrome-linux/chrome"),
-            "/usr/bin/chromium",
-            "/usr/bin/chromium-browser",
-        ]
+    chrome_paths = [
+        os.path.join(playwright_browsers_path, "chromium-*/chrome-linux/chrome"),
+        os.path.join(playwright_browsers_path, "chromium-*/chrome-linux/chromium"),
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+        "/usr/bin/google-chrome",
+    ]
 
-        for path in possible_paths:
-            if os.path.exists(path):
-                print(f"✅ 대체 경로 발견: {path}")
+    for path_pattern in chrome_paths:
+        if "*" in path_pattern:
+            # 와일드카드 패턴 처리
+            matches = glob.glob(path_pattern)
+            if matches:
+                print(f"✅ Chromium 실행 파일 발견: {matches[0]}")
                 return True
+        elif os.path.exists(path_pattern):
+            print(f"✅ Chromium 실행 파일 발견: {path_pattern}")
+            return True
 
-        return False
+    print("❌ Chromium 실행 파일을 찾을 수 없습니다")
+    return False
 
 
 def install_browsers():
