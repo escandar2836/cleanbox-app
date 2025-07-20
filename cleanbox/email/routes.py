@@ -1157,27 +1157,7 @@ def unsubscribe_email(email_id):
             f"📝 이메일 {email_id} 조회 성공 - 제목: {email.subject}, 발신자: {email.sender}"
         )
 
-        # 새로운 이메일인지 확인 (최근 7일 이내)
-        from datetime import datetime, timedelta
-
-        recent_threshold = datetime.utcnow() - timedelta(days=7)
-        is_recent_email = email.created_at and email.created_at > recent_threshold
-
-        # 같은 발신자로부터 최근에 새 이메일이 들어왔는지 확인
-        recent_same_sender = Email.query.filter(
-            Email.user_id == current_user.id,
-            Email.sender == email.sender,
-            Email.created_at > recent_threshold,
-            Email.id != email_id,
-        ).first()
-
-        # 새로운 이메일이거나 같은 발신자로부터 최근에 새 이메일이 들어온 경우 구독해지 상태 재설정
-        if is_recent_email or recent_same_sender:
-            print(f"🔄 새로운 이메일 감지 - 구독해지 상태 재설정")
-            email.is_unsubscribed = False
-            db.session.commit()
-
-        # 이미 구독해지된 이메일인지 확인 (재설정 후)
+        # 이미 구독해지된 이메일인지 확인
         if email.is_unsubscribed:
             print(f"⏭️ 이메일 {email_id}는 이미 구독해지됨")
             return jsonify(

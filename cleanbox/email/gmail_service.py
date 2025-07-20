@@ -274,32 +274,6 @@ class GmailService:
             # 발신자 정보 추출
             sender = email_data.get("sender") or "알 수 없는 발신자"
 
-            # 새로운 이메일인 경우 발신자별 구독해지 상태 확인
-            # 최근 7일 이내에 같은 발신자로부터 새 이메일이 들어오면 구독해지 상태 재설정
-            from datetime import datetime, timedelta
-
-            recent_threshold = datetime.utcnow() - timedelta(days=7)
-
-            # 같은 발신자로부터 최근에 새 이메일이 들어왔는지 확인
-            recent_same_sender = Email.query.filter(
-                Email.user_id == self.user_id,
-                Email.sender == sender,
-                Email.created_at > recent_threshold,
-                Email.is_unsubscribed == True,
-            ).first()
-
-            # 새로운 이메일이 들어오면 같은 발신자의 구독해지 상태 재설정
-            if recent_same_sender:
-                print(
-                    f"🔄 새로운 이메일 감지 - 발신자 '{sender}'의 구독해지 상태 재설정"
-                )
-                Email.query.filter(
-                    Email.user_id == self.user_id,
-                    Email.sender == sender,
-                    Email.is_unsubscribed == True,
-                ).update({"is_unsubscribed": False})
-                db.session.commit()
-
             # 새 이메일 생성 (기본값 처리)
             email_obj = Email(
                 user_id=self.user_id,
@@ -313,6 +287,7 @@ class GmailService:
                 received_at=self._parse_date(email_data.get("date")),
                 is_read=False,
                 is_archived=False,
+                is_unsubscribed=False,  # 새 이메일은 기본적으로 구독해지되지 않음
             )
 
             db.session.add(email_obj)
