@@ -180,17 +180,33 @@ class PlaywrightUnsubscribeService:
         # 새 컨텍스트 생성 (기존 컨텍스트 재사용)
         if self.context is None:
             try:
+                print(f" 브라우저 컨텍스트 생성 시작...")
+                print(f"🔍 브라우저 상태: {self.browser}")
+                print(f"🔍 브라우저 타입: {type(self.browser)}")
+                print(
+                    f"🔍 브라우저 메서드: {[m for m in dir(self.browser) if not m.startswith('_')]}"
+                )
+
                 self.context = await self.browser.new_context(
                     viewport={"width": 640, "height": 480},
                     user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                     java_script_enabled=True,
                     ignore_https_errors=True,
                 )
+                print(f"🔍 컨텍스트 생성 결과: {self.context}")
+                print(f"🔍 컨텍스트 타입: {type(self.context)}")
+                print(
+                    f"🔍 컨텍스트 메서드: {[m for m in dir(self.context) if not m.startswith('_')]}"
+                )
+
                 if self.context is None:
                     raise Exception("브라우저 컨텍스트 생성 실패")
                 print("📝 새 브라우저 컨텍스트 생성")
             except Exception as e:
                 print(f"❌ 브라우저 컨텍스트 생성 실패: {str(e)}")
+                print(f"🔍 예외 타입: {type(e)}")
+                print(f"🔍 예외 상세: {e}")
+                print(f"🔍 예외 traceback: {e.__traceback__}")
                 raise Exception(f"브라우저 컨텍스트 생성 실패: {str(e)}")
         else:
             self.stats["browser_reuses"] += 1
@@ -200,15 +216,35 @@ class PlaywrightUnsubscribeService:
 
         # 새 페이지 생성
         try:
+            print(f" 페이지 생성 시작...")
+            print(f"🔍 컨텍스트 상태: {self.context}")
+            print(f"🔍 컨텍스트 타입: {type(self.context)}")
+            print(f"🔍 컨텍스트가 None인가?: {self.context is None}")
+
+            if self.context is None:
+                print(f"❌ 컨텍스트가 None입니다!")
+                raise Exception("컨텍스트가 None입니다")
+
+            print(f"🔍 new_page 메서드 호출 전...")
             self.page = await self.context.new_page()
+            print(f"🔍 페이지 생성 결과: {self.page}")
+            print(f" 페이지 타입: {type(self.page)}")
+            print(f"🔍 페이지가 None인가?: {self.page is None}")
+
             if self.page is None:
                 raise Exception("페이지 생성 실패")
 
+            print(f"🔍 페이지 타임아웃 설정 시작...")
             await self.page.set_default_timeout(self.timeouts["page_load"])
             print("✅ 새 페이지 생성 완료")
             return self.page
         except Exception as e:
             print(f"❌ 페이지 생성 실패: {str(e)}")
+            print(f"🔍 예외 타입: {type(e)}")
+            print(f"🔍 예외 상세: {e}")
+            print(f"🔍 컨텍스트 상태: {self.context}")
+            print(f" 페이지 상태: {self.page}")
+            print(f"🔍 예외 traceback: {e.__traceback__}")
             # 페이지 정리 시도
             if self.page:
                 try:
