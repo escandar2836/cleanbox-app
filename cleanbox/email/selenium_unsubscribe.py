@@ -37,12 +37,12 @@ class SeleniumUnsubscribeService:
         self.setup_logging()
         self.driver = None
 
-        # 타임아웃 설정
+        # 타임아웃 설정 (배포 환경에 맞게 조정)
         self.timeouts = {
-            "page_load": 30,
-            "element_wait": 10,
-            "api_call": 15,
-            "retry_delay": 2,
+            "page_load": 60,  # 30초 → 60초
+            "element_wait": 15,  # 10초 → 15초
+            "api_call": 30,  # 15초 → 30초
+            "retry_delay": 3,  # 2초 → 3초
         }
 
     def setup_logging(self):
@@ -74,10 +74,10 @@ class SeleniumUnsubscribeService:
         }
 
     def _setup_chrome_driver(self) -> webdriver.Chrome:
-        """Chrome WebDriver 설정"""
+        """Chrome WebDriver 설정 (메모리 최적화)"""
         chrome_options = Options()
 
-        # Docker 환경을 위한 설정
+        # 메모리 사용량 최적화
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
@@ -86,7 +86,14 @@ class SeleniumUnsubscribeService:
         chrome_options.add_argument("--disable-images")
         chrome_options.add_argument("--disable-javascript")  # 필요시 제거
         chrome_options.add_argument("--headless")
-        chrome_options.add_argument("--window-size=1920,1080")
+        chrome_options.add_argument("--window-size=1280,720")  # 해상도 줄임
+        chrome_options.add_argument("--disable-background-timer-throttling")
+        chrome_options.add_argument("--disable-backgrounding-occluded-windows")
+        chrome_options.add_argument("--disable-renderer-backgrounding")
+        chrome_options.add_argument("--disable-features=TranslateUI")
+        chrome_options.add_argument("--disable-ipc-flooding-protection")
+        chrome_options.add_argument("--memory-pressure-off")
+        chrome_options.add_argument("--max_old_space_size=128")  # 메모리 제한
         chrome_options.add_argument(
             "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         )
@@ -98,11 +105,18 @@ class SeleniumUnsubscribeService:
             # webdriver-manager 사용
             service = Service(ChromeDriverManager().install())
 
-        driver = webdriver.Chrome(service=service, options=chrome_options)
-        driver.set_page_load_timeout(self.timeouts["page_load"])
-        driver.implicitly_wait(self.timeouts["element_wait"])
+        try:
+            driver = webdriver.Chrome(service=service, options=chrome_options)
+            driver.set_page_load_timeout(self.timeouts["page_load"])
+            driver.implicitly_wait(self.timeouts["element_wait"])
 
-        return driver
+            # 메모리 사용량 모니터링
+            self._log_memory_usage("Chrome 드라이버 초기화 후")
+
+            return driver
+        except Exception as e:
+            print(f"❌ Chrome 드라이버 초기화 실패: {str(e)}")
+            raise e
 
     def extract_unsubscribe_links(
         self, email_content: str, email_headers: Dict = None
@@ -201,9 +215,14 @@ class SeleniumUnsubscribeService:
     def process_unsubscribe_with_selenium_ai(
         self, unsubscribe_url: str, user_email: str = None
     ) -> Dict:
-        """Selenium + OpenAI API를 활용한 범용 구독해지 처리"""
+        """Selenium + OpenAI API를 활용한 범용 구독해지 처리 (메모리 최적화)"""
         start_time = time.time()
         self.log_unsubscribe_attempt(unsubscribe_url, user_email, start_time)
+
+        # 초기 메모리 체크
+        self._log_memory_usage("처리 시작")
+        if not self._check_memory_limit():
+            return self._finalize_failure("메모리 부족으로 처리 중단", start_time)
 
         max_retries = 2
         retry_count = 0
@@ -214,6 +233,12 @@ class SeleniumUnsubscribeService:
                     f"🔧 Selenium + AI 구독해지 시도 (시도 {retry_count + 1}/{max_retries + 1}): {unsubscribe_url}"
                 )
 
+                # 메모리 체크
+                if not self._check_memory_limit():
+                    return self._finalize_failure(
+                        "메모리 부족으로 처리 중단", start_time
+                    )
+
                 # Chrome WebDriver 초기화
                 self.driver = self._setup_chrome_driver()
 
@@ -222,31 +247,43 @@ class SeleniumUnsubscribeService:
                 self.driver.get(unsubscribe_url)
                 time.sleep(2)  # 페이지 로딩 대기
 
+                # 메모리 체크
+                if not self._check_memory_limit():
+                    self._cleanup_driver()
+                    return self._finalize_failure(
+                        "메모리 부족으로 처리 중단", start_time
+                    )
+
                 # 2단계: 기본 구독해지 시도
                 print(f"📝 2단계: 기본 구독해지 시도")
                 basic_result = self._try_basic_unsubscribe(user_email)
                 if basic_result["success"]:
+                    self._cleanup_driver()
                     return self._finalize_success(basic_result, start_time)
 
                 # 3단계: 두 번째 페이지 처리
                 print(f"📝 3단계: 두 번째 페이지 처리")
                 second_result = self._try_second_page_unsubscribe(user_email)
                 if second_result["success"]:
+                    self._cleanup_driver()
                     return self._finalize_success(second_result, start_time)
 
                 # 4단계: AI 분석 및 처리
                 print(f"📝 4단계: AI 분석 및 처리")
                 ai_result = self._analyze_page_with_ai(user_email)
                 if ai_result["success"]:
+                    self._cleanup_driver()
                     return self._finalize_success(ai_result, start_time)
 
                 # 모든 시도 실패
+                self._cleanup_driver()
                 return self._finalize_failure(
                     "모든 구독해지 방법이 실패했습니다", start_time
                 )
 
             except Exception as e:
                 print(f"❌ Selenium 처리 중 오류: {str(e)}")
+                self._cleanup_driver()
                 retry_count += 1
                 if retry_count <= max_retries:
                     print(f"⏳ {self.timeouts['retry_delay']}초 후 재시도...")
@@ -255,13 +292,6 @@ class SeleniumUnsubscribeService:
                     return self._finalize_failure(
                         f"Selenium 처리 실패: {str(e)}", start_time
                     )
-
-            finally:
-                if self.driver:
-                    try:
-                        self.driver.quit()
-                    except:
-                        pass
 
         return self._finalize_failure("최대 재시도 횟수 초과", start_time)
 
@@ -634,3 +664,52 @@ class SeleniumUnsubscribeService:
                 else 0
             ),
         }
+
+    def _log_memory_usage(self, context: str = ""):
+        """메모리 사용량 로깅"""
+        try:
+            import psutil
+
+            process = psutil.Process()
+            memory_info = process.memory_info()
+            memory_mb = memory_info.rss / 1024 / 1024
+            print(f"📊 메모리 사용량 ({context}): {memory_mb:.1f} MB")
+            self.logger.info(f"메모리 사용량 ({context}): {memory_mb:.1f} MB")
+        except ImportError:
+            print(f"📊 메모리 모니터링 불가 ({context})")
+        except Exception as e:
+            print(f"⚠️ 메모리 모니터링 오류: {str(e)}")
+
+    def _cleanup_driver(self):
+        """드라이버 정리 및 메모리 해제"""
+        if self.driver:
+            try:
+                self.driver.quit()
+                print("🧹 Chrome 드라이버 정리 완료")
+            except Exception as e:
+                print(f"⚠️ 드라이버 정리 중 오류: {str(e)}")
+            finally:
+                self.driver = None
+
+        # 가비지 컬렉션 강제 실행
+        import gc
+
+        gc.collect()
+        self._log_memory_usage("드라이버 정리 후")
+
+    def _check_memory_limit(self) -> bool:
+        """메모리 제한 체크"""
+        try:
+            import psutil
+
+            process = psutil.Process()
+            memory_info = process.memory_info()
+            memory_mb = memory_info.rss / 1024 / 1024
+
+            # 500MB 제한 (Render 무료 플랜 기준)
+            if memory_mb > 500:
+                print(f"⚠️ 메모리 사용량 초과: {memory_mb:.1f} MB")
+                return False
+            return True
+        except:
+            return True  # 모니터링 불가시 계속 진행
