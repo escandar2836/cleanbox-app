@@ -1,7 +1,8 @@
 import requests
 import time
 
-URL = "https://cleanbox-app.onrender.com"
+URL = "https://cleanbox-app-1.onrender.com"
+
 
 def job():
     try:
@@ -9,6 +10,7 @@ def job():
         print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Status: {resp.status_code}")
     except Exception as e:
         print(f"Error calling {URL}: {e}")
+
 
 print("Starting loop: calling every 10 minutes.")
 while True:

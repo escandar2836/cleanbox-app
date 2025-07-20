@@ -1788,7 +1788,7 @@ def debug_webhook_setup():
             "environment": {
                 "project_id": os.environ.get("GOOGLE_CLOUD_PROJECT"),
                 "topic_name": os.environ.get("GMAIL_WEBHOOK_TOPIC"),
-                "webhook_url": "https://cleanbox-app.onrender.com/webhook/gmail",
+                "webhook_url": "https://cleanbox-app-1.onrender.com/webhook/gmail",
             },
             "accounts": [],
         }
