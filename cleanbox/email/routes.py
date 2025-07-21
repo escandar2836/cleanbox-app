@@ -5,18 +5,48 @@ import logging
 from datetime import datetime, timedelta
 
 # Third-party imports
-from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for
+from flask import (
+    Blueprint,
+    render_template,
+    request,
+    jsonify,
+    flash,
+    redirect,
+    url_for,
+    session,
+)
 from flask_login import login_required, current_user
+from flask_apscheduler import APScheduler
 
 # Local imports
 from ..models import Email, Category, UserAccount, WebhookStatus, db
 from .. import cache
 from .gmail_service import GmailService
 from .ai_classifier import AIClassifier
+from ..auth.routes import (
+    check_and_refresh_token,
+    get_current_account_id,
+    grant_service_account_pubsub_permissions,
+)
 
 logger = logging.getLogger(__name__)
 
 email_bp = Blueprint("email", __name__)
+
+
+# Lazy imports to avoid circular import issues
+def get_scheduler():
+    """Get scheduler instance lazily to avoid circular imports"""
+    from app import scheduler
+
+    return scheduler
+
+
+def get_scheduled_webhook_monitoring():
+    """Get scheduled webhook monitoring function lazily to avoid circular imports"""
+    from app import scheduled_webhook_monitoring
+
+    return scheduled_webhook_monitoring
 
 
 @email_bp.route("/")
@@ -67,8 +97,6 @@ def list_emails():
         # 토큰 상태 확인 및 갱신 시도
         for account in accounts:
             try:
-                from ..auth.routes import check_and_refresh_token
-
                 token_valid = check_and_refresh_token(current_user.id, account.id)
 
                 if not token_valid:
@@ -490,8 +518,6 @@ def analyze_email(email_id):
 def email_statistics():
     """이메일 통계 (모든 계정 합산)"""
     try:
-        from ..auth.routes import get_current_account_id
-
         # 모든 활성 계정 가져오기
         accounts = UserAccount.query.filter_by(
             user_id=current_user.id, is_active=True
@@ -1279,8 +1305,6 @@ def unsubscribe_email(email_id):
 @login_required
 def clear_bulk_result():
     """대량 처리 결과 세션 클리어"""
-    from flask import session
-
     session.pop("bulk_unsubscribe_result", None)
     return jsonify({"success": True})
 
@@ -1437,7 +1461,6 @@ def setup_gmail_webhook_with_permissions(
 ) -> dict:
     """Gmail 웹훅을 설정합니다. (권한 확인 포함)"""
     try:
-        from ..auth.routes import grant_service_account_pubsub_permissions
         import os
 
         # 1단계: 서비스 계정 권한 확인 및 부여
@@ -2006,11 +2029,8 @@ def process_missed_emails():
 def scheduler_status():
     """스케줄러 상태 확인"""
     try:
-        from flask_apscheduler import APScheduler
-        from app import scheduler
-
         # 스케줄러 작업 상태 확인
-        jobs = scheduler.get_jobs()
+        jobs = get_scheduler().get_jobs()
         webhook_job = None
 
         for job in jobs:
@@ -2020,7 +2040,7 @@ def scheduler_status():
 
         if webhook_job:
             status = {
-                "scheduler_running": scheduler.running,
+                "scheduler_running": get_scheduler().running,
                 "webhook_job_active": webhook_job.next_run_time is not None,
                 "next_run_time": (
                     webhook_job.next_run_time.isoformat()
@@ -2031,7 +2051,7 @@ def scheduler_status():
             }
         else:
             status = {
-                "scheduler_running": scheduler.running,
+                "scheduler_running": get_scheduler().running,
                 "webhook_job_active": False,
                 "next_run_time": None,
                 "job_interval": "Not found",
@@ -2050,12 +2070,10 @@ def scheduler_status():
 def trigger_scheduled_monitoring():
     """스케줄된 웹훅 모니터링 수동 트리거"""
     try:
-        from app import scheduled_webhook_monitoring
-
         print("🔄 수동 스케줄된 웹훅 모니터링 트리거...")
 
         # 스케줄된 함수 직접 호출
-        scheduled_webhook_monitoring()
+        get_scheduled_webhook_monitoring()
 
         return jsonify(
             {"success": True, "message": "스케줄된 웹훅 모니터링이 실행되었습니다."}

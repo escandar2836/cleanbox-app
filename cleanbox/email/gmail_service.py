@@ -11,7 +11,11 @@ from googleapiclient.errors import HttpError
 
 # Local imports
 from ..models import Email, Category, UserAccount, db
-from ..auth.routes import get_user_credentials, get_current_account_id
+from ..auth.routes import (
+    get_user_credentials,
+    get_current_account_id,
+    refresh_user_token,
+)
 from .advanced_unsubscribe import AdvancedUnsubscribeService
 
 
@@ -60,8 +64,6 @@ class GmailService:
                 credentials.refresh(Request())
 
                 # 갱신된 토큰 저장
-                from ..auth.routes import refresh_user_token
-
                 refresh_success = refresh_user_token(self.user_id, self.account_id)
 
                 if not refresh_success:
