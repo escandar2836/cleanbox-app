@@ -3072,6 +3072,45 @@ Response format:
             await page.close()
             print("[INFO] Page closed.")
 
+    async def extract_unsubscribe_links_with_ai_fallback(
+        self, email_content: str, email_headers: Dict = None, user_email: str = None
+    ) -> List[str]:
+        """Extract unsubscribe links from email, fallback to AI-based context analysis if none found (async)"""
+        # 1. 기존 동기 방식으로 먼저 시도
+        links = self.extract_unsubscribe_links(email_content, email_headers)
+        if links:
+            return links
+
+        print(
+            "🤖 No unsubscribe links found by keyword. Trying AI-based context analysis..."
+        )
+        # 2. Playwright 브라우저/컨텍스트 초기화
+        await self.initialize_browser()
+        temp_page = await self._create_temp_page_from_response(email_content)
+        if not temp_page:
+            print("❌ Failed to create temp page for AI analysis.")
+            return []
+        try:
+            ai_result = await self._analyze_page_with_ai(temp_page, user_email)
+            # AI가 추천한 링크 추출
+            # (action이 link_click이고, target이 있으면 해당 텍스트와 일치하는 링크 href 반환)
+            if ai_result.get("success") and ai_result.get("message", "").startswith(
+                "Unsubscribe successful"
+            ):
+                # 실제로 클릭된 링크를 추적하려면, _execute_ai_instructions에서 클릭한 element의 href를 반환하도록 개선 필요
+                # 여기서는 임시로, temp_page의 모든 <a> 중 target 텍스트와 일치하는 href를 반환
+                target = ai_result.get("target")
+                if target:
+                    from bs4 import BeautifulSoup
+
+                    soup = BeautifulSoup(email_content, "html.parser")
+                    for link in soup.find_all("a", href=True):
+                        if target.lower() in link.get_text().lower():
+                            return [link["href"]]
+            return []
+        finally:
+            await temp_page.close()
+
 
 # Synchronous wrapper function (for use in Flask application)
 def process_unsubscribe_sync(unsubscribe_url: str, user_email: str = None) -> Dict:

@@ -183,24 +183,24 @@ class AdvancedUnsubscribeService:
             print(f"⚠️ Failed to find unsubscribe link: {str(e)}")
             return None
 
-    def process_unsubscribe_advanced(
+    async def process_unsubscribe_advanced(
         self, email_content: str, email_headers: Dict = None, user_email: str = None
     ) -> Dict:
-        """Advanced unsubscribe processing (using Playwright service)"""
+        """Advanced unsubscribe processing (using Playwright service, with AI fallback)"""
         try:
-            print(f"🔧 Starting advanced unsubscribe processing")
+            print(f"🔧 Starting advanced unsubscribe processing (async, AI fallback)")
 
-            # Extract unsubscribe links
-            unsubscribe_links = self.extract_unsubscribe_links(
-                email_content, email_headers
+            # Extract unsubscribe links (AI fallback 포함)
+            unsubscribe_links = await self.playwright_service.extract_unsubscribe_links_with_ai_fallback(
+                email_content, email_headers, user_email
             )
 
             if not unsubscribe_links:
                 return {
                     "success": False,
-                    "message": "No unsubscribe link found.",
+                    "message": "No unsubscribe link found (even with AI).",
                     "error_type": "no_unsubscribe_link",
-                    "error_details": "Could not find unsubscribe link in email.",
+                    "error_details": "Could not find unsubscribe link in email (AI fallback also failed).",
                 }
 
             print(f"📝 Found unsubscribe links: {unsubscribe_links}")

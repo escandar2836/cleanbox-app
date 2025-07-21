@@ -440,8 +440,8 @@ class GmailService:
         except HttpError as error:
             raise Exception(f"Failed to delete email: {error}")
 
-    def process_unsubscribe(self, email_obj) -> Dict:
-        """Process advanced unsubscribe (improved version)"""
+    async def process_unsubscribe(self, email_obj) -> Dict:
+        """Process advanced unsubscribe (improved version, async)"""
         print(f"🔍 GmailService.process_unsubscribe started - Email ID: {email_obj.id}")
         print(
             f"📝 Email info - Subject: {email_obj.subject}, Sender: {email_obj.sender}"
@@ -454,7 +454,7 @@ class GmailService:
 
             # Use advanced unsubscribe service (pass user email)
             print(f"📝 AdvancedUnsubscribeService call started")
-            result = self.advanced_unsubscribe.process_unsubscribe_advanced(
+            result = await self.advanced_unsubscribe.process_unsubscribe_advanced(
                 email_obj.content, getattr(email_obj, "headers", {}), user_email
             )
             print(f"📝 AdvancedUnsubscribeService result: {result}")
