@@ -471,35 +471,20 @@ function bulkUnsubscribe() {
     if (emailIds.length === 0) return;
     
     if (confirm(`${emailIds.length}개의 이메일에서 구독 해지를 시도하시겠습니까?`)) {
-        // 구독 해지는 처리 시간이 길어서 modal을 먼저 표시
         showBulkProcessingModal('구독 해지', emailIds.length);
-        
-        // 약간의 지연 후 bulk action 실행 (modal이 완전히 표시되도록)
-        setTimeout(() => {
-            performBulkAction('unsubscribe', emailIds);
-        }, 100);
+        performBulkAction('unsubscribe', emailIds);
     }
 }
 
 // Bulk 처리 모달 표시
 function showBulkProcessingModal(action, totalCount) {
-    // Flash 메시지 숨기기
-    hideFlashMessages();
-    
     const modal = new bootstrap.Modal(document.getElementById('bulkProcessingModal'));
     const title = document.getElementById('bulkActionTitle');
     const message = document.getElementById('bulkProcessingMessage');
     const totalCountElement = document.getElementById('totalEmailCount');
     
     title.textContent = `${action} 중`;
-    
-    // 구독 해지인 경우 더 자세한 메시지 표시
-    if (action === '구독 해지') {
-        message.textContent = `${totalCount}개의 이메일에서 구독 해지 링크를 찾아 처리하고 있습니다...`;
-    } else {
-        message.textContent = `${totalCount}개의 이메일을 ${action}하고 있습니다...`;
-    }
-    
+    message.textContent = `${totalCount}개의 이메일을 ${action}하고 있습니다...`;
     totalCountElement.textContent = totalCount;
     
     modal.show();
@@ -540,7 +525,7 @@ function performBulkAction(action, emailIds) {
                 // 3초 후 자동 새로고침
                 setTimeout(() => {
                     window.location.reload();
-                }, 3000);
+                }, 5000);
             }, 1000);
         }, 500);
     })
@@ -990,47 +975,6 @@ function handleUnsubscribeError(error, modalElement) {
     `;
 }
 
-// 대량 구독 해지 함수
-function bulkUnsubscribe() {
-    const emailIds = getSelectedEmailIds();
-    console.log('🔍 [list.html] bulkUnsubscribe() 호출됨');
-    console.log('📧 선택된 이메일 ID들:', emailIds);
-    console.log('📊 선택된 이메일 개수:', emailIds.length);
-    
-    if (emailIds.length === 0) {
-        console.log('⚠️ 선택된 이메일이 없습니다');
-        return;
-    }
-    
-    if (confirm(`${emailIds.length}개의 이메일 구독을 해지하시겠습니까?\n\nAI가 각 이메일에서 구독 해지 링크를 찾아 자동으로 처리합니다.`)) {
-        console.log('✅ 사용자 확인 완료, 폼 생성 시작');
-        
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = '{{ url_for("email.bulk_actions") }}';
-        
-        const actionInput = document.createElement('input');
-        actionInput.type = 'hidden';
-        actionInput.name = 'action';
-        actionInput.value = 'unsubscribe';
-        form.appendChild(actionInput);
-        
-        emailIds.forEach((id, index) => {
-            const input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = 'email_ids';
-            input.value = id;
-            form.appendChild(input);
-            console.log(`📝 폼에 이메일 ID 추가 [${index + 1}]:`, id);
-        });
-        
-        console.log('🚀 폼 제출:', form.action);
-        document.body.appendChild(form);
-        form.submit();
-    } else {
-        console.log('❌ 사용자가 취소했습니다');
-    }
-}
 
 // 웹훅 재설정 함수
 function setupWebhook() {
