@@ -3187,8 +3187,18 @@ Response format:
 
 # Synchronous wrapper function (for use in Flask application)
 def process_unsubscribe_sync(unsubscribe_url: str, user_email: str = None) -> Dict:
-    """Synchronous unsubscribe processing wrapper"""
+    """Synchronous unsubscribe processing wrapper (Flask-safe)"""
     service = PlaywrightUnsubscribeService()
-    return asyncio.run(
-        service.process_unsubscribe_with_playwright_ai(unsubscribe_url, user_email)
-    )
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        raise RuntimeError(
+            "process_unsubscribe_sync는 이미 실행 중인 이벤트 루프 내에서 호출할 수 없습니다. Flask 등 동기 환경에서만 사용하세요. 비동기 환경에서는 직접 await service.process_unsubscribe_with_playwright_ai(...)를 호출하세요."
+        )
+    else:
+        return asyncio.run(
+            service.process_unsubscribe_with_playwright_ai(unsubscribe_url, user_email)
+        )
