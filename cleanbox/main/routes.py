@@ -11,8 +11,8 @@ main_bp = Blueprint("main", __name__)
 @main_bp.route("/dashboard")
 @login_required
 def dashboard():
-    """메인 대시보드"""
-    # 사용자의 활성 계정 확인 (최신 데이터)
+    """Main dashboard"""
+    # Check user's active accounts (latest data)
     accounts = UserAccount.query.filter_by(
         user_id=current_user.id, is_active=True
     ).all()
@@ -23,13 +23,13 @@ def dashboard():
                 "main/dashboard.html", user=current_user, accounts=[], categories=[]
             )
         )
-        # 캐시 무효화
+        # Invalidate cache
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
         return response
 
-    # 사용자의 활성 카테고리 목록 (최신 데이터)
+    # User's active category list (latest data)
     categories = Category.query.filter_by(user_id=current_user.id, is_active=True).all()
 
     response = make_response(
@@ -41,7 +41,7 @@ def dashboard():
         )
     )
 
-    # 캐시 무효화
+    # Invalidate cache
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"

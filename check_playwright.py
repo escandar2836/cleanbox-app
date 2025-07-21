@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Playwright 브라우저 설치 상태 확인 스크립트
+Playwright browser installation status check script
 """
 
 import os
@@ -9,60 +9,60 @@ import sys
 
 
 def check_playwright_installation():
-    """Playwright 설치 상태 확인"""
-    print("🔍 Playwright 설치 상태 확인")
+    """Check Playwright installation status"""
+    print("🔍 Checking Playwright installation status")
 
     try:
-        # Playwright 버전 확인
+        # Check Playwright version
         result = subprocess.run(
             ["playwright", "--version"], capture_output=True, text=True
         )
         if result.returncode == 0:
-            print(f"✅ Playwright 버전: {result.stdout.strip()}")
+            print(f"✅ Playwright version: {result.stdout.strip()}")
         else:
-            print(f"❌ Playwright 설치 안됨: {result.stderr}")
+            print(f"❌ Playwright installation failed: {result.stderr}")
             return False
     except FileNotFoundError:
-        print("❌ Playwright 명령어를 찾을 수 없습니다")
+        print("❌ Playwright command not found")
         return False
 
     return True
 
 
 def check_browser_installation():
-    """브라우저 설치 상태 확인"""
-    print("\n🔍 브라우저 설치 상태 확인")
+    """Check browser installation status"""
+    print("\n🔍 Checking browser installation status")
 
     try:
-        # 브라우저 설치 확인
+        # Check browser installation
         result = subprocess.run(
             ["playwright", "install", "chromium", "--dry-run"],
             capture_output=True,
             text=True,
         )
         if result.returncode == 0:
-            print("✅ Chromium 브라우저 설치됨")
+            print("✅ Chromium browser installed")
         else:
-            print(f"❌ Chromium 브라우저 설치 안됨: {result.stderr}")
+            print(f"❌ Chromium browser installation failed: {result.stderr}")
             return False
     except Exception as e:
-        print(f"❌ 브라우저 확인 중 오류: {str(e)}")
+        print(f"❌ Error while checking browser: {str(e)}")
         return False
 
     return True
 
 
 def check_browser_path():
-    """브라우저 경로 확인"""
-    print("\n🔍 브라우저 경로 확인")
+    """Check browser path"""
+    print("\n🔍 Checking browser path")
 
-    # 환경 변수 확인
+    # Check environment variable
     playwright_browsers_path = os.environ.get(
         "PLAYWRIGHT_BROWSERS_PATH", "/ms-playwright"
     )
     print(f"📝 PLAYWRIGHT_BROWSERS_PATH: {playwright_browsers_path}")
 
-    # 브라우저 실행 파일 경로 확인 (와일드카드 패턴 포함)
+    # Check browser executable path (including wildcard pattern)
     import glob
 
     chrome_paths = [
@@ -79,79 +79,79 @@ def check_browser_path():
 
     for path_pattern in chrome_paths:
         if "*" in path_pattern:
-            # 와일드카드 패턴 처리
+            # Handle wildcard pattern
             matches = glob.glob(path_pattern)
             if matches:
-                print(f"✅ Chromium 실행 파일 발견: {matches[0]}")
+                print(f"✅ Chromium executable found: {matches[0]}")
                 return True
         elif os.path.exists(path_pattern):
-            print(f"✅ Chromium 실행 파일 발견: {path_pattern}")
+            print(f"✅ Chromium executable found: {path_pattern}")
             return True
 
-    print("❌ Chromium 실행 파일을 찾을 수 없습니다")
+    print("❌ Chromium executable not found")
     return False
 
 
 def install_browsers():
-    """브라우저 설치"""
-    print("\n🔧 브라우저 설치 시도")
+    """Install browsers"""
+    print("\n🔧 Trying to install browsers")
 
     try:
-        # Chromium 설치
+        # Install Chromium
         result = subprocess.run(
             ["playwright", "install", "chromium"], capture_output=True, text=True
         )
         if result.returncode == 0:
-            print("✅ Chromium 설치 성공")
+            print("✅ Chromium installed successfully")
         else:
-            print(f"❌ Chromium 설치 실패: {result.stderr}")
+            print(f"❌ Chromium installation failed: {result.stderr}")
             return False
 
-        # 의존성 설치
+        # Install dependencies
         result = subprocess.run(
             ["playwright", "install-deps", "chromium"], capture_output=True, text=True
         )
         if result.returncode == 0:
-            print("✅ 브라우저 의존성 설치 성공")
+            print("✅ Browser dependencies installed successfully")
         else:
-            print(f"❌ 브라우저 의존성 설치 실패: {result.stderr}")
+            print(f"❌ Browser dependencies installation failed: {result.stderr}")
             return False
 
     except Exception as e:
-        print(f"❌ 브라우저 설치 중 오류: {str(e)}")
+        print(f"❌ Error during browser installation: {str(e)}")
         return False
 
     return True
 
 
 def main():
-    """메인 함수"""
-    print("🚀 Playwright 브라우저 상태 확인")
+    """Main function"""
+    print("🚀 Playwright browser status check start")
     print("=" * 50)
 
-    # 1. Playwright 설치 확인
+    # 1. Check Playwright installation
     playwright_ok = check_playwright_installation()
 
-    # 2. 브라우저 설치 확인
+    # 2. Check browser installation
     browser_ok = check_browser_installation()
 
-    # 3. 브라우저 경로 확인
+    # 3. Check browser path
     path_ok = check_browser_path()
 
-    print("\n📊 결과 요약:")
-    print(f"Playwright 설치: {'✅' if playwright_ok else '❌'}")
-    print(f"브라우저 설치: {'✅' if browser_ok else '❌'}")
-    print(f"브라우저 경로: {'✅' if path_ok else '❌'}")
+    print("\n📊 Summary:")
+    print(f"Playwright installation: {'✅' if playwright_ok else '❌'}")
+    print(f"Browser installation: {'✅' if browser_ok else '❌'}")
+    print(f"Browser path: {'✅' if path_ok else '❌'}")
 
     if not (playwright_ok and browser_ok and path_ok):
-        print("\n🔧 문제 해결 시도...")
+        print("\n🔧 Trying to fix issues...")
         if install_browsers():
-            print("✅ 브라우저 설치 완료")
+            print("✅ Browser installation complete")
         else:
-            print("❌ 브라우저 설치 실패")
+            print("❌ Browser installation failed")
             sys.exit(1)
     else:
-        print("\n✅ 모든 검사 통과!")
+        print("\n✅ All checks passed!")
 
 
 if __name__ == "__main__":

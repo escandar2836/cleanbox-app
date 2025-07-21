@@ -1,106 +1,106 @@
-# CleanBox: AI 이메일 분류 및 구독해지 자동화
+# CleanBox: AI Email Classification & Automated Unsubscription
 
-CleanBox는 Gmail과 연동하여 AI가 이메일을 자동 분류·요약하고, 구독해지까지 지원하는 통합 이메일 관리 서비스입니다.
+CleanBox is an integrated email management service that connects with Gmail and uses AI to automatically classify, summarize, and even unsubscribe from emails.
 
 ---
 
-## 🏗️ 시스템 아키텍처
+## 🏗️ System Architecture
 
 ```mermaid
 flowchart TD
-    subgraph "사용자"
-        A1["Google 로그인"]
-        A2["카테고리 추가/관리"]
-        A3["이메일 동기화"]
-        A4["카테고리별 이메일/요약 확인"]
-        A5["이메일 선택/삭제/구독해지"]
-        A6["이메일 상세 보기"]
+    subgraph "User"
+        A1["Google Login"]
+        A2["Add/Manage Categories"]
+        A3["Email Synchronization"]
+        A4["View Emails by Category/Summary"]
+        A5["Select/Delete/Unsubscribe Emails"]
+        A6["View Email Details"]
     end
-    subgraph "CleanBox 백엔드"
-        B1["OAuth 인증 및 계정 관리"]
-        B2["카테고리 DB 관리"]
-        B3["Gmail API 연동"]
-        B4["AI 이메일 분류/요약"]
-        B5["이메일 DB 저장"]
-        B6["Gmail 아카이브"]
-        B7["구독해지 자동화 (Playwright+AI)"]
+    subgraph "CleanBox Backend"
+        B1["OAuth Authentication & Account Management"]
+        B2["Category DB Management"]
+        B3["Gmail API Integration"]
+        B4["AI Email Classification/Summarization"]
+        B5["Email DB Storage"]
+        B6["Gmail Archive"]
+        B7["Automated Unsubscription (Playwright+AI)"]
     end
     A1-->|"OAuth"|B1
-    A2-->|"카테고리 추가/수정"|B2
-    A3-->|"동기화 요청"|B3
-    B3-->|"신규 이메일"|B5
-    B5-->|"분류/요약"|B4
-    B4-->|"카테고리 지정/요약"|B5
-    B5-->|"DB 저장"|B2
-    B5-->|"아카이브"|B6
-    A4-->|"카테고리별 목록"|B2
-    B2-->|"이메일 목록"|A4
-    A5-->|"구독해지 요청"|B7
+    A2-->|"Add/Edit Category"|B2
+    A3-->|"Sync Request"|B3
+    B3-->|"New Emails"|B5
+    B5-->|"Classify/Summarize"|B4
+    B4-->|"Assign Category/Summary"|B5
+    B5-->|"DB Storage"|B2
+    B5-->|"Archive"|B6
+    A4-->|"Category List"|B2
+    B2-->|"Email List"|A4
+    A5-->|"Unsubscribe Request"|B7
     B7-->|"Playwright+AI"|B3
-    A6-->|"상세 보기"|B5
-    B5-->|"본문/요약"|A6
+    A6-->|"View Details"|B5
+    B5-->|"Content/Summary"|A6
 ```
 
 ---
 
-## 주요 기능
+## Key Features
 
-### 1. Google OAuth 로그인 및 멀티 계정 지원
-- Google OAuth로 안전하게 로그인
-- 여러 Gmail 계정 연동 및 전환 가능
+### 1. Google OAuth Login & Multi-Account Support
+- Secure login with Google OAuth
+- Connect and switch between multiple Gmail accounts
 
-### 2. 카테고리 관리
-- 사용자 정의 카테고리(이름/설명) 추가·수정·삭제
-- 카테고리별로 이메일 자동 분류
+### 2. Category Management
+- Add, edit, and delete user-defined categories (name/description)
+- Automatically classify emails by category
 
-### 3. AI 기반 이메일 분류 및 요약
-- OpenAI API를 활용해 이메일 본문/제목/발신자 기반으로 카테고리 분류
-- 각 이메일에 대해 AI가 요약 생성
+### 3. AI-based Email Classification & Summarization
+- Uses OpenAI API to classify emails by content/subject/sender
+- AI generates summaries for each email
 
-### 4. 이메일 동기화 및 아카이브
-- Gmail API로 신규 이메일 실시간 동기화 (웹훅/수동 동기화)
-- 분류/요약 후 Gmail에서 자동 아카이브 처리
+### 4. Email Synchronization & Archiving
+- Real-time sync of new emails via Gmail API (webhook/manual)
+- Archive emails in Gmail after classification/summarization
 
-### 5. 카테고리별 이메일 목록/요약/상세
-- 카테고리 클릭 시 해당 이메일 목록 및 AI 요약 제공
-- 개별 이메일 클릭 시 원본 본문/요약/메타데이터 확인
+### 5. Category-based Email List/Summary/Details
+- Click a category to view email list and AI summary
+- Click an email to view full content/summary/metadata
 
-### 6. 대량 작업 및 구독해지 자동화
-- 여러 이메일 선택 후 삭제/구독해지 일괄 처리
-- 구독해지: 이메일 내 "unsubscribe" 링크 탐색 → Playwright+AI로 실제 구독해지 페이지 자동 방문 및 폼 처리
+### 6. Bulk Actions & Automated Unsubscription
+- Select multiple emails to delete or unsubscribe in bulk
+- Unsubscribe: Automatically visits the "unsubscribe" link in the email using Playwright+AI
 
 ---
 
-## 기술 스택
+## Tech Stack
 - **Backend**: Python, Flask, SQLAlchemy
 - **AI**: OpenAI API (GPT)
 - **Email**: Google Gmail API, Webhook
 - **Browser Automation**: Playwright (headless, AI agent)
 - **DB**: PostgreSQL
 - **Frontend**: Bootstrap, Jinja2
-- **배포**: Docker, Render
+- **Deployment**: Docker, Render
 
 ---
 
-## 설치 및 실행
+## Installation & Usage
 
-1. 저장소 클론
+1. Clone the repository
 ```bash
 git clone https://github.com/your-username/cleanbox-app.git
 cd cleanbox-app
 ```
-2. 가상환경 및 의존성 설치
+2. Create virtual environment & install dependencies
 ```bash
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 ```
-3. 환경변수 설정
+3. Set environment variables
 ```bash
 cp env.example .env
-# .env 파일 편집 (Google, OpenAI, DB 등)
+# Edit the .env file (Google, OpenAI, DB, etc.)
 ```
-4. 실행
+4. Run the app
 ```bash
 python app.py
 ```
@@ -113,7 +113,7 @@ docker run -p 8000:8000 cleanbox-app
 
 ---
 
-## 환경 변수 예시
+## Example Environment Variables
 ```env
 GOOGLE_CLIENT_ID=...
 GOOGLE_CLIENT_SECRET=...
@@ -125,18 +125,18 @@ CLEANBOX_ENCRYPTION_KEY=...
 
 ---
 
-## 테스트
+## Testing
 ```bash
 pytest
 ```
 
 ---
 
-## 라이선스
+## License
 MIT License
 
 ---
 
-## 문의/기여
-- 이슈/PR 환영
-- 궁금한 점은 GitHub Issue로 남겨주세요.
+## Issues/Contact
+- Issues/PRs are welcome
+- For questions, please leave a GitHub Issue.

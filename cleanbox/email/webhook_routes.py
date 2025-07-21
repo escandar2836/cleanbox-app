@@ -21,53 +21,53 @@ webhook_bp = Blueprint("webhook", __name__)
 
 @webhook_bp.route("/gmail", methods=["POST"])
 def gmail_webhook():
-    """Gmail 웹훅 처리"""
+    """Gmail webhook handler"""
     try:
-        logger.info("웹훅 요청 수신")
+        logger.info("Webhook request received")
 
-        # 웹훅 검증
+        # Webhook verification
         if not _verify_webhook(request):
-            logger.warning("웹훅 검증 실패")
-            return jsonify({"status": "error", "message": "인증 실패"}), 401
+            logger.warning("Webhook verification failed")
+            return jsonify({"status": "error", "message": "Authentication failed"}), 401
 
-        # 웹훅 데이터 파싱
+        # Parse webhook data
         data = request.get_json()
 
         if not data or "message" not in data:
-            logger.warning("잘못된 웹훅 데이터 구조")
-            return jsonify({"status": "error", "message": "잘못된 웹훅 데이터"}), 400
+            logger.warning("Invalid webhook data structure")
+            return jsonify({"status": "error", "message": "Invalid webhook data"}), 400
 
-        # 메시지 디코딩
+        # Decode message
         message_data = base64.b64decode(data["message"]["data"]).decode("utf-8")
         message = json.loads(message_data)
 
-        # 이메일 주소 추출
+        # Extract email address
         email_address = message.get("emailAddress")
         history_id = message.get("historyId")
 
-        logger.info(f"웹훅 처리: {email_address}, history_id: {history_id}")
+        logger.info(f"Webhook processing: {email_address}, history_id: {history_id}")
 
         if not email_address or not history_id:
-            logger.warning("이메일 정보 누락")
-            return jsonify({"status": "error", "message": "이메일 정보 없음"}), 400
+            logger.warning("Missing email information")
+            return jsonify({"status": "error", "message": "No email information"}), 400
 
-        # 해당 계정 찾기
+        # Find account
         account = UserAccount.query.filter_by(account_email=email_address).first()
         if not account:
-            logger.warning(f"계정을 찾을 수 없음: {email_address}")
-            return jsonify({"status": "error", "message": "계정을 찾을 수 없음"}), 404
+            logger.warning(f"Account not found: {email_address}")
+            return jsonify({"status": "error", "message": "Account not found"}), 404
 
-        # 새 이메일 처리
+        # Process new emails
         result = process_new_emails_for_account(account)
 
-        # 새 이메일이 처리되었으면 캐시 무효화 및 알림
+        # If new emails processed, invalidate cache and notify
         if result and result.get("processed_count", 0) > 0:
-            # 캐시 무효화 (실시간 알림을 위해)
+            # Invalidate cache (for real-time notification)
             cache_key = f"max_email_id_{account.user_id}"
             cache.delete(cache_key)
-            logger.info(f"캐시 무효화: {cache_key}")
+            logger.info(f"Cache invalidated: {cache_key}")
 
-            # 브라우저 알림을 위한 간단한 알림 데이터
+            # Simple notification data for browser notification
             notification_data = {
                 "type": "new_emails",
                 "user_id": account.user_id,
@@ -76,14 +76,14 @@ def gmail_webhook():
                 "archived_count": result["archived_count"],
                 "account_email": account.account_email,
                 "timestamp": datetime.utcnow().isoformat(),
-                "message": f"{result['processed_count']}개의 새로운 이메일이 처리되었습니다.",
+                "message": f"{result['processed_count']} new emails have been processed.",
             }
 
             logger.info(
-                f"새 이메일 처리 완료: {account.user_id} - {result['processed_count']}개 이메일"
+                f"New email processing complete: {account.user_id} - {result['processed_count']} emails"
             )
 
-        # 웹훅 수신 시간 업데이트
+        # Update webhook received time
         try:
             webhook_status = WebhookStatus.query.filter_by(
                 user_id=account.user_id, account_id=account.id, is_active=True
@@ -92,23 +92,23 @@ def gmail_webhook():
             if webhook_status:
                 webhook_status.last_webhook_received = datetime.utcnow()
                 db.session.commit()
-                logger.info(f"웹훅 수신 시간 업데이트: {email_address}")
+                logger.info(f"Webhook received time updated: {email_address}")
         except Exception as e:
-            logger.error(f"웹훅 수신 시간 업데이트 실패: {e}")
+            logger.error(f"Failed to update webhook received time: {e}")
 
-        logger.info(f"웹훅 처리 완료: {email_address}")
+        logger.info(f"Webhook processing complete: {email_address}")
         return jsonify({"status": "success"})
 
     except Exception as e:
-        logger.error(f"웹훅 처리 중 오류: {e}")
+        logger.error(f"Error during webhook processing: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
 @webhook_bp.route("/gmail/test", methods=["GET"])
 def gmail_webhook_test():
-    """Gmail 웹훅 테스트 엔드포인트"""
+    """Gmail webhook test endpoint"""
     try:
-        # 연결된 계정 정보도 함께 반환
+        # Return connected account info as well
         accounts = UserAccount.query.filter_by(is_active=True).all()
         account_info = [
             {
@@ -123,7 +123,7 @@ def gmail_webhook_test():
         return jsonify(
             {
                 "status": "success",
-                "message": "웹훅 엔드포인트가 정상 작동합니다",
+                "message": "Webhook endpoint is working properly",
                 "timestamp": datetime.utcnow().isoformat(),
                 "connected_accounts": account_info,
                 "webhook_url": "/webhook/gmail",
@@ -134,65 +134,67 @@ def gmail_webhook_test():
 
 
 def _verify_webhook(request):
-    """웹훅 검증 (완화된 버전)"""
+    """Webhook verification (relaxed version)"""
     try:
-        # Content-Type 확인
+        # Check Content-Type
         if request.content_type != "application/json":
-            logger.warning("잘못된 Content-Type")
+            logger.warning("Invalid Content-Type")
             return False
 
-        # User-Agent 확인 (Google Cloud Pub/Sub) - 완화된 검증
+        # Check User-Agent (Google Cloud Pub/Sub) - relaxed verification
         user_agent = request.headers.get("User-Agent", "")
-        # Google Cloud Pub/Sub의 실제 User-Agent는 다양할 수 있으므로 완화
+        # Google Cloud Pub/Sub's actual User-Agent can vary, so relaxed
         if not user_agent or "Google" not in user_agent:
-            logger.warning(f"의심스러운 User-Agent: {user_agent}")
-            # 개발 환경에서는 더 관대하게 처리
+            logger.warning(f"Suspicious User-Agent: {user_agent}")
+            # In development environment, skip User-Agent check
             if os.environ.get("FLASK_ENV") == "development":
-                logger.info("개발 환경에서 User-Agent 검증 건너뜀")
+                logger.info(
+                    "Skipping User-Agent verification in development environment"
+                )
             else:
                 return False
 
-        # 기본적인 요청 구조 확인
+        # Basic request structure check
         data = request.get_json()
         if not data or "message" not in data:
-            logger.warning("잘못된 웹훅 데이터 구조")
+            logger.warning("Invalid webhook data structure")
             return False
 
         return True
 
     except Exception as e:
-        logger.error(f"웹훅 검증 오류: {e}")
+        logger.error(f"Webhook verification error: {e}")
         return False
 
 
 def process_new_emails_for_account(account):
-    """계정의 새 이메일 처리 (가입 날짜 이후만)"""
+    """Process new emails for account (only after signup date)"""
     try:
         gmail_service = GmailService(account.user_id, account.id)
         ai_classifier = AIClassifier()
 
-        # 사용자 정보 가져오기
+        # Get user info
         user = User.query.get(account.user_id)
         if not user:
-            logger.error(f"사용자 정보를 찾을 수 없음: {account.user_id}")
+            logger.error(f"User info not found: {account.user_id}")
             return None
 
-        # 가입 날짜 이후의 이메일만 가져오기
+        # Only get emails after signup date
         after_date = user.first_service_access
         logger.info(
-            f"웹훅 이메일 처리 - 계정: {account.account_email}, 가입일: {after_date}"
+            f"Webhook email processing - account: {account.account_email}, signup date: {after_date}"
         )
 
-        # 새 이메일 가져오기 (가입 날짜 이후만)
+        # Get new emails (only after signup date)
         recent_emails = gmail_service.fetch_recent_emails(
             max_results=10, after_date=after_date
         )
 
         if not recent_emails:
-            logger.info(f"새 이메일 없음: {account.account_email}")
+            logger.info(f"No new emails: {account.account_email}")
             return None
 
-        # 사용자 카테고리 가져오기 (AI 분류용 딕셔너리 형태로 변환)
+        # Get user categories (for AI classification, as dict)
         category_objects = gmail_service.get_user_categories()
         categories = [
             {"id": cat.id, "name": cat.name, "description": cat.description or ""}
@@ -205,7 +207,7 @@ def process_new_emails_for_account(account):
 
         for email_data in recent_emails:
             try:
-                # 이미 처리된 이메일인지 확인
+                # Check if email already processed
                 existing_email = Email.query.filter_by(
                     user_id=account.user_id,
                     account_id=account.id,
@@ -215,13 +217,13 @@ def process_new_emails_for_account(account):
                 if existing_email:
                     continue
 
-                # DB에 저장
+                # Save to DB
                 email_obj = gmail_service.save_email_to_db(email_data)
 
                 if email_obj:
                     processed_count += 1
 
-                    # AI 분류 및 요약
+                    # AI classification and summarization
                     if categories:
                         category_id, summary = (
                             ai_classifier.classify_and_summarize_email(
@@ -238,54 +240,56 @@ def process_new_emails_for_account(account):
                             )
                             classified_count += 1
 
-                        # 요약 저장
+                        # Save summary
                         if (
                             summary
                             and summary
-                            != "AI 처리를 사용할 수 없습니다. 수동으로 확인해주세요."
+                            != "AI processing not available. Please check manually."
                         ):
                             email_obj.summary = summary
 
-                            # AI 분석 완료 후 Gmail에서 아카이브 처리
+                            # After AI analysis, archive in Gmail
                             try:
                                 gmail_service.archive_email(email_data["gmail_id"])
                                 email_obj.is_archived = True
                                 archived_count += 1
                                 logger.info(
-                                    f"✅ 웹훅 이메일 아카이브 완료: {email_data.get('subject', '제목 없음')}"
+                                    f"✅ Webhook email archived: {email_data.get('subject', 'No subject')}"
                                 )
                             except Exception as e:
-                                logger.error(f"❌ 웹훅 이메일 아카이브 실패: {str(e)}")
+                                logger.error(
+                                    f"❌ Webhook email archive failed: {str(e)}"
+                                )
 
                             db.session.commit()
 
                 logger.info(
-                    f"웹훅 이메일 처리 완료 - 제목: {email_data.get('subject', '제목 없음')}"
+                    f"Webhook email processing complete - subject: {email_data.get('subject', 'No subject')}"
                 )
 
             except Exception as e:
-                logger.error(f"웹훅 이메일 처리 실패: {str(e)}")
+                logger.error(f"Webhook email processing failed: {str(e)}")
                 continue
 
         logger.info(
-            f"웹훅 처리 완료 - 계정: {account.account_email}, 처리: {processed_count}개, 분류: {classified_count}개, 아카이브: {archived_count}개"
+            f"Webhook processing complete - account: {account.account_email}, processed: {processed_count}, classified: {classified_count}, archived: {archived_count}"
         )
 
-        # 처리 결과 반환
+        # Return processing result
         result = {
             "processed_count": processed_count,
             "classified_count": classified_count,
             "archived_count": archived_count,
         }
 
-        # 새 이메일이 처리된 경우 로그 기록
+        # If new emails processed, log
         if processed_count > 0:
             logger.info(
-                f"새 이메일 처리됨 - 사용자: {account.user_id}, 처리된 이메일: {processed_count}개"
+                f"New emails processed - user: {account.user_id}, processed emails: {processed_count}"
             )
 
         return result
 
     except Exception as e:
-        logger.error(f"웹훅 이메일 처리 중 오류: {str(e)}")
+        logger.error(f"Error during webhook email processing: {str(e)}")
         return None

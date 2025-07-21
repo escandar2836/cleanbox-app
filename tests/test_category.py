@@ -34,7 +34,7 @@ def login_test_user(app, client):
         db.session.add(account)
         db.session.commit()
         category = Category(
-            user_id=user.id, name="Work", description="업무", is_active=True
+            user_id=user.id, name="Work", description="Work", is_active=True
         )
         db.session.add(category)
         db.session.commit()
@@ -46,7 +46,7 @@ class TestCategory:
     def test_list_categories_requires_login(self, client):
         response = client.get("/category/", follow_redirects=False)
         if response.status_code == 404:
-            pytest.skip("/category/ 라우트가 없음. 구현 후 테스트 필요.")
+            pytest.skip("/category/ route not found. Test after implementation.")
         assert response.status_code in (200, 302, 303)
         if response.status_code in (302, 303):
             assert "/auth/login" in response.location
@@ -54,10 +54,10 @@ class TestCategory:
     def test_list_categories_success(self, client, login_test_user):
         response = client.get("/category/", follow_redirects=False)
         if response.status_code == 404:
-            pytest.skip("/category/ 라우트가 없음. 구현 후 테스트 필요.")
+            pytest.skip("/category/ route not found. Test after implementation.")
         assert response.status_code in (200, 302, 303)
-        # 카테고리 관리 페이지가 정상적으로 렌더링되는지
-        assert "카테고리 관리" in response.data.decode()
+        # Check if category management page is rendered properly
+        assert "Category Management" in response.data.decode()
 
     @patch("cleanbox.category.routes.Category")
     def test_add_category_success(self, mock_category, client, login_test_user):
@@ -66,14 +66,14 @@ class TestCategory:
             "/category/add",
             data={
                 "name": "Work",
-                "description": "업무",
+                "description": "Work",
                 "color": "#123456",
                 "icon": "fas fa-briefcase",
             },
             follow_redirects=False,
         )
         if response.status_code == 404:
-            pytest.skip("/category/add 라우트가 없음. 구현 후 테스트 필요.")
+            pytest.skip("/category/add route not found. Test after implementation.")
         assert response.status_code in (200, 302, 303)
 
     @patch("cleanbox.category.routes.Category")
@@ -81,21 +81,21 @@ class TestCategory:
         mock_category.query.filter_by.return_value.first.return_value = MagicMock()
         response = client.post(
             "/category/add",
-            data={"name": "Work", "description": "업무"},
+            data={"name": "Work", "description": "Work"},
             follow_redirects=False,
         )
         if response.status_code == 404:
-            pytest.skip("/category/add 라우트가 없음. 구현 후 테스트 필요.")
+            pytest.skip("/category/add route not found. Test after implementation.")
         assert response.status_code in (200, 302, 303)
 
     def test_add_category_empty_name(self, client, login_test_user):
         response = client.post(
             "/category/add",
-            data={"name": "", "description": "업무"},
+            data={"name": "", "description": "Work"},
             follow_redirects=False,
         )
         if response.status_code == 404:
-            pytest.skip("/category/add 라우트가 없음. 구현 후 테스트 필요.")
+            pytest.skip("/category/add route not found. Test after implementation.")
         assert response.status_code in (200, 302, 303)
 
     @patch("cleanbox.category.routes.Category")
@@ -107,11 +107,11 @@ class TestCategory:
         )
         response = client.post(
             "/category/edit/1",
-            data={"name": "Personal", "description": "개인"},
+            data={"name": "Personal", "description": "Personal"},
             follow_redirects=False,
         )
         if response.status_code == 404:
-            pytest.skip("/category/edit/1 라우트가 없음. 구현 후 테스트 필요.")
+            pytest.skip("/category/edit/1 route not found. Test after implementation.")
         assert response.status_code in (200, 302, 303)
 
     @patch("cleanbox.category.routes.Category")
@@ -123,11 +123,11 @@ class TestCategory:
         )
         response = client.post(
             "/category/edit/1",
-            data={"name": "Work", "description": "업무"},
+            data={"name": "Work", "description": "Work"},
             follow_redirects=False,
         )
         if response.status_code == 404:
-            pytest.skip("/category/edit/1 라우트가 없음. 구현 후 테스트 필요.")
+            pytest.skip("/category/edit/1 route not found. Test after implementation.")
         assert response.status_code in (200, 302, 303)
 
     @patch("cleanbox.category.routes.Category")
@@ -135,11 +135,13 @@ class TestCategory:
         mock_category.query.filter_by.return_value.first.return_value = None
         response = client.post(
             "/category/edit/999",
-            data={"name": "Work", "description": "업무"},
+            data={"name": "Work", "description": "Work"},
             follow_redirects=False,
         )
         if response.status_code == 404:
-            pytest.skip("/category/edit/999 라우트가 없음. 구현 후 테스트 필요.")
+            pytest.skip(
+                "/category/edit/999 route not found. Test after implementation."
+            )
         assert response.status_code in (200, 302, 303)
 
     @patch("cleanbox.category.routes.Category")
@@ -148,7 +150,9 @@ class TestCategory:
         mock_category.query.filter_by.return_value.first.return_value = mock_cat
         response = client.post("/category/delete/1", follow_redirects=False)
         if response.status_code == 404:
-            pytest.skip("/category/delete/1 라우트가 없음. 구현 후 테스트 필요.")
+            pytest.skip(
+                "/category/delete/1 route not found. Test after implementation."
+            )
         assert response.status_code in (200, 302, 303)
 
     @patch("cleanbox.category.routes.Category")
@@ -156,5 +160,7 @@ class TestCategory:
         mock_category.query.filter_by.return_value.first.return_value = None
         response = client.post("/category/delete/999", follow_redirects=False)
         if response.status_code == 404:
-            pytest.skip("/category/delete/999 라우트가 없음. 구현 후 테스트 필요.")
+            pytest.skip(
+                "/category/delete/999 route not found. Test after implementation."
+            )
         assert response.status_code in (200, 302, 303)

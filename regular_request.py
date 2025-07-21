@@ -15,4 +15,4 @@ def job():
 print("Starting loop: calling every 10 minutes.")
 while True:
     job()
-    time.sleep(600)  # 10분 = 600초
+    time.sleep(600)  # 10 minutes = 600 seconds

@@ -1,12 +1,12 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <title>{% block title %}CleanBox - AI 이메일 정리 앱{% endblock %}</title>
+    <title>{% block title %}CleanBox - AI Email Organizer App{% endblock %}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
@@ -31,61 +31,57 @@
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
             z-index: 1000;
         }
-        
-        /* Modal이 flash 메시지보다 위에 표시되도록 */
+        /* Make modal appear above flash messages */
         .modal {
             z-index: 1050 !important;
         }
     </style>
 </head>
 <body>
-    <!-- 네비게이션 -->
+    <!-- Navigation -->
     <nav class="navbar navbar-expand-lg cleanbox-header">
         <div class="container">
             <a class="navbar-brand cleanbox-logo" href="{{ url_for('index') }}">
                 <i class="fas fa-inbox"></i> CleanBox
             </a>
-            
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
-            
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
                     {% if current_user and current_user.is_authenticated %}
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('category.list_categories') }}">
-                            <i class="fas fa-tags"></i> 카테고리
+                            <i class="fas fa-tags"></i> Category
                         </a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('email.list_emails') }}">
-                            <i class="fas fa-envelope"></i> 이메일
+                            <i class="fas fa-envelope"></i> Email
                         </a>
                     </li>
                     {% endif %}
                 </ul>
-                
                 <ul class="navbar-nav">
                     {% if current_user and current_user.is_authenticated %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-user"></i> {{ current_user.name or current_user.email or '사용자' }}
+                            <i class="fas fa-user"></i> {{ current_user.name or current_user.email or 'User' }}
                         </a>
                         <ul class="dropdown-menu">
                             <li><a class="dropdown-item" href="{{ url_for('auth.manage_accounts') }}">
-                                <i class="fas fa-user-circle"></i> 계정 관리
+                                <i class="fas fa-user-circle"></i> Manage Accounts
                             </a></li>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}">
-                                <i class="fas fa-sign-out-alt"></i> 로그아웃
+                                <i class="fas fa-sign-out-alt"></i> Logout
                             </a></li>
                         </ul>
                     </li>
                     {% else %}
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('auth.login') }}">
-                            <i class="fab fa-google"></i> Google 로그인
+                            <i class="fab fa-google"></i> Sign in with Google
                         </a>
                     </li>
                     {% endif %}
@@ -94,7 +90,7 @@
         </div>
     </nav>
 
-    <!-- 플래시 메시지 (독립적인 row) -->
+    <!-- Flash message (independent row) -->
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
             <div class="container flash-message-container">
@@ -108,68 +104,62 @@
         {% endif %}
     {% endwith %}
 
-    <!-- 메인 컨텐츠 -->
+    <!-- Main content -->
     <main class="container mt-4">
         {% block content %}{% endblock %}
     </main>
 
-    <!-- 푸터 -->
+    <!-- Footer -->
     <footer class="bg-light mt-5 py-4">
         <div class="container text-center">
             <p class="text-muted mb-0">
                 <i class="fas fa-heart text-danger"></i> 
-                CleanBox - AI 기반 이메일 정리 앱
+                CleanBox - AI-powered Email Organizer App
             </p>
         </div>
     </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    
+    {% raw %}
     <script>
-    // 전역 변수 (가벼운 폴링용)
+    // Global variables (for polling)
     let emailCheckInterval = null;
     let isUserActive = true;
-    const CHECK_INTERVAL = 15000; // 15초로 단축 - 더 빠른 반응성
-    const INACTIVE_TIMEOUT = 300000; // 5분
-    
-    // Flash 메시지 자동 제거 함수
+    const CHECK_INTERVAL = 15000; // 15 seconds for faster response
+    const INACTIVE_TIMEOUT = 300000; // 5 minutes
+    // Flash message auto-hide function
     function hideFlashMessages() {
         const flashMessages = document.querySelectorAll('.flash-message-container .alert');
         flashMessages.forEach(message => {
             message.style.display = 'none';
         });
     }
-    
-    // Flash 메시지 다시 표시 함수
+    // Flash message show function
     function showFlashMessages() {
         const flashMessages = document.querySelectorAll('.flash-message-container .alert');
         flashMessages.forEach(message => {
             message.style.display = 'block';
         });
     }
-    
-    // Modal 표시 전 flash 메시지 숨기기
+    // Hide flash messages before showing modal
     document.addEventListener('show.bs.modal', function() {
         hideFlashMessages();
     });
-    
-    // Modal 숨김 후 flash 메시지 다시 표시
+    // Show flash messages after hiding modal
     document.addEventListener('hidden.bs.modal', function() {
         showFlashMessages();
     });
-    
-    // 브라우저 알림 권한 요청
+    // Request browser notification permission
     function requestNotificationPermission() {
         if ('Notification' in window) {
             Notification.requestPermission().then(function(permission) {
                 if (permission === 'granted') {
-                    console.log('✅ 브라우저 알림 권한 허용됨');
+                    console.log('✅ Browser notification permission granted');
                 }
             });
         }
     }
-    
-    // 브라우저 알림 표시
+    // Show browser notification
     function showBrowserNotification(title, body, icon) {
         if ('Notification' in window && Notification.permission === 'granted') {
             new Notification(title, {
@@ -179,54 +169,47 @@
             });
         }
     }
-    
-    // 토스트 알림 표시
+    // Show toast notification
     function showToastNotification(data) {
         const toastContainer = document.getElementById('toastContainer') || createToastContainer();
-        
         const toastElement = document.createElement('div');
         toastElement.className = 'toast';
         toastElement.innerHTML = `
             <div class="toast-header bg-success text-white">
                 <i class="fas fa-envelope-open me-2"></i>
-                <strong class="me-auto">새 이메일 알림</strong>
+                <strong class="me-auto">New Email Notification</strong>
                 <small>${new Date().toLocaleTimeString()}</small>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast"></button>
             </div>
             <div class="toast-body">
                 <p class="mb-1">${data.message}</p>
-                <small class="text-muted">처리된 이메일: ${data.total_count}개</small>
+                <small class="text-muted">Processed emails: ${data.total_count}</small>
                 <div class="mt-2">
-                    <button class="btn btn-sm btn-primary" onclick="location.reload()">새로고침</button>
+                    <button class="btn btn-sm btn-primary" onclick="location.reload()">Refresh</button>
                 </div>
             </div>
         `;
-        
         toastContainer.appendChild(toastElement);
         const toast = new bootstrap.Toast(toastElement, { delay: 10000 });
         toast.show();
-        
-        // 10초 후 자동 제거
+        // Auto-remove after 10 seconds
         setTimeout(() => {
             if (toastElement.parentNode) {
                 toastElement.remove();
             }
         }, 10000);
     }
-    
-    // Bulk Action 결과 토스트 알림 표시
+    // Show bulk action toast
     function showBulkActionToast(message, type = 'success') {
         const toastContainer = document.getElementById('toastContainer') || createToastContainer();
-        
         const bgClass = type === 'success' ? 'bg-success' : type === 'warning' ? 'bg-warning' : 'bg-danger';
         const icon = type === 'success' ? 'fa-check-circle' : type === 'warning' ? 'fa-exclamation-triangle' : 'fa-times-circle';
-        
         const toastElement = document.createElement('div');
         toastElement.className = 'toast';
         toastElement.innerHTML = `
             <div class="toast-header ${bgClass} text-white">
                 <i class="fas ${icon} me-2"></i>
-                <strong class="me-auto">Bulk Action 완료</strong>
+                <strong class="me-auto">Bulk Action Complete</strong>
                 <small>${new Date().toLocaleTimeString()}</small>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast"></button>
             </div>
@@ -234,20 +217,16 @@
                 <p class="mb-1">${message}</p>
             </div>
         `;
-        
         toastContainer.appendChild(toastElement);
-        const toast = new bootstrap.Toast(toastElement, { delay: 15000 }); // 15초 후 자동 숨김
+        const toast = new bootstrap.Toast(toastElement, { delay: 15000 }); // Auto-hide after 15 seconds
         toast.show();
-        
-        // 15초 후 DOM에서 완전 제거 (delay와 동일한 시간)
         setTimeout(() => {
             if (toastElement.parentNode) {
                 toastElement.remove();
             }
         }, 15000);
     }
-    
-    // 토스트 컨테이너 생성
+    // Create toast container
     function createToastContainer() {
         const container = document.createElement('div');
         container.id = 'toastContainer';
@@ -256,98 +235,74 @@
         document.body.appendChild(container);
         return container;
     }
-    
-    // 새 이메일 체크 함수 (email id 기반 비교)
+    // Check for new emails (compare by email id)
     function checkNewEmails() {
         {% if current_user and current_user.is_authenticated %}
-        // 이메일 관련 페이지에서만 체크
+        // Only check on email-related pages
         const currentPath = window.location.pathname;
         const emailRelatedPaths = ['/email', '/main/dashboard'];
         const shouldCheck = emailRelatedPaths.some(path => currentPath.startsWith(path));
-        
         if (!shouldCheck) {
             return;
         }
-        
-        // localStorage에서 마지막으로 본 email id 가져오기
+        // Get last seen email id from localStorage
         const lastSeenEmailId = localStorage.getItem('lastSeenEmailId');
         const lastSeenEmailIdParam = lastSeenEmailId ? `?last_seen_email_id=${lastSeenEmailId}` : '';
-        
         fetch(`/email/api/check-new-emails${lastSeenEmailIdParam}`)
             .then(response => response.json())
             .then(data => {
-                console.log('📧 새 이메일 체크 응답:', data);
-                
+                console.log('📧 New email check response:', data);
                 if (data.has_new_emails && data.new_count > 0) {
-                    console.log('📧 새 이메일 발견:', data.new_count, '개');
-                    console.log('최대 email id:', data.max_email_id, '마지막으로 본 email id:', data.last_seen_email_id);
-                    
-                    // 처음 접속한 경우 체크 (lastSeenEmailId가 없거나 0인 경우)
+                    console.log('📧 New emails found:', data.new_count, 'items');
+                    console.log('Latest email id:', data.max_email_id, 'Last seen email id:', data.last_seen_email_id);
                     const isFirstVisit = !lastSeenEmailId || lastSeenEmailId === '0';
-                    
                     if (!isFirstVisit) {
-                        // 처음 접속이 아닌 경우에만 알림 표시
-                        console.log('📧 기존 사용자 - 알림 표시');
-                        
-                        // 브라우저 알림
+                        // Show browser notification
                         showBrowserNotification(
-                            '새 이메일 도착! 📧',
-                            `${data.new_count}개의 새 이메일이 있습니다.`,
+                            'New emails arrived! 📧',
+                            `${data.new_count} new emails are available.`,
                             '/static/favicon.ico'
                         );
-                        
-                        // 토스트 알림
+                        // Show toast notification
                         showToastNotification({
-                            message: `${data.new_count}개의 새 이메일이 도착했습니다!`,
+                            message: `${data.new_count} new emails have arrived!`,
                             total_count: data.new_count
                         });
                     } else {
-                        console.log('📧 처음 접속 - 알림 없이 초기화만 진행');
+                        console.log('📧 First visit - skip notification');
                     }
-                    
-                    // localStorage 업데이트 (최대 email id로) - 항상 실행
+                    // Update localStorage with latest email id
                     if (data.max_email_id) {
                         localStorage.setItem('lastSeenEmailId', data.max_email_id.toString());
-                        console.log('✅ localStorage 업데이트:', data.max_email_id);
+                        console.log('✅ localStorage updated:', data.max_email_id);
                     }
                 } else {
-                    console.log('📧 새 이메일 없음');
+                    console.log('📧 No new emails');
                 }
             })
             .catch(error => {
-                console.error('❌ 새 이메일 체크 오류:', error);
+                console.error('❌ Error checking new emails:', error);
             });
         {% endif %}
     }
-    
-    // 이메일 목록에서 최대 email id 업데이트 (개선된 버전)
+    // Update last seen email id (improved version)
     function updateLastSeenEmailId() {
         {% if current_user and current_user.is_authenticated %}
-        // 모든 페이지에서 실행 (이메일 관련 정보가 표시되는 모든 페이지)
         const currentPath = window.location.pathname;
-        
-        // 페이지의 이메일 요소들에서 최대 id 찾기
         const emailElements = document.querySelectorAll('[data-email-id]');
         let maxEmailId = 0;
-        
         emailElements.forEach(element => {
             const emailId = parseInt(element.getAttribute('data-email-id'));
             if (emailId && emailId > maxEmailId) {
                 maxEmailId = emailId;
             }
         });
-        
-        // 최대 email id가 있으면 localStorage 업데이트
         if (maxEmailId > 0) {
             const currentLastSeen = localStorage.getItem('lastSeenEmailId');
             const currentLastSeenId = currentLastSeen ? parseInt(currentLastSeen) : 0;
-            
-            // 더 큰 값으로만 업데이트
             if (maxEmailId > currentLastSeenId) {
                 localStorage.setItem('lastSeenEmailId', maxEmailId.toString());
-                console.log('📧 마지막으로 본 email id 업데이트:', currentLastSeenId, '→', maxEmailId, '(페이지:', currentPath, ')');
-                
-                // 서버에도 업데이트
+                console.log('📧 Updated last seen email id:', currentLastSeenId, '→', maxEmailId, '(page:', currentPath, ')');
                 fetch('/email/api/update-last-seen-email', {
                     method: 'POST',
                     headers: {
@@ -360,70 +315,55 @@
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        console.log('✅ 서버에 마지막으로 본 email id 업데이트 완료');
+                        console.log('✅ Server last seen email id updated');
                     }
                 })
                 .catch(error => {
-                    console.error('❌ 서버 업데이트 오류:', error);
+                    console.error('❌ Server update error:', error);
                 });
             }
         } else {
-            // 이메일 ID가 없는 페이지에서는 기존 값 유지
-            console.log('📧 이 페이지에는 이메일 ID가 없습니다:', currentPath);
+            // No email ID found on this page, keep previous value
+            console.log('📧 No email ID found on this page:', currentPath);
         }
         {% endif %}
     }
-    
-    // 사용자 활동 기반 이메일 확인 추적 (모든 페이지에서)
+    // Track email viewing activity (on all pages)
     function trackEmailViewing() {
         {% if current_user and current_user.is_authenticated %}
-        // 모든 페이지에서 실행 (이메일 관련 정보가 표시되는 모든 페이지)
         const currentPath = window.location.pathname;
-        console.log('📧 이메일 확인 추적 시작:', currentPath);
-        
+        console.log('📧 Start tracking email viewing:', currentPath);
         let hasTracked = false;
-        
-        // 스크롤 이벤트로 이메일 확인 추적
         function handleScroll() {
             if (!hasTracked) {
                 const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
                 const windowHeight = window.innerHeight;
                 const documentHeight = document.documentElement.scrollHeight;
-                
-                // 페이지의 50% 이상 스크롤했으면 이메일을 확인했다고 판단
                 if (scrollTop + windowHeight >= documentHeight * 0.5) {
                     updateLastSeenEmailId();
                     hasTracked = true;
-                    console.log('📧 스크롤 기반 이메일 확인 추적');
+                    console.log('📧 Email viewed by scroll');
                 }
             }
         }
-        
-        // 이메일 클릭 이벤트로 추적
         function handleEmailClick(event) {
             const emailElement = event.target.closest('[data-email-id]');
             if (emailElement) {
                 updateLastSeenEmailId();
-                console.log('📧 클릭 기반 이메일 확인 추적');
+                console.log('📧 Email viewed by click');
             }
         }
-        
-        // 페이지 포커스 이벤트로 추적 (일정 시간 후)
         function handleFocus() {
             setTimeout(() => {
                 if (document.hasFocus()) {
                     updateLastSeenEmailId();
-                    console.log('📧 포커스 기반 이메일 확인 추적');
+                    console.log('📧 Email viewed by focus');
                 }
-            }, 5000); // 5초 후 실행
+            }, 5000);
         }
-        
-        // 이벤트 리스너 등록
         window.addEventListener('scroll', handleScroll, { passive: true });
         document.addEventListener('click', handleEmailClick);
         window.addEventListener('focus', handleFocus);
-        
-        // 페이지 언로드 시 이벤트 리스너 제거
         window.addEventListener('beforeunload', () => {
             window.removeEventListener('scroll', handleScroll);
             document.removeEventListener('click', handleEmailClick);
@@ -431,49 +371,37 @@
         });
         {% endif %}
     }
-    
-    // 사용자 활동 감지
+    // Reset user activity
     function resetUserActivity() {
         isUserActive = true;
         if (!emailCheckInterval) {
             startEmailChecking();
         }
     }
-    
-    // 이메일 체킹 시작
+    // Start email checking
     function startEmailChecking() {
         if (emailCheckInterval) {
             clearInterval(emailCheckInterval);
         }
-        
-        // 즉시 한 번 체크
         checkNewEmails();
-        
-        // 주기적 체크 시작
         emailCheckInterval = setInterval(() => {
             if (isUserActive) {
                 checkNewEmails();
             }
         }, CHECK_INTERVAL);
-        
-        console.log('🔄 이메일 체킹 시작 (30초 간격)');
+        console.log('🔄 Started email checking (every 15s)');
     }
-    
-    // 이메일 체킹 중지
+    // Stop email checking
     function stopEmailChecking() {
         if (emailCheckInterval) {
             clearInterval(emailCheckInterval);
             emailCheckInterval = null;
-            console.log('⏹️ 이메일 체킹 중지');
+            console.log('⏹️ Stopped email checking');
         }
     }
-    
-    // 페이지 로드 시 초기화
+    // Page load initialization
     document.addEventListener('DOMContentLoaded', function() {
-        // 브라우저 알림 권한 요청
         requestNotificationPermission();
-        
-        // Flash 메시지 자동 제거
         setTimeout(() => {
             const flashMessages = document.querySelectorAll('.flash-message-container .alert');
             flashMessages.forEach(message => {
@@ -481,51 +409,36 @@
                 bsAlert.close();
             });
         }, 5000);
-        
-        // 사용자 활동 감지 이벤트
         ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'].forEach(event => {
             document.addEventListener(event, resetUserActivity, true);
         });
-        
-        // 비활성 상태 감지
         let inactivityTimer;
         function resetInactivityTimer() {
             clearTimeout(inactivityTimer);
             inactivityTimer = setTimeout(() => {
                 isUserActive = false;
                 stopEmailChecking();
-                console.log('😴 사용자 비활성 상태 - 체킹 중지');
+                console.log('😴 User inactive - stopped checking');
             }, INACTIVE_TIMEOUT);
         }
-        
         resetInactivityTimer();
         document.addEventListener('mousemove', resetInactivityTimer);
         document.addEventListener('keypress', resetInactivityTimer);
-        
-        // 이메일 체킹 시작 (지연 시작)
         setTimeout(() => {
             startEmailChecking();
         }, 2000);
-        
-        // 이메일 목록에서 최대 email id 업데이트 (지연 실행)
         setTimeout(() => {
             updateLastSeenEmailId();
         }, 3000);
-        
-        // 사용자 활동 기반 이메일 확인 추적 시작
         trackEmailViewing();
     });
-    
-    // 페이지 언로드 시 정리
     window.addEventListener('beforeunload', function() {
         stopEmailChecking();
     });
-    
-    // Flash 스타일 메시지 표시 함수
+    // Show flash message utility
     function showFlashMessage(message, type = 'info') {
         const alertClass = type === 'error' ? 'danger' : type;
         const iconClass = type === 'danger' ? 'exclamation-triangle' : 'info-circle';
-        
         const alertDiv = document.createElement('div');
         alertDiv.className = `alert alert-${alertClass} alert-dismissible fade show`;
         alertDiv.style.cssText = 'position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 300px; max-width: 500px;';
@@ -534,10 +447,7 @@
             <span style="white-space: pre-line;">${message}</span>
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         `;
-        
         document.body.appendChild(alertDiv);
-        
-        // 5초 후 자동 제거
         setTimeout(() => {
             if (alertDiv.parentNode) {
                 alertDiv.remove();
@@ -545,7 +455,7 @@
         }, 5000);
     }
     </script>
-    
+    {% endraw %}
     {% block scripts %}{% endblock %}
 </body>
 </html> 

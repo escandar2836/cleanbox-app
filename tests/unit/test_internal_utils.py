@@ -16,8 +16,8 @@ class TestInternalUtils:
         return_value=[
             {
                 "gmail_id": "g1",
-                "subject": "제목",
-                "snippet": "요약",
+                "subject": "Subject",
+                "snippet": "Summary",
                 "sender": "a@b.com",
             }
         ],
@@ -52,7 +52,7 @@ class TestInternalUtils:
             "expiry": None,
         }
         mock_gmail.return_value.get_user_categories.return_value = [
-            MagicMock(id=1, name="Work", description="업무")
+            MagicMock(id=1, name="Work", description="Work")
         ]
         mock_ai.return_value.classify_email.return_value = {
             "category_id": 1,

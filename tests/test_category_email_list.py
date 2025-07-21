@@ -24,18 +24,18 @@ class TestCategoryEmailList:
     @patch("cleanbox.email.routes.Category")
     def test_category_email_list_success(self, mock_category, mock_email, client):
         self.login(client)
-        # 카테고리 mock
+        # category mock
         mock_category.query.filter_by.return_value.first.return_value = MagicMock(
             id=1, name="Work", user_id="123"
         )
-        # 이메일 mock (2개)
+        # email mock (2 items)
         mock_email.query.filter_by.return_value.filter.return_value.order_by.return_value.paginate.return_value = MagicMock(
             items=[
                 MagicMock(
                     id=1,
                     subject="A",
                     sender="a@b.com",
-                    summary="요약A",
+                    summary="SummaryA",
                     is_archived=True,
                     is_read=False,
                     updated_at=None,
@@ -45,7 +45,7 @@ class TestCategoryEmailList:
                     id=2,
                     subject="B",
                     sender="b@b.com",
-                    summary="요약B",
+                    summary="SummaryB",
                     is_archived=False,
                     is_read=True,
                     updated_at=None,
@@ -60,10 +60,13 @@ class TestCategoryEmailList:
         response = client.get("/email/category/1")
         if response.status_code == 302:
             pytest.skip(
-                "로그인/권한/라우트 문제로 리다이렉트 발생. 구현 후 테스트 필요."
+                "Redirect due to login/permission/layout issue. Test after implementation."
             )
         assert response.status_code == 200
-        assert "요약A" in response.data.decode() and "요약B" in response.data.decode()
+        assert (
+            "SummaryA" in response.data.decode()
+            and "SummaryB" in response.data.decode()
+        )
 
     @patch("cleanbox.email.routes.Email")
     @patch("cleanbox.email.routes.Category")
@@ -78,13 +81,10 @@ class TestCategoryEmailList:
         response = client.get("/email/category/2")
         if response.status_code == 302:
             pytest.skip(
-                "로그인/권한/라우트 문제로 리다이렉트 발생. 구현 후 테스트 필요."
+                "Redirect due to login/permission/layout issue. Test after implementation."
             )
         assert response.status_code == 200
-        assert (
-            "이메일이 없습니다" in response.data.decode()
-            or response.data.decode() == ""
-        )
+        assert "No emails" in response.data.decode() or response.data.decode() == ""
 
     @patch("cleanbox.email.routes.Email")
     @patch("cleanbox.email.routes.Category")
@@ -96,10 +96,10 @@ class TestCategoryEmailList:
         response = client.get("/email/category/999", follow_redirects=False)
         if response.status_code == 302:
             pytest.skip(
-                "로그인/권한/라우트 문제로 리다이렉트 발생. 구현 후 테스트 필요."
+                "Redirect due to login/permission/layout issue. Test after implementation."
             )
         assert (
-            "카테고리를 찾을 수 없습니다" in response.data.decode()
+            "Could not find category" in response.data.decode()
             or response.status_code == 200
         )
 
@@ -110,14 +110,14 @@ class TestCategoryEmailList:
         mock_category.query.filter_by.return_value.first.return_value = MagicMock(
             id=1, name="Work", user_id="123"
         )
-        # 21개 이메일로 2페이지
+        # 21 emails for 2 pages
         mock_email.query.filter_by.return_value.filter.return_value.order_by.return_value.paginate.return_value = MagicMock(
             items=[
                 MagicMock(
                     id=i,
                     subject=f"S{i}",
                     sender="a@b.com",
-                    summary=f"요약{i}",
+                    summary=f"Summary{i}",
                     is_archived=False,
                     is_read=False,
                     updated_at=None,
@@ -133,18 +133,21 @@ class TestCategoryEmailList:
         response = client.get("/email/category/1?page=1")
         if response.status_code == 302:
             pytest.skip(
-                "로그인/권한/라우트 문제로 리다이렉트 발생. 구현 후 테스트 필요."
+                "Redirect due to login/permission/layout issue. Test after implementation."
             )
         assert response.status_code == 200
-        assert "요약1" in response.data.decode() and "요약20" in response.data.decode()
-        # 2페이지 요청
+        assert (
+            "Summary1" in response.data.decode()
+            and "Summary20" in response.data.decode()
+        )
+        # Request page 2
         mock_email.query.filter_by.return_value.filter.return_value.order_by.return_value.paginate.return_value = MagicMock(
             items=[
                 MagicMock(
                     id=21,
                     subject="S21",
                     sender="a@b.com",
-                    summary="요약21",
+                    summary="Summary21",
                     is_archived=False,
                     is_read=False,
                     updated_at=None,
@@ -158,4 +161,4 @@ class TestCategoryEmailList:
         )
         response2 = client.get("/email/category/1?page=2")
         assert response2.status_code == 200
-        assert "요약21" in response2.data.decode()
+        assert "Summary21" in response2.data.decode()

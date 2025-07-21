@@ -1,6 +1,6 @@
 """
-메모리 사용량 모니터링 유틸리티
-Render 환경에서 메모리 사용량을 추적하고 제한을 관리합니다.
+Memory usage monitoring utility
+Tracks and manages memory usage in Render environment.
 """
 
 import os
@@ -16,16 +16,16 @@ except ImportError:
 
 
 class MemoryMonitor:
-    """메모리 사용량 모니터링"""
+    """Memory usage monitoring"""
 
-    def __init__(self, max_memory_mb: int = 400):  # 512MB 중 400MB 사용
+    def __init__(self, max_memory_mb: int = 400):  # Use 400MB out of 512MB
         self.max_memory_mb = max_memory_mb
         self.logger = logging.getLogger(__name__)
-        self.warning_threshold = 0.8  # 80% 경고 임계값
-        self.critical_threshold = 0.9  # 90% 위험 임계값
+        self.warning_threshold = 0.8  # 80% warning threshold
+        self.critical_threshold = 0.9  # 90% critical threshold
 
     def get_memory_usage(self) -> Dict:
-        """현재 메모리 사용량 반환"""
+        """Return current memory usage"""
         if not PSUTIL_AVAILABLE:
             return self._get_memory_usage_fallback()
 
@@ -48,15 +48,15 @@ class MemoryMonitor:
                 "critical_threshold": self.critical_threshold,
             }
         except Exception as e:
-            self.logger.warning(f"메모리 사용량 확인 실패: {str(e)}")
+            self.logger.warning(f"Failed to check memory usage: {str(e)}")
             return self._get_memory_usage_fallback()
 
     def _get_memory_usage_fallback(self) -> Dict:
-        """psutil 없을 때의 대체 메서드"""
+        """Fallback method when psutil is not available"""
         return {
             "memory_mb": 0,
             "memory_percent": 0,
-            "is_safe": True,  # 확인 불가시 안전하다고 가정
+            "is_safe": True,  # Assume safe if cannot check
             "is_critical": False,
             "max_memory_mb": self.max_memory_mb,
             "warning_threshold": self.warning_threshold,
@@ -65,24 +65,24 @@ class MemoryMonitor:
         }
 
     def check_memory_limit(self) -> bool:
-        """메모리 제한 체크"""
+        """Check memory limit"""
         usage = self.get_memory_usage()
         is_safe = usage["is_safe"]
 
         if not is_safe:
             self.logger.warning(
-                f"메모리 사용량 위험: {usage['memory_mb']:.1f}MB ({usage['memory_percent']:.1f}%)"
+                f"Memory usage warning: {usage['memory_mb']:.1f}MB ({usage['memory_percent']:.1f}%)"
             )
 
         if usage.get("is_critical", False):
             self.logger.error(
-                f"메모리 사용량 위험 수준: {usage['memory_mb']:.1f}MB ({usage['memory_percent']:.1f}%)"
+                f"Memory usage critical: {usage['memory_mb']:.1f}MB ({usage['memory_percent']:.1f}%)"
             )
 
         return is_safe
 
     def log_memory_usage(self, context: str = ""):
-        """메모리 사용량 로깅"""
+        """Log memory usage"""
         usage = self.get_memory_usage()
 
         if usage.get("psutil_available", True):
@@ -94,13 +94,13 @@ class MemoryMonitor:
 
             self.logger.log(
                 level,
-                f"메모리 사용량 ({context}): {usage['memory_mb']:.1f}MB ({usage['memory_percent']:.1f}%)",
+                f"Memory usage ({context}): {usage['memory_mb']:.1f}MB ({usage['memory_percent']:.1f}%)",
             )
         else:
-            self.logger.info(f"메모리 모니터링 불가 ({context})")
+            self.logger.info(f"Memory monitoring unavailable ({context})")
 
     def get_memory_stats(self) -> Dict:
-        """메모리 통계 반환"""
+        """Return memory stats"""
         usage = self.get_memory_usage()
         return {
             "current_mb": usage["memory_mb"],
@@ -112,10 +112,10 @@ class MemoryMonitor:
         }
 
     def should_cleanup(self) -> bool:
-        """정리 필요 여부 확인"""
+        """Check if cleanup is needed"""
         usage = self.get_memory_usage()
         return not usage.get("is_safe", True) or usage.get("is_critical", False)
 
 
-# 전역 메모리 모니터 인스턴스
+# Global memory monitor instance
 memory_monitor = MemoryMonitor()

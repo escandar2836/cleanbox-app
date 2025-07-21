@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 FROM python:3.11-slim
 
-# 시스템 패키지 업데이트 및 필수 도구 설치 (한 번에 처리)
+# System package update and required tool installation (all at once)
 RUN apt-get update && apt-get install -y \
     wget \
     gnupg \
@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
     python3-dev \
-    # Playwright 브라우저 의존성
+    # Playwright browser dependencies
     libnss3 \
     libatk-bridge2.0-0 \
     libdrm2 \
@@ -29,29 +29,29 @@ RUN apt-get update && apt-get install -y \
     libxshmfence1 \
     && rm -rf /var/lib/apt/lists/*
 
-# 작업 디렉토리 설정
+# Set working directory
 WORKDIR /app
 
-# Python 의존성 복사 및 설치 (캐시 최적화)
+# Copy and install Python dependencies (cache optimized)
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Playwright 브라우저 설치 (별도 레이어로 분리하여 캐시 최적화)
+# Install Playwright browser (separate layer for cache optimization)
 RUN playwright install chromium
 RUN playwright install-deps chromium
 
-# 설치된 브라우저 위치 확인
-RUN ls -la ~/.cache/ms-playwright || echo "캐시 디렉토리 없음"
+# Check installed browser location
+RUN ls -la ~/.cache/ms-playwright || echo "No cache directory found"
 RUN find ~/.cache/ms-playwright -maxdepth 3 | sed -e 's/^/PATH: /'
 
 ENV DISPLAY=:99
 
-# 애플리케이션 코드 복사 (마지막에 복사하여 캐시 활용)
+# Copy application code (copy at the end to leverage cache)
 COPY . .
 
-# 포트 노출
+# Expose port
 EXPOSE 8000
 
-# 애플리케이션 실행
+# Run application
 CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "1", "app:app"] 

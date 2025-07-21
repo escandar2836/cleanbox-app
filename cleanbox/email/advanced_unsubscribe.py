@@ -19,13 +19,13 @@ from .playwright_unsubscribe import (
 
 
 class AdvancedUnsubscribeService:
-    """고급 구독해지 서비스 (Playwright 기반)"""
+    """Advanced Unsubscribe Service (Playwright-based)"""
 
     def __init__(self):
         self.setup_logging()
         self.playwright_service = PlaywrightUnsubscribeService()
 
-        # 타임아웃 설정
+        # Timeout settings
         self.timeouts = {
             "page_load": 30,
             "element_wait": 10,
@@ -34,13 +34,13 @@ class AdvancedUnsubscribeService:
         }
 
     def setup_logging(self):
-        """로깅 설정"""
+        """Setup logging"""
         logging.basicConfig(
             level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
         )
         self.logger = logging.getLogger(__name__)
 
-        # 파일 로깅 추가
+        # Add file logging
         if not os.path.exists("logs"):
             os.makedirs("logs")
         file_handler = logging.FileHandler("logs/unsubscribe_service.log")
@@ -51,7 +51,7 @@ class AdvancedUnsubscribeService:
         file_handler.setFormatter(formatter)
         self.logger.addHandler(file_handler)
 
-        # 통계 초기화
+        # Initialize stats
         self.stats = {
             "total_attempts": 0,
             "successful_unsubscribes": 0,
@@ -64,13 +64,13 @@ class AdvancedUnsubscribeService:
     def extract_unsubscribe_links(
         self, email_content: str, email_headers: Dict = None
     ) -> List[str]:
-        """이메일에서 구독해지 링크 추출 (Playwright 서비스 사용)"""
+        """Extract unsubscribe links from email (using Playwright service)"""
         return self.playwright_service.extract_unsubscribe_links(
             email_content, email_headers
         )
 
     def _is_valid_unsubscribe_url(self, url: str) -> bool:
-        """유효한 구독해지 URL인지 확인"""
+        """Check if URL is a valid unsubscribe link"""
         try:
             parsed = urlparse(url)
             return parsed.scheme in ["http", "https"] and bool(parsed.netloc)
@@ -80,9 +80,9 @@ class AdvancedUnsubscribeService:
     def _detect_personal_email(
         self, email_content: str, email_headers: Dict = None
     ) -> bool:
-        """개인 이메일 감지"""
+        """Detect personal email"""
         try:
-            # 1. 발신자 도메인 확인
+            # 1. Check sender domain
             if email_headers:
                 from_header = email_headers.get("From", "").lower()
                 personal_domains = [
@@ -98,13 +98,13 @@ class AdvancedUnsubscribeService:
 
                 for domain in personal_domains:
                     if domain in from_header:
-                        print(f"📝 개인 도메인 감지: {domain}")
+                        print(f"Personal domain detected: {domain}")
                         return True
 
-            # 2. 이메일 내용 분석
+            # 2. Analyze email content
             content_lower = email_content.lower()
 
-            # 마케팅 관련 키워드가 없는지 확인
+            # Check for marketing keywords
             marketing_keywords = [
                 "unsubscribe",
                 "opt-out",
@@ -127,37 +127,37 @@ class AdvancedUnsubscribeService:
             )
 
             if not has_marketing_content:
-                print(f"📝 마케팅 콘텐츠가 없음 - 개인 이메일로 판단")
+                print(f"No marketing content - considered personal email")
                 return True
 
             return False
 
         except Exception as e:
-            print(f"⚠️ 개인 이메일 감지 중 오류: {str(e)}")
+            print(f"Error detecting personal email: {str(e)}")
             return False
 
     def process_unsubscribe_simple(self, unsubscribe_url: str) -> Dict:
-        """간단한 구독해지 처리 (Playwright 서비스 사용)"""
+        """Simple unsubscribe processing (using Playwright service)"""
         try:
-            print(f"🔧 간단한 구독해지 처리 시작: {unsubscribe_url}")
+            print(f"🔧 Starting simple unsubscribe processing: {unsubscribe_url}")
 
-            # Playwright 서비스를 사용하여 처리 (동기식 래퍼 사용)
+            # Use Playwright service for processing (sync wrapper)
             result = process_unsubscribe_sync(unsubscribe_url)
 
             return result
 
         except Exception as e:
-            print(f"❌ 간단한 구독해지 처리 실패: {str(e)}")
+            print(f"❌ Failed simple unsubscribe processing: {str(e)}")
             return {
                 "success": False,
-                "message": f"구독해지 처리 실패: {str(e)}",
+                "message": f"Unsubscribe processing failed: {str(e)}",
                 "error_details": str(e),
             }
 
     def _find_unsubscribe_link_simple(self, soup: BeautifulSoup) -> Optional[str]:
-        """간단한 구독해지 링크 찾기"""
+        """Find simple unsubscribe link"""
         try:
-            # 구독해지 관련 링크 찾기
+            # Find unsubscribe-related links
             unsubscribe_keywords = [
                 "unsubscribe",
                 "opt-out",
@@ -180,17 +180,17 @@ class AdvancedUnsubscribeService:
             return None
 
         except Exception as e:
-            print(f"⚠️ 구독해지 링크 찾기 실패: {str(e)}")
+            print(f"⚠️ Failed to find unsubscribe link: {str(e)}")
             return None
 
     def process_unsubscribe_advanced(
         self, email_content: str, email_headers: Dict = None, user_email: str = None
     ) -> Dict:
-        """고급 구독해지 처리 (Playwright 서비스 사용)"""
+        """Advanced unsubscribe processing (using Playwright service)"""
         try:
-            print(f"🔧 고급 구독해지 처리 시작")
+            print(f"🔧 Starting advanced unsubscribe processing")
 
-            # 구독해지 링크 추출
+            # Extract unsubscribe links
             unsubscribe_links = self.extract_unsubscribe_links(
                 email_content, email_headers
             )
@@ -198,24 +198,24 @@ class AdvancedUnsubscribeService:
             if not unsubscribe_links:
                 return {
                     "success": False,
-                    "message": "구독해지 링크를 찾을 수 없습니다.",
+                    "message": "No unsubscribe link found.",
                     "error_type": "no_unsubscribe_link",
-                    "error_details": "이메일에서 구독해지 링크를 찾을 수 없습니다.",
+                    "error_details": "Could not find unsubscribe link in email.",
                 }
 
-            print(f"📝 발견된 구독해지 링크: {unsubscribe_links}")
+            print(f"📝 Found unsubscribe links: {unsubscribe_links}")
 
-            # 각 링크에 대해 구독해지 시도
+            # Try unsubscribe for each link
             failed_links = []
             for i, link in enumerate(unsubscribe_links):
-                print(f"📝 링크 {i + 1}/{len(unsubscribe_links)} 처리: {link}")
+                print(f"📝 Processing link {i + 1}/{len(unsubscribe_links)}: {link}")
 
                 result = process_unsubscribe_sync(link, user_email)
 
                 if result["success"]:
                     return {
                         "success": True,
-                        "message": f"구독해지 성공: {result['message']}",
+                        "message": f"Unsubscribe success: {result['message']}",
                         "processed_url": link,
                         "processing_time": result.get("processing_time", 0),
                     }
@@ -224,42 +224,42 @@ class AdvancedUnsubscribeService:
                         {
                             "link_number": i + 1,
                             "url": link,
-                            "error": result.get("message", "알 수 없는 오류"),
+                            "error": result.get("message", "Unknown error"),
                         }
                     )
 
-            # 모든 링크 실패
+            # All links failed
             return {
                 "success": False,
-                "message": "모든 구독해지 링크에서 실패했습니다.",
+                "message": "Failed on all unsubscribe links.",
                 "error_type": "all_links_failed",
-                "error_details": f"{len(failed_links)}개의 구독해지 링크를 시도했지만 모두 실패했습니다.",
+                "error_details": f"Tried {len(failed_links)} unsubscribe links, all failed.",
                 "failed_links": failed_links,
                 "attempted_links": unsubscribe_links,
             }
 
         except Exception as e:
-            print(f"❌ 고급 구독해지 처리 실패: {str(e)}")
+            print(f"❌ Failed advanced unsubscribe processing: {str(e)}")
             return {
                 "success": False,
-                "message": f"고급 구독해지 처리 실패: {str(e)}",
+                "message": f"Advanced unsubscribe processing failed: {str(e)}",
                 "error_details": str(e),
             }
 
     def process_unsubscribe_with_mechanicalsoup_ai(
         self, unsubscribe_url: str, user_email: str = None
     ) -> Dict:
-        """Playwright + AI를 활용한 범용 구독해지 처리 (기존 함수명 유지)"""
+        """Universal unsubscribe processing using Playwright + AI (legacy function name kept)"""
         return process_unsubscribe_sync(unsubscribe_url, user_email)
 
     def test_unsubscribe_service(
         self, service_name: str, test_url: str, user_email: str = None
     ) -> Dict:
-        """구독해지 서비스 테스트"""
+        """Unsubscribe service test"""
         try:
-            print(f"🧪 구독해지 서비스 테스트 시작: {service_name}")
+            print(f"🧪 Starting unsubscribe service test: {service_name}")
 
-            # Playwright 서비스를 사용하여 테스트
+            # Use Playwright service for testing
             result = process_unsubscribe_sync(test_url, user_email)
 
             return {
@@ -271,19 +271,19 @@ class AdvancedUnsubscribeService:
             }
 
         except Exception as e:
-            print(f"❌ 구독해지 서비스 테스트 실패: {str(e)}")
+            print(f"❌ Unsubscribe service test failed: {str(e)}")
             return {
                 "service_name": service_name,
                 "test_url": test_url,
                 "success": False,
-                "message": f"테스트 실패: {str(e)}",
+                "message": f"Test failed: {str(e)}",
                 "error_details": str(e),
             }
 
     def run_comprehensive_tests(self, test_cases: List[Dict]) -> Dict:
-        """종합 테스트 실행"""
+        """Run comprehensive tests"""
         try:
-            print(f"🧪 종합 테스트 시작: {len(test_cases)}개 케이스")
+            print(f"🧪 Starting comprehensive tests: {len(test_cases)} cases")
 
             results = []
             passed = 0
@@ -312,7 +312,7 @@ class AdvancedUnsubscribeService:
             }
 
         except Exception as e:
-            print(f"❌ 종합 테스트 실패: {str(e)}")
+            print(f"❌ Comprehensive tests failed: {str(e)}")
             return {
                 "total_tests": 0,
                 "passed": 0,
@@ -322,27 +322,27 @@ class AdvancedUnsubscribeService:
             }
 
     def get_test_cases(self) -> List[Dict]:
-        """테스트 케이스 목록 반환"""
+        """Return test cases list"""
         return [
             {
                 "service_name": "Netflix",
                 "test_url": "https://www.netflix.com/account",
-                "description": "Netflix 구독 해지 테스트",
+                "description": "Netflix unsubscribe test",
             },
             {
                 "service_name": "Spotify",
                 "test_url": "https://www.spotify.com/account/subscription/",
-                "description": "Spotify 구독 해지 테스트",
+                "description": "Spotify unsubscribe test",
             },
             {
                 "service_name": "YouTube",
                 "test_url": "https://www.youtube.com/paid_memberships",
-                "description": "YouTube Premium 구독 해지 테스트",
+                "description": "YouTube Premium unsubscribe test",
             },
         ]
 
     def analyze_failure_cases(self, test_results: Dict) -> Dict:
-        """실패 케이스 분석"""
+        """Analyze failure cases"""
         try:
             failed_results = [
                 result
@@ -360,12 +360,12 @@ class AdvancedUnsubscribeService:
                 service_name = result.get("service_name", "Unknown")
                 message = result.get("message", "Unknown error")
 
-                # 서비스별 실패 횟수
+                # Service-wise failure counts
                 failure_analysis["service_failure_counts"][service_name] = (
                     failure_analysis["service_failure_counts"].get(service_name, 0) + 1
                 )
 
-                # 실패 이유 분석
+                # Analyze failure reasons
                 if "timeout" in message.lower():
                     failure_analysis["failure_reasons"]["timeout"] = (
                         failure_analysis["failure_reasons"].get("timeout", 0) + 1
@@ -387,20 +387,20 @@ class AdvancedUnsubscribeService:
             return failure_analysis
 
         except Exception as e:
-            print(f"❌ 실패 케이스 분석 실패: {str(e)}")
+            print(f"❌ Failed to analyze failure cases: {str(e)}")
             return {"error": str(e)}
 
     def log_unsubscribe_attempt(
         self, url: str, user_email: str = None, start_time: float = None
     ) -> None:
-        """구독해지 시도 로깅"""
+        """Log unsubscribe attempt"""
         self.stats["total_attempts"] += 1
-        self.logger.info(f"구독해지 시도: {url}, 사용자: {user_email}")
+        self.logger.info(f"Unsubscribe attempt: {url}, User: {user_email}")
 
     def log_unsubscribe_result(
         self, result: Dict, processing_time: float, url: str
     ) -> None:
-        """구독해지 결과 로깅"""
+        """Log unsubscribe result"""
         if result.get("success"):
             self.stats["successful_unsubscribes"] += 1
         else:
@@ -408,16 +408,16 @@ class AdvancedUnsubscribeService:
 
         self.stats["processing_times"].append(processing_time)
         self.logger.info(
-            f"구독해지 결과: {result.get('message', 'N/A')}, "
-            f"처리시간: {processing_time:.2f}초, URL: {url}"
+            f"Unsubscribe result: {result.get('message', 'N/A')}, "
+            f"Processing time: {processing_time:.2f}s, URL: {url}"
         )
 
     def log_ai_analysis(self, ai_response: Dict, url: str) -> None:
-        """AI 분석 로깅"""
-        self.logger.info(f"AI 분석 결과: {ai_response}, URL: {url}")
+        """Log AI analysis"""
+        self.logger.info(f"AI analysis result: {ai_response}, URL: {url}")
 
     def get_statistics(self) -> Dict:
-        """통계 정보 반환"""
+        """Return statistics information"""
         playwright_stats = self.playwright_service.get_statistics()
 
         return {
@@ -434,7 +434,7 @@ class AdvancedUnsubscribeService:
         }
 
     def export_statistics_report(self, filename: str = None) -> str:
-        """통계 보고서 내보내기"""
+        """Export statistics report"""
         try:
             if not filename:
                 filename = f"unsubscribe_statistics_{int(time.time())}.json"
@@ -444,26 +444,26 @@ class AdvancedUnsubscribeService:
             with open(filename, "w", encoding="utf-8") as f:
                 json.dump(stats, f, ensure_ascii=False, indent=2)
 
-            print(f"📊 통계 보고서 저장됨: {filename}")
+            print(f"📊 Statistics report saved: {filename}")
             return filename
 
         except Exception as e:
-            print(f"❌ 통계 보고서 내보내기 실패: {str(e)}")
+            print(f"❌ Failed to export statistics report: {str(e)}")
             return ""
 
     def log_performance_metrics(
         self, url: str, method: str, processing_time: float, success: bool
     ) -> None:
-        """성능 메트릭 로깅"""
+        """Log performance metrics"""
         self.logger.info(
-            f"성능 메트릭: URL={url}, Method={method}, "
+            f"Performance metrics: URL={url}, Method={method}, "
             f"Time={processing_time:.2f}s, Success={success}"
         )
 
     def monitor_system_health(self) -> Dict:
-        """시스템 상태 모니터링"""
+        """Monitor system health"""
         try:
-            # Playwright 서비스 상태 확인
+            # Check Playwright service status
             playwright_stats = self.playwright_service.get_statistics()
 
             return {

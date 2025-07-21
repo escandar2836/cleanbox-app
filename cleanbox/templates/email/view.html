@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}CleanBox - 이메일 상세{% endblock %}
+{% block title %}CleanBox - Email Details{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -51,16 +51,16 @@
         <div class="card cleanbox-card">
             <div class="card-header bg-primary text-white">
                 <div class="d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0"><i class="fas fa-envelope"></i> 이메일 상세</h5>
+                    <h5 class="mb-0"><i class="fas fa-envelope"></i> Email Details</h5>
                     <div>
                         <a href="{{ url_for('email.list_emails') }}" class="btn btn-light btn-sm">
-                            <i class="fas fa-arrow-left"></i> 목록으로
+                            <i class="fas fa-arrow-left"></i> Back to List
                         </a>
                     </div>
                 </div>
             </div>
             <div class="card-body">
-                <!-- 이메일 헤더 -->
+                <!-- Email Header -->
                 <div class="mb-4">
                     <div class="d-flex justify-content-between align-items-start mb-3">
                         <div>
@@ -70,52 +70,52 @@
                             </p>
                             <p class="text-muted mb-2">
                                 <i class="fas fa-clock"></i> 
-                                {{ email.received_at.strftime('%Y년 %m월 %d일 %H:%M') if email.received_at else email.created_at.strftime('%Y년 %m월 %d일 %H:%M') }}
+                                {{ email.received_at.strftime('%Y-%m-%d %H:%M') if email.received_at else email.created_at.strftime('%Y-%m-%d %H:%M') }}
                             </p>
                         </div>
                         <div class="btn-group">
                             {% if not email.is_read %}
                             <a href="{{ url_for('email.mark_as_read', email_id=email.id) }}" class="btn btn-success btn-sm">
-                                <i class="fas fa-check"></i> 읽음 표시
+                                <i class="fas fa-check"></i> Mark as Read
                             </a>
                             {% endif %}
                             {% if not email.is_archived %}
                             <a href="{{ url_for('email.archive_email', email_id=email.id) }}" class="btn btn-warning btn-sm">
-                                <i class="fas fa-archive"></i> 아카이브
+                                <i class="fas fa-archive"></i> Archive
                             </a>
                             {% endif %}
                             <button class="btn btn-info btn-sm" onclick="analyzeEmail({{ email.id }})">
-                                <i class="fas fa-robot"></i> AI 분석
+                                <i class="fas fa-robot"></i> AI Analysis
                             </button>
                             {% if not email.is_unsubscribed %}
                             <button class="btn btn-danger btn-sm" onclick="unsubscribeEmail({{ email.id }})">
-                                <i class="fas fa-unlink"></i> 구독 해지
+                                <i class="fas fa-unlink"></i> Unsubscribe
                             </button>
                             {% else %}
                             <button class="btn btn-secondary btn-sm" disabled>
-                                <i class="fas fa-check"></i> 이미 해지됨
+                                <i class="fas fa-check"></i> Already Unsubscribed
                             </button>
                             {% endif %}
                         </div>
                     </div>
                     
-                    <!-- 카테고리 정보 -->
+                    <!-- Category Info -->
                     <div class="mb-3">
                         {% if category %}
                         <span class="badge" style="background-color: {{ category.color }};">
                             <i class="{{ category.icon }}"></i> {{ category.name }}
                         </span>
                         {% else %}
-                        <span class="badge bg-secondary">미분류</span>
+                        <span class="badge bg-secondary">Unclassified</span>
                         {% endif %}
                         
-                        <!-- 카테고리 변경 -->
+                        <!-- Change Category -->
                         <div class="dropdown d-inline-block ms-2">
                             <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
-                                <i class="fas fa-edit"></i> 분류 변경
+                                <i class="fas fa-edit"></i> Change Category
                             </button>
                             <ul class="dropdown-menu">
-                                <li><a class="dropdown-item" href="#" onclick="changeCategory({{ email.id }}, 0)">미분류</a></li>
+                                <li><a class="dropdown-item" href="#" onclick="changeCategory({{ email.id }}, 0)">Unclassified</a></li>
                                 {% for cat in categories %}
                                 <li><a class="dropdown-item" href="#" onclick="changeCategory({{ email.id }}, {{ cat.id }})">
                                     <i class="{{ cat.icon }}" style="color: {{ cat.color }};"></i> {{ cat.name }}
@@ -126,17 +126,17 @@
                     </div>
                 </div>
                 
-                <!-- AI 요약 -->
+                <!-- AI Summary -->
                 {% if email.summary %}
                 <div class="alert alert-info">
-                    <h6><i class="fas fa-robot"></i> AI 요약</h6>
+                    <h6><i class="fas fa-robot"></i> AI Summary</h6>
                     <p class="mb-0">{{ email.summary }}</p>
                 </div>
                 {% endif %}
                 
-                <!-- 이메일 본문 -->
+                <!-- Email Content -->
                 <div class="mb-4">
-                    <h6><i class="fas fa-file-alt"></i> 이메일 내용</h6>
+                    <h6><i class="fas fa-file-alt"></i> Email Content</h6>
                     <div class="border rounded p-3 bg-light">
                         <div class="email-content">
                             {{ email.content|safe }}
@@ -144,39 +144,39 @@
                     </div>
                 </div>
                 
-                <!-- 이메일 정보 -->
+                <!-- Email Info -->
                 <div class="row">
                     <div class="col-md-6">
-                        <h6><i class="fas fa-info-circle"></i> 이메일 정보</h6>
+                        <h6><i class="fas fa-info-circle"></i> Email Info</h6>
                         <ul class="list-unstyled">
                             <li><strong>Gmail ID:</strong> {{ email.gmail_id }}</li>
                             {% if email.thread_id %}
                             <li><strong>Thread ID:</strong> {{ email.thread_id }}</li>
                             {% endif %}
-                            <li><strong>상태:</strong> 
+                            <li><strong>Status:</strong> 
                                 {% if email.is_read %}
-                                <span class="badge bg-success">읽음</span>
+                                <span class="badge bg-success">Read</span>
                                 {% else %}
-                                <span class="badge bg-warning">읽지 않음</span>
+                                <span class="badge bg-warning">Unread</span>
                                 {% endif %}
                             </li>
-                            <li><strong>아카이브:</strong> 
+                            <li><strong>Archive:</strong> 
                                 {% if email.is_archived %}
-                                <span class="badge bg-info">아카이브됨</span>
+                                <span class="badge bg-info">Archived</span>
                                 {% else %}
-                                <span class="badge bg-secondary">활성</span>
+                                <span class="badge bg-secondary">Active</span>
                                 {% endif %}
                             </li>
                         </ul>
                     </div>
                     <div class="col-md-6">
-                        <h6><i class="fas fa-chart-bar"></i> 통계</h6>
+                        <h6><i class="fas fa-chart-bar"></i> Statistics</h6>
                         <ul class="list-unstyled">
-                            <li><strong>생성일:</strong> {{ email.created_at.strftime('%Y년 %m월 %d일 %H:%M') }}</li>
-                            <li><strong>수정일:</strong> {{ email.updated_at.strftime('%Y년 %m월 %d일 %H:%M') }}</li>
-                            <li><strong>내용 길이:</strong> {{ email.content|length }}자</li>
+                            <li><strong>Created At:</strong> {{ email.created_at.strftime('%Y-%m-%d %H:%M') }}</li>
+                            <li><strong>Updated At:</strong> {{ email.updated_at.strftime('%Y-%m-%d %H:%M') }}</li>
+                            <li><strong>Content Length:</strong> {{ email.content|length }} chars</li>
                             {% if email.summary %}
-                            <li><strong>요약 길이:</strong> {{ email.summary|length }}자</li>
+                            <li><strong>Summary Length:</strong> {{ email.summary|length }} chars</li>
                             {% endif %}
                         </ul>
                     </div>
@@ -186,58 +186,57 @@
     </div>
 </div>
 
-<!-- AI 분석 모달 -->
+<!-- AI Analysis Modal -->
 <div class="modal fade" id="analysisModal" tabindex="-1" data-bs-backdrop="false">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header bg-info text-white">
-                <h5 class="modal-title"><i class="fas fa-robot"></i> AI 분석 결과</h5>
+                <h5 class="modal-title"><i class="fas fa-robot"></i> AI Analysis Result</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body" id="analysisContent">
                 <div class="text-center">
                     <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">분석 중...</span>
+                        <span class="visually-hidden">Analyzing...</span>
                     </div>
-                    <p class="mt-2">AI가 이메일을 분석하고 있습니다...</p>
+                    <p class="mt-2">AI is analyzing your email...</p>
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">닫기</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
     </div>
 </div>
 
-<!-- 구독 해지 모달 -->
+<!-- Unsubscribe Modal -->
 <div class="modal fade" id="unsubscribeModal" tabindex="-1" data-bs-backdrop="false">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header bg-warning text-dark">
-                <h5 class="modal-title"><i class="fas fa-unlink"></i> 구독 해지 진행</h5>
+                <h5 class="modal-title"><i class="fas fa-unlink"></i> Unsubscribing</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body" id="unsubscribeContent">
                 <div class="text-center">
                     <div class="spinner-border text-warning" role="status">
-                        <span class="visually-hidden">구독 해지 중...</span>
+                        <span class="visually-hidden">Unsubscribing...</span>
                     </div>
-                    <p class="mt-2">AI가 구독 해지 링크를 찾아 처리하고 있습니다...</p>
+                    <p class="mt-2">AI is finding and processing the unsubscribe link...</p>
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">닫기</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
     </div>
 </div>
 
 <script>
-// 카테고리 변경 함수
+// Change category function
 function changeCategory(emailId, categoryId) {
     const formData = new FormData();
     formData.append('category_id', categoryId);
-    
     fetch(`/email/${emailId}/classify`, {
         method: 'POST',
         body: formData
@@ -245,21 +244,19 @@ function changeCategory(emailId, categoryId) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            location.reload(); // 페이지 새로고침
+            location.reload(); // Refresh page
         } else {
-            alert('카테고리 변경 실패: ' + data.message);
+            alert('Failed to change category: ' + data.message);
         }
     })
     .catch(error => {
-        alert('오류: ' + error);
+        alert('Error: ' + error);
     });
 }
-
-// AI 분석 함수
+// AI analysis function
 function analyzeEmail(emailId) {
     const modal = new bootstrap.Modal(document.getElementById('analysisModal'));
     modal.show();
-    
     fetch(`/email/${emailId}/analyze`)
         .then(response => response.json())
         .then(data => {
@@ -276,96 +273,76 @@ function analyzeEmail(emailId) {
         .catch(error => {
             document.getElementById('analysisContent').innerHTML = `
                 <div class="alert alert-danger">
-                    <i class="fas fa-exclamation-triangle"></i> 분석 중 오류가 발생했습니다: ${error}
+                    <i class="fas fa-exclamation-triangle"></i> An error occurred during analysis: ${error}
                 </div>
             `;
         });
 }
-
-// 분석 결과 표시 (구조화된 요약)
+// Display analysis result (structured summary)
 function displayAnalysis(analysis) {
     const content = document.getElementById('analysisContent');
-    
     let categoryHtml = '';
     if (analysis.category_name && analysis.category_name !== '미분류') {
         categoryHtml = `
             <div class="col-md-6">
-                <h6><i class="fas fa-tag"></i> 분류 결과</h6>
+                <h6><i class="fas fa-tag"></i> Classification Result</h6>
                 <div class="mb-3">
                     <span class="badge bg-primary">${analysis.category_name}</span>
                 </div>
             </div>
         `;
     }
-    
     content.innerHTML = `
         <div class="row">
             <div class="col-md-6">
-                <h6><i class="fas fa-file-alt"></i> AI 요약</h6>
+                <h6><i class="fas fa-file-alt"></i> AI Summary</h6>
                 <div class="small" style="white-space: pre-line;">${analysis.summary}</div>
             </div>
             ${categoryHtml}
         </div>
     `;
 }
-
-// 구독 해지 함수
+// Unsubscribe function
 function unsubscribeEmail(emailId) {
-    console.log('🔍 [view.html] unsubscribeEmail() 호출됨');
-    console.log('📧 이메일 ID:', emailId);
-    console.log('📧 이메일 ID 타입:', typeof emailId);
-    
-    // Bootstrap 확인 및 개선된 처리
+    console.log('🔍 [view.html] unsubscribeEmail() called');
+    console.log('📧 Email ID:', emailId);
+    console.log('📧 Email ID type:', typeof emailId);
     if (typeof bootstrap === 'undefined') {
-        console.error('❌ Bootstrap이 로드되지 않았습니다');
-        showFallbackAlert('Bootstrap이 로드되지 않았습니다. 페이지를 새로고침해주세요.', 'danger');
+        console.error('❌ Bootstrap is not loaded');
+        showFallbackAlert('Bootstrap is not loaded. Please refresh the page.', 'danger');
         return;
     }
-    
-    // 모달 요소 확인 및 개선된 처리
     const modalElement = document.getElementById('unsubscribeModal');
     if (!modalElement) {
-        console.error('❌ 구독 해지 모달을 찾을 수 없습니다');
-        showFallbackAlert('모달을 찾을 수 없습니다. 페이지를 새로고침해주세요.', 'danger');
+        console.error('❌ Unsubscribe modal not found');
+        showFallbackAlert('Modal not found. Please refresh the page.', 'danger');
         return;
     }
-    
-    if (!confirm('이 이메일의 구독을 해지하시겠습니까?\n\nAI가 자동으로 구독 해지 링크를 찾아 처리합니다.')) {
-        console.log('❌ 사용자가 취소했습니다');
+    if (!confirm('Would you like to unsubscribe from this email?\n\nAI will automatically find and process the unsubscribe link.')) {
+        console.log('❌ User cancelled');
         return;
     }
-    
-    console.log('✅ 사용자 확인 완료, 모달 표시');
-    
+    console.log('✅ User confirmed, showing modal');
     try {
-        // 모달 표시
         const modal = new bootstrap.Modal(modalElement);
         modal.show();
-        
-        // 구독 해지 요청
         const requestUrl = `/email/${emailId}/unsubscribe`;
-        console.log('🚀 요청 URL:', requestUrl);
-        console.log('📡 fetch 요청 시작');
-        
-        // 타임아웃 설정 (30초)
+        console.log('🚀 Request URL:', requestUrl);
+        console.log('📡 fetch request started');
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 30000);
-        
         fetch(requestUrl, {
             signal: controller.signal
         })
         .then(response => {
             clearTimeout(timeoutId);
             if (!response.ok) {
-                // HTTP 에러 상태인 경우 응답 내용을 확인
                 return response.text().then(text => {
                     try {
-                        // JSON 응답인지 확인
                         const jsonData = JSON.parse(text);
-                        throw new Error(jsonData.message || `서버 오류가 발생했습니다. (${response.status})`);
+                        throw new Error(jsonData.message || `A server error has occurred. (${response.status})`);
                     } catch (parseError) {
-                        // JSON이 아닌 경우 (HTML 에러 페이지 등)
-                        throw new Error(`서버 오류가 발생했습니다. (${response.status})`);
+                        throw new Error(`A server error has occurred. (${response.status})`);
                     }
                 });
             }
@@ -376,54 +353,46 @@ function unsubscribeEmail(emailId) {
         })
         .catch(error => {
             clearTimeout(timeoutId);
-            console.error('구독해지 요청 실패:', error);
-            
-            // 네트워크 오류인지 확인
+            console.error('Unsubscribe request failed:', error);
             if (error.name === 'AbortError') {
-                handleUnsubscribeError(new Error('요청 시간이 초과되었습니다. 다시 시도해주세요.'), modalElement);
+                handleUnsubscribeError(new Error('Request timed out. Please try again.'), modalElement);
             } else if (error.name === 'TypeError' && error.message.includes('fetch')) {
-                handleUnsubscribeError(new Error('네트워크 연결을 확인해주세요.'), modalElement);
+                handleUnsubscribeError(new Error('Please check your network connection.'), modalElement);
             } else {
                 handleUnsubscribeError(error, modalElement);
             }
         });
     } catch (error) {
-        console.error('모달 표시 실패:', error);
-        showFallbackAlert('모달 표시 중 오류가 발생했습니다.', 'danger');
+        console.error('Failed to show modal:', error);
+        showFallbackAlert('An error occurred while showing the modal.', 'danger');
     }
 }
-
-// 구독해지 결과 처리 함수
+// Unsubscribe result handling function
 function handleUnsubscribeResult(data, modalElement) {
     const modalBody = modalElement.querySelector('.modal-body');
     if (!modalBody) {
-        alert('모달 내용을 찾을 수 없습니다.');
+        alert('Modal content not found.');
         return;
     }
-    
     if (data.success) {
-        // 일괄 업데이트 정보 포함
         let bulkUpdateInfo = '';
         if (data.bulk_updated_count && data.bulk_updated_count > 0) {
             bulkUpdateInfo = `
                 <div class="alert alert-info mt-3">
                     <i class="fas fa-info-circle"></i>
-                    <strong>일괄 업데이트 완료:</strong> ${data.bulk_updated_message}
+                    <strong>Bulk Update Complete:</strong> ${data.bulk_updated_message}
                 </div>
             `;
         }
-        
         modalBody.innerHTML = `
             <div class="text-center">
                 <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
-                <h5 class="text-success">구독 해지 완료!</h5>
+                <h5 class="text-success">Unsubscribe complete!</h5>
                 <p>${data.message}</p>
-                ${data.steps ? `<div class="mt-3"><strong>처리 단계:</strong><ul class="text-start">${data.steps.map(step => `<li>${step}</li>`).join('')}</ul></div>` : ''}
+                ${data.steps ? `<div class="mt-3"><strong>Processing Steps:</strong><ul class="text-start">${data.steps.map(step => `<li>${step}</li>`).join('')}</ul></div>` : ''}
                 ${bulkUpdateInfo}
             </div>
         `;
-        
-        // 페이지 새로고침으로 상태 업데이트
         setTimeout(() => {
             location.reload();
         }, 2000);
@@ -431,33 +400,30 @@ function handleUnsubscribeResult(data, modalElement) {
         modalBody.innerHTML = `
             <div class="text-center">
                 <i class="fas fa-exclamation-triangle fa-3x text-danger mb-3"></i>
-                <h5 class="text-danger">구독 해지 실패</h5>
+                <h5 class="text-danger">Unsubscribe failed</h5>
                 <p>${data.message}</p>
-                ${data.steps ? `<div class="mt-3"><strong>시도한 단계:</strong><ul class="text-start">${data.steps.map(step => `<li>${step}</li>`).join('')}</ul></div>` : ''}
+                ${data.steps ? `<div class="mt-3"><strong>Attempted Steps:</strong><ul class="text-start">${data.steps.map(step => `<li>${step}</li>`).join('')}</ul></div>` : ''}
             </div>
         `;
     }
 }
-
-// 구독해지 오류 처리 함수
+// Unsubscribe error handling function
 function handleUnsubscribeError(error, modalElement) {
     const modalBody = modalElement.querySelector('.modal-body');
     if (!modalBody) {
-        alert('모달 내용을 찾을 수 없습니다.');
+        alert('Modal content not found.');
         return;
     }
-    
     modalBody.innerHTML = `
         <div class="text-center">
             <i class="fas fa-exclamation-triangle fa-3x text-danger mb-3"></i>
-            <h5 class="text-danger">오류 발생</h5>
-            <p>구독 해지 처리 중 오류가 발생했습니다.</p>
+            <h5 class="text-danger">Error Occurred</h5>
+            <p>An error occurred during unsubscribe processing.</p>
             <small class="text-muted">${error.message}</small>
         </div>
     `;
 }
-
-// 폴백 알림 함수 (모달이 없을 때 사용)
+// Fallback alert function (used when modal is not available)
 function showFallbackAlert(message, type = 'info') {
     const alertDiv = document.createElement('div');
     alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
@@ -468,8 +434,6 @@ function showFallbackAlert(message, type = 'info') {
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     `;
     document.body.appendChild(alertDiv);
-    
-    // 5초 후 자동 제거
     setTimeout(() => {
         if (alertDiv.parentNode) {
             alertDiv.remove();

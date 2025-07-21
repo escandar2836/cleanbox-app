@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 FROM python:3.11-slim
 
-# 시스템 패키지 업데이트 및 필수 도구 설치 (한 번에 처리)
+# System package update and required tool installation (all at once)
 RUN apt-get update && apt-get install -y \
     wget \
     gnupg \
@@ -13,41 +13,41 @@ RUN apt-get update && apt-get install -y \
     python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# 작업 디렉토리 설정
+# Set working directory
 WORKDIR /app
 
-# Python 의존성 복사 및 설치 (캐시 최적화)
+# Copy and install Python dependencies (cache optimized)
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Playwright 브라우저 설치
+# Install Playwright browser
 RUN playwright install chromium
 RUN playwright install-deps chromium
 
-# Playwright 환경 변수 설정
+# Playwright environment variable
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
-# 메모리 제한 및 성능 최적화 환경 변수
+# Memory limit and performance optimization environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV CHROME_HEADLESS=1
 ENV CHROME_NO_SANDBOX=1
 ENV CHROME_DISABLE_DEV_SHM=1
 
-# 메모리 제한 설정 (Render 무료 플랜 기준)
+# Memory limit settings (Render free plan standard)
 ENV NODE_OPTIONS="--max-old-space-size=128"
 ENV CHROME_MEMORY_LIMIT=128
 
-# 애플리케이션 코드 복사 (마지막에 복사하여 캐시 활용)
+# Copy application code (copy at the end to leverage cache)
 COPY . .
 
-# 포트 노출
+# Expose port
 EXPOSE 8000
 
-# 헬스체크 추가
+# Healthcheck
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/ || exit 1
 
-# 애플리케이션 실행
+# Run application
 CMD ["gunicorn", "--config", "gunicorn.conf.py", "app:app"] 

@@ -1,27 +1,27 @@
 {% extends "base.html" %}
 
-{% block title %}CleanBox - 계정 관리{% endblock %}
+{% block title %}CleanBox - Manage Accounts{% endblock %}
 
 {% block content %}
 <div class="row">
     <div class="col-12">
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <h1><i class="fas fa-users"></i> Gmail 계정 관리</h1>
+            <h1><i class="fas fa-users"></i> Gmail Account Management</h1>
             <div>
                 <a href="{{ url_for('category.list_categories') }}" class="btn btn-secondary">
-                    <i class="fas fa-arrow-left"></i> 대시보드로 돌아가기
+                    <i class="fas fa-arrow-left"></i> Back to Dashboard
                 </a>
             </div>
         </div>
     </div>
 </div>
 
-<!-- 연결된 계정 목록 -->
+<!-- Connected Accounts List -->
 <div class="row">
     <div class="col-12">
         <div class="card cleanbox-card">
             <div class="card-header bg-primary text-white">
-                <h5 class="mb-0"><i class="fas fa-list"></i> 연결된 Gmail 계정</h5>
+                <h5 class="mb-0"><i class="fas fa-list"></i> Connected Gmail Accounts</h5>
             </div>
             <div class="card-body">
                 {% if accounts %}
@@ -32,7 +32,7 @@
                             <div class="d-flex align-items-center">
                                 <div class="me-3">
                                     {% if account.is_primary %}
-                                    <span class="badge bg-success me-2">기본</span>
+                                    <span class="badge bg-success me-2">Primary</span>
                                     {% endif %}
                                     <i class="fas fa-envelope fa-2x text-primary"></i>
                                 </div>
@@ -43,16 +43,16 @@
                                     {% endif %}
                                     <br>
                                     <small class="text-muted">
-                                        연결일: {{ account.created_at.strftime('%Y년 %m월 %d일') }}
+                                        Connected: {{ account.created_at.strftime('%Y-%m-%d') }}
                                     </small>
                                 </div>
                             </div>
                             <div class="btn-group">
                                 {% if not account.is_primary %}
                                 <form method="POST" action="{{ url_for('auth.remove_account', account_id=account.id) }}" 
-                                      style="display: inline;" onsubmit="return confirm('정말로 이 계정 연결을 해제하시겠습니까?')">
+                                      style="display: inline;" onsubmit="return confirm('Are you sure you want to disconnect this account?')">
                                     <button type="submit" class="btn btn-outline-danger btn-sm">
-                                        <i class="fas fa-unlink"></i> 연결 해제
+                                        <i class="fas fa-unlink"></i> Disconnect
                                     </button>
                                 </form>
                                 {% endif %}
@@ -64,8 +64,8 @@
                 {% else %}
                 <div class="text-center py-5">
                     <i class="fas fa-users fa-3x text-muted mb-3"></i>
-                    <h4 class="text-muted">연결된 Gmail 계정이 없습니다</h4>
-                    <p class="text-muted">Gmail 계정을 연결하여 CleanBox를 사용해보세요!</p>
+                    <h4 class="text-muted">No Gmail accounts connected</h4>
+                    <p class="text-muted">Connect a Gmail account to use CleanBox!</p>
                 </div>
                 {% endif %}
             </div>
@@ -73,29 +73,28 @@
     </div>
 </div>
 
-<!-- 새 계정 연결 -->
+<!-- Add New Account -->
 <div class="row mt-4">
     <div class="col-12">
         <div class="card cleanbox-card">
             <div class="card-header bg-success text-white">
-                <h5 class="mb-0"><i class="fas fa-plus"></i> 새 Gmail 계정 연결</h5>
+                <h5 class="mb-0"><i class="fas fa-plus"></i> Connect New Gmail Account</h5>
             </div>
             <div class="card-body">
                 <div class="row">
                     <div class="col-md-8">
-                        <h6>CleanBox에 추가 Gmail 계정을 연결하세요</h6>
+                        <h6>Connect an additional Gmail account to CleanBox</h6>
                         <p class="text-muted">
-                            여러 Gmail 계정을 연결하면 모든 계정의 이메일을 CleanBox에서 통합 관리할 수 있습니다.
-                            각 계정의 이메일은 별도로 분류되고 관리됩니다.
+                            By connecting multiple Gmail accounts, you can manage all your emails in CleanBox. Each account's emails are classified and managed separately.
                         </p>
                         <ul class="text-muted">
-                            <li>각 계정의 이메일은 독립적으로 분류됩니다</li>
-                            <li>기본 계정은 연결 해제할 수 없습니다</li>
+                            <li>Emails from each account are classified independently</li>
+                            <li>The primary account cannot be disconnected</li>
                         </ul>
                     </div>
                     <div class="col-md-4 text-center">
                         <a href="{{ url_for('auth.add_account') }}" class="btn btn-success btn-lg">
-                            <i class="fas fa-plus"></i> Gmail 계정 추가
+                            <i class="fas fa-plus"></i> Add Gmail Account
                         </a>
                     </div>
                 </div>
@@ -105,20 +104,18 @@
 </div>
 
 <script>
-// 페이지 로드 시 캐시 무효화
+// Refresh page on browser back navigation
 window.addEventListener('load', function() {
-    // 브라우저 캐시 무효화
     if (window.performance && window.performance.navigation.type === window.performance.navigation.TYPE_BACK_FORWARD) {
         location.reload(true);
     }
 });
 
-// 폼 제출 후 페이지 새로고침
+// Refresh after form submit
 document.addEventListener('DOMContentLoaded', function() {
     const forms = document.querySelectorAll('form');
     forms.forEach(form => {
         form.addEventListener('submit', function() {
-            // 폼 제출 후 페이지 새로고침
             setTimeout(function() {
                 location.reload(true);
             }, 1000);

@@ -10,7 +10,7 @@ class TestAdvancedUnsubscribeService:
             "http://unsubscribe.com"
         ]
         service = AdvancedUnsubscribeService()
-        links = service.extract_unsubscribe_links("본문", {})
+        links = service.extract_unsubscribe_links("body text", {})
         assert links == ["http://unsubscribe.com"]
 
     @patch.object(AdvancedUnsubscribeService, "extract_unsubscribe_links")
@@ -19,14 +19,18 @@ class TestAdvancedUnsubscribeService:
         mock_extract.return_value = ["http://unsubscribe.com"]
         mock_sync.return_value = {"success": True, "message": "ok"}
         service = AdvancedUnsubscribeService()
-        result = service.process_unsubscribe_advanced("본문", {}, "user@example.com")
+        result = service.process_unsubscribe_advanced(
+            "body text", {}, "user@example.com"
+        )
         assert result["success"] is True
 
     @patch.object(AdvancedUnsubscribeService, "extract_unsubscribe_links")
     def test_process_unsubscribe_advanced_no_links(self, mock_extract):
         mock_extract.return_value = []
         service = AdvancedUnsubscribeService()
-        result = service.process_unsubscribe_advanced("본문", {}, "user@example.com")
+        result = service.process_unsubscribe_advanced(
+            "body text", {}, "user@example.com"
+        )
         assert result["success"] is False
         assert result["error_type"] == "no_unsubscribe_link"
 
@@ -45,10 +49,10 @@ class TestAdvancedUnsubscribeService:
 
     def test_detect_personal_email(self):
         service = AdvancedUnsubscribeService()
-        # 개인 도메인
+        # Personal domain
         headers = {"From": "user@gmail.com"}
-        assert service._detect_personal_email("내용", headers) is True
-        # 마케팅 키워드 없음
-        assert service._detect_personal_email("안녕하세요", {}) is True
-        # 마케팅 키워드 있음
-        assert service._detect_personal_email("구독해지 안내", {}) is False
+        assert service._detect_personal_email("content", headers) is True
+        # No marketing keyword
+        assert service._detect_personal_email("hello", {}) is True
+        # Marketing keyword exists
+        assert service._detect_personal_email("unsubscribe notice", {}) is False

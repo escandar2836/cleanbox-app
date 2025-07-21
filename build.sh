@@ -1,42 +1,42 @@
 #!/bin/bash
 
-# 빠른 빌드 스크립트
-echo "🚀 CleanBox 빠른 빌드 시작"
+# Fast build script
+echo "🚀 CleanBox fast build start"
 
-# 빌드 타입 선택
+# Select build type
 BUILD_TYPE=${1:-fast}
 
 case $BUILD_TYPE in
     "fast")
-        echo "⚡ 빠른 빌드 (멀티스테이지)"
+        echo "⚡ Fast build (multi-stage)"
         docker build -f Dockerfile.fast -t cleanbox-app:fast .
         ;;
     "simple")
-        echo "📦 간단한 빌드"
+        echo "📦 Simple build"
         docker build -f Dockerfile.simple -t cleanbox-app:simple .
         ;;
     "optimized")
-        echo "🚀 최적화된 빌드"
+        echo "🚀 Optimized build"
         docker build -f Dockerfile.optimized -t cleanbox-app:optimized .
         ;;
     "full")
-        echo "🔧 전체 빌드"
+        echo "🔧 Full build"
         docker build -f Dockerfile -t cleanbox-app:full .
         ;;
     "test")
-        echo "🧪 브라우저 설치 테스트"
+        echo "🧪 Browser install test"
         docker run --rm cleanbox-app:optimized python check_playwright.py
         ;;
     "fix")
-        echo "🔧 브라우저 설치 문제 해결"
+        echo "🔧 Browser install issue fix"
         docker run --rm -it cleanbox-app:optimized bash -c "chmod +x fix_playwright.sh && ./fix_playwright.sh"
         ;;
     *)
-        echo "❌ 알 수 없는 빌드 타입: $BUILD_TYPE"
-        echo "사용법: ./build.sh [fast|simple|full]"
+        echo "❌ Unknown build type: $BUILD_TYPE"
+        echo "Usage: ./build.sh [fast|simple|full]"
         exit 1
         ;;
 esac
 
-echo "✅ 빌드 완료!"
-echo "실행: docker run -p 8000:8000 cleanbox-app:$BUILD_TYPE" 
+echo "✅ Build complete!"
+echo "Run: docker run -p 8000:8000 cleanbox-app:$BUILD_TYPE" 

@@ -1,38 +1,38 @@
 {% extends "base.html" %}
 
-{% block title %}CleanBox - 메인 대시보드{% endblock %}
+{% block title %}CleanBox - Main Dashboard{% endblock %}
 
 {% block content %}
 <div class="row">
     <div class="col-12">
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <h1><i class="fas fa-tags"></i> CleanBox 대시보드</h1>
+            <h1><i class="fas fa-tags"></i> CleanBox Dashboard</h1>
             <div>
                 <a href="{{ url_for('email.list_emails') }}" class="btn btn-success me-2">
-                    <i class="fas fa-envelope"></i> 이메일 관리
+                    <i class="fas fa-envelope"></i> Manage Emails
                 </a>
                 <a href="{{ url_for('email.sync_emails') }}" class="btn btn-primary">
-                    <i class="fas fa-sync-alt"></i> Gmail 동기화
+                    <i class="fas fa-sync-alt"></i> Gmail Sync
                 </a>
             </div>
         </div>
     </div>
 </div>
 
-<!-- 3개 섹션 메인 페이지 -->
+<!-- 3 Main Sections -->
 <div class="row">
-    <!-- 섹션 1: 다중 Gmail 계정 연결 -->
+    <!-- Section 1: Multiple Gmail Accounts -->
     <div class="col-md-4">
         <div class="card cleanbox-card h-100">
             <div class="card-header bg-primary text-white">
-                <h5 class="mb-0"><i class="fas fa-link"></i> Gmail 계정 연결</h5>
+                <h5 class="mb-0"><i class="fas fa-link"></i> Gmail Account Connection</h5>
             </div>
             <div class="card-body">
                 <div class="mb-3">
-                    <h6><i class="fas fa-user"></i> 현재 연결된 계정</h6>
+                    <h6><i class="fas fa-user"></i> Connected Account</h6>
                     <div class="d-flex align-items-center mb-2">
                         {% if user.picture %}
-                        <img src="{{ user.picture }}" alt="프로필" class="rounded-circle me-2" width="32" height="32">
+                        <img src="{{ user.picture }}" alt="Profile" class="rounded-circle me-2" width="32" height="32">
                         {% else %}
                         <i class="fas fa-user-circle fa-2x text-muted me-2"></i>
                         {% endif %}
@@ -41,30 +41,30 @@
                             <small class="text-muted">{{ user.email }}</small>
                         </div>
                     </div>
-                    <span class="badge bg-success">연결됨</span>
+                    <span class="badge bg-success">Connected</span>
                 </div>
                 
                 <div class="mb-3">
-                    <h6><i class="fas fa-plus"></i> 추가 계정 연결</h6>
-                    <p class="text-muted small">다른 Gmail 계정을 연결하여 여러 받은 편지함을 관리할 수 있습니다.</p>
+                    <h6><i class="fas fa-plus"></i> Connect Another Account</h6>
+                    <p class="text-muted small">Connect multiple Gmail accounts to manage all your emails in CleanBox.</p>
                     <button class="btn btn-outline-primary btn-sm" onclick="connectAccount()">
-                        <i class="fas fa-plus"></i> 계정 추가
+                        <i class="fas fa-plus"></i> Add Account
                     </button>
                 </div>
                 
                 <div class="alert alert-info small">
                     <i class="fas fa-info-circle"></i>
-                    <strong>다중 계정 기능:</strong> 여러 Gmail 계정을 연결하여 모든 이메일을 CleanBox에서 통합 관리할 수 있습니다.
+                    <strong>Multiple Account Feature:</strong> Connect multiple Gmail accounts to manage all your emails in CleanBox.
                 </div>
             </div>
         </div>
     </div>
     
-    <!-- 섹션 2: 카테고리 목록 -->
+    <!-- Section 2: Category List -->
     <div class="col-md-4">
         <div class="card cleanbox-card h-100">
             <div class="card-header bg-success text-white">
-                <h5 class="mb-0"><i class="fas fa-list"></i> 내 카테고리</h5>
+                <h5 class="mb-0"><i class="fas fa-list"></i> My Categories</h5>
             </div>
             <div class="card-body">
                 {% if categories %}
@@ -75,19 +75,19 @@
                             <i class="{{ category.icon }}" style="color: {{ category.color }}; margin-right: 10px;"></i>
                             <div>
                                 <h6 class="mb-1">{{ category.name }}</h6>
-                                <small class="text-muted">{{ category.description or '설명 없음' }}</small>
+                                <small class="text-muted">{{ category.description or 'No description' }}</small>
                             </div>
                         </div>
                         <div class="d-flex align-items-center">
                             <span class="badge bg-primary rounded-pill me-2">{{ category.emails|length }}</span>
                             <div class="btn-group btn-group-sm">
-                                <a href="{{ url_for('email.category_emails', category_id=category.id) }}" class="btn btn-outline-primary" title="이메일 보기">
+                                <a href="{{ url_for('email.category_emails', category_id=category.id) }}" class="btn btn-outline-primary" title="View Emails">
                                     <i class="fas fa-envelope"></i>
                                 </a>
-                                <a href="{{ url_for('category.edit_category', category_id=category.id) }}" class="btn btn-outline-secondary" title="수정">
+                                <a href="{{ url_for('category.edit_category', category_id=category.id) }}" class="btn btn-outline-secondary" title="Edit">
                                     <i class="fas fa-edit"></i>
                                 </a>
-                                <button class="btn btn-outline-danger" onclick="confirmDelete({{ category.id }}, '{{ category.name }}')" title="삭제">
+                                <button class="btn btn-outline-danger" onclick="confirmDelete({{ category.id }}, '{{ category.name }}')" title="Delete">
                                     <i class="fas fa-trash"></i>
                                 </button>
                             </div>
@@ -98,41 +98,44 @@
                 {% else %}
                 <div class="text-center py-4">
                     <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
-                    <h6 class="text-muted">아직 카테고리가 없습니다</h6>
-                    <p class="text-muted small">첫 번째 카테고리를 추가하여 CleanBox를 시작해보세요!</p>
+                    <h6 class="text-muted">No categories yet</h6>
+                    <p class="text-muted small">Add your first category to start using CleanBox!</p>
+                    <a href="{{ url_for('category.add_category') }}" class="btn btn-warning btn-sm">
+                        <i class="fas fa-plus"></i> Add First Category
+                    </a>
                 </div>
                 {% endif %}
             </div>
         </div>
     </div>
     
-    <!-- 섹션 3: 새 카테고리 추가 -->
+    <!-- Section 3: Add New Category -->
     <div class="col-md-4">
         <div class="card cleanbox-card h-100">
             <div class="card-header bg-warning text-dark">
-                <h5 class="mb-0"><i class="fas fa-plus"></i> 새 카테고리 추가</h5>
+                <h5 class="mb-0"><i class="fas fa-plus"></i> Add New Category</h5>
             </div>
             <div class="card-body">
                 <div class="text-center mb-4">
                     <i class="fas fa-tags fa-3x text-warning mb-3"></i>
-                    <h6>새 카테고리 만들기</h6>
-                    <p class="text-muted small">이메일을 분류할 카테고리를 추가하세요</p>
+                    <h6>Create a new category</h6>
+                    <p class="text-muted small">Add a category to classify your emails</p>
                 </div>
                 
                 <div class="d-grid">
                     <a href="{{ url_for('category.add_category') }}" class="btn btn-warning">
-                        <i class="fas fa-plus"></i> 카테고리 추가하기
+                        <i class="fas fa-plus"></i> Add Category
                     </a>
                 </div>
                 
                 <hr>
                 
                 <div class="small">
-                    <h6><i class="fas fa-lightbulb"></i> 카테고리 팁</h6>
+                    <h6><i class="fas fa-lightbulb"></i> Category Tips</h6>
                     <ul class="list-unstyled">
-                        <li><i class="fas fa-check text-success"></i> 구체적인 설명을 입력하면 AI가 더 정확하게 분류합니다</li>
-                        <li><i class="fas fa-check text-success"></i> 색상과 아이콘으로 카테고리를 쉽게 구분할 수 있습니다</li>
-                        <li><i class="fas fa-check text-success"></i> 카테고리는 언제든지 수정/삭제할 수 있습니다</li>
+                        <li><i class="fas fa-check text-success"></i> Provide a concrete description for better AI classification</li>
+                        <li><i class="fas fa-check text-success"></i> Use color and icon to easily distinguish categories</li>
+                        <li><i class="fas fa-check text-success"></i> Categories can be edited or deleted anytime</li>
                     </ul>
                 </div>
             </div>
@@ -140,34 +143,34 @@
     </div>
 </div>
 
-<!-- 통계 및 빠른 액션 -->
+<!-- Statistics & Quick Actions -->
 <div class="row mt-4">
     <div class="col-12">
         <div class="card cleanbox-card">
             <div class="card-header bg-info text-white">
-                <h5 class="mb-0"><i class="fas fa-chart-bar"></i> CleanBox 통계</h5>
+                <h5 class="mb-0"><i class="fas fa-chart-bar"></i> CleanBox Statistics</h5>
             </div>
             <div class="card-body">
                 <div class="row">
                     <div class="col-md-3 text-center">
                         <i class="fas fa-envelope fa-2x text-primary mb-2"></i>
                         <h5 id="totalEmails">-</h5>
-                        <p class="text-muted">전체 이메일</p>
+                        <p class="text-muted">Total Emails</p>
                     </div>
                     <div class="col-md-3 text-center">
                         <i class="fas fa-envelope-open fa-2x text-warning mb-2"></i>
                         <h5 id="unreadEmails">-</h5>
-                        <p class="text-muted">읽지 않은 이메일</p>
+                        <p class="text-muted">Unread Emails</p>
                     </div>
                     <div class="col-md-3 text-center">
                         <i class="fas fa-archive fa-2x text-success mb-2"></i>
                         <h5 id="archivedEmails">-</h5>
-                        <p class="text-muted">아카이브된 이메일</p>
+                        <p class="text-muted">Archived Emails</p>
                     </div>
                     <div class="col-md-3 text-center">
                         <i class="fas fa-robot fa-2x text-info mb-2"></i>
                         <h5 id="aiClassified">-</h5>
-                        <p class="text-muted">AI 분류된 이메일</p>
+                        <p class="text-muted">AI Classified Emails</p>
                     </div>
                 </div>
                 
@@ -175,13 +178,13 @@
                     <div class="col-12">
                         <div class="d-flex justify-content-center">
                             <a href="{{ url_for('email.sync_emails') }}" class="btn btn-success me-2">
-                                <i class="fas fa-sync-alt"></i> Gmail 동기화
+                                <i class="fas fa-sync-alt"></i> Gmail Sync
                             </a>
                             <a href="{{ url_for('email.list_emails') }}" class="btn btn-primary me-2">
-                                <i class="fas fa-envelope"></i> 이메일 관리
+                                <i class="fas fa-envelope"></i> Manage Emails
                             </a>
                             <a href="{{ url_for('category.add_category') }}" class="btn btn-warning">
-                                <i class="fas fa-plus"></i> 새 카테고리
+                                <i class="fas fa-plus"></i> Add Category
                             </a>
                         </div>
                     </div>
@@ -191,26 +194,26 @@
     </div>
 </div>
 
-<!-- 삭제 확인 모달 -->
+<!-- Delete Confirmation Modal -->
 <div class="modal fade" id="deleteModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header bg-danger text-white">
-                <h5 class="modal-title"><i class="fas fa-exclamation-triangle"></i> 카테고리 삭제</h5>
+                <h5 class="modal-title"><i class="fas fa-exclamation-triangle"></i> Delete Category</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <p><strong id="deleteCategoryName"></strong> 카테고리를 삭제하시겠습니까?</p>
+                <p><strong id="deleteCategoryName"></strong> - Are you sure you want to delete this category?</p>
                 <p class="text-muted small">
-                    • 이 카테고리에 속한 이메일들이 '미분류'로 이동됩니다.<br>
-                    • 삭제된 카테고리는 복구할 수 없습니다.
+                    • Emails in this category will be moved to 'Unclassified'.<br>
+                    • Deleted categories cannot be recovered.
                 </p>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">취소</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                 <form id="deleteForm" method="POST" style="display: inline;">
                     <button type="submit" class="btn btn-danger">
-                        <i class="fas fa-trash"></i> 삭제 확인
+                        <i class="fas fa-trash"></i> Confirm Delete
                     </button>
                 </form>
             </div>
@@ -219,7 +222,6 @@
 </div>
 
 <script>
-// 카테고리 삭제 확인
 function confirmDelete(categoryId, categoryName) {
     document.getElementById('deleteCategoryName').textContent = categoryName;
     document.getElementById('deleteForm').action = `/category/delete/${categoryId}`;
@@ -227,12 +229,10 @@ function confirmDelete(categoryId, categoryName) {
     modal.show();
 }
 
-// 계정 연결 기능 (향후 구현)
 function connectAccount() {
-    alert('다중 계정 연결 기능은 향후 업데이트에서 제공됩니다.');
+    alert('Multiple account connection will be available in a future update.');
 }
 
-// 통계 업데이트
 document.addEventListener('DOMContentLoaded', function() {
     fetch('/email/statistics')
         .then(response => response.json())
@@ -247,7 +247,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         })
         .catch(error => {
-            console.error('통계 조회 실패:', error);
+            console.error('Failed to fetch statistics:', error);
         });
 });
 </script>

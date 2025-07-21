@@ -33,10 +33,10 @@ class TestBulkActions:
         )
         if response.status_code == 302:
             pytest.skip(
-                "로그인/권한/라우트 문제로 리다이렉트 발생. 구현 후 테스트 필요."
+                "Redirect due to login/permission/layout issue. Test after implementation."
             )
         assert response.status_code == 200
-        assert "성공" in response.json["message"]
+        assert "success" in response.json["message"]
 
     @patch("cleanbox.email.routes.Email")
     def test_bulk_archive_success(self, mock_email, client):
@@ -52,10 +52,10 @@ class TestBulkActions:
         )
         if response.status_code == 302:
             pytest.skip(
-                "로그인/권한/라우트 문제로 리다이렉트 발생. 구현 후 테스트 필요."
+                "Redirect due to login/permission/layout issue. Test after implementation."
             )
         assert response.status_code == 200
-        assert "성공" in response.json["message"]
+        assert "success" in response.json["message"]
 
     @patch("cleanbox.email.routes.Email")
     def test_bulk_mark_read_success(self, mock_email, client):
@@ -71,10 +71,10 @@ class TestBulkActions:
         )
         if response.status_code == 302:
             pytest.skip(
-                "로그인/권한/라우트 문제로 리다이렉트 발생. 구현 후 테스트 필요."
+                "Redirect due to login/permission/layout issue. Test after implementation."
             )
         assert response.status_code == 200
-        assert "성공" in response.json["message"]
+        assert "success" in response.json["message"]
 
     @patch("cleanbox.email.routes.Email")
     def test_bulk_unsubscribe_success(self, mock_email, client):
@@ -92,12 +92,12 @@ class TestBulkActions:
         )
         if response.status_code == 302:
             pytest.skip(
-                "로그인/권한/라우트 문제로 리다이렉트 발생. 구현 후 테스트 필요."
+                "Redirect due to login/permission/layout issue. Test after implementation."
             )
         assert response.status_code == 200
         assert (
-            "성공" in response.json["message"]
-            or "처리 완료" in response.json["message"]
+            "success" in response.json["message"]
+            or "processing complete" in response.json["message"]
         )
 
     def test_bulk_action_no_emails(self, client):
@@ -109,10 +109,10 @@ class TestBulkActions:
         )
         if response.status_code == 302:
             pytest.skip(
-                "로그인/권한/라우트 문제로 리다이렉트 발생. 구현 후 테스트 필요."
+                "Redirect due to login/permission/layout issue. Test after implementation."
             )
         assert response.status_code == 400
-        assert "선택된 이메일이 없습니다" in response.json["message"]
+        assert "No selected emails" in response.json["message"]
 
     def test_bulk_action_invalid_action(self, client):
         self.login(client)
@@ -123,7 +123,7 @@ class TestBulkActions:
         )
         if response.status_code == 302:
             pytest.skip(
-                "로그인/권한/라우트 문제로 리다이렉트 발생. 구현 후 테스트 필요."
+                "Redirect due to login/permission/layout issue. Test after implementation."
             )
         assert response.status_code == 400
-        assert "지원하지 않는 작업" in response.json["message"]
+        assert "Unsupported action" in response.json["message"]

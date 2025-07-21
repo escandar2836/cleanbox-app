@@ -20,27 +20,27 @@ from .advanced_unsubscribe import AdvancedUnsubscribeService
 
 
 class GmailService:
-    """Gmail API 서비스 클래스"""
+    """Gmail API Service Class"""
 
     def __init__(self, user_id: str, account_id: Optional[int] = None):
         self.user_id = user_id
         self.account_id = account_id or get_current_account_id()
 
         if not self.account_id:
-            raise Exception("활성 계정을 찾을 수 없습니다.")
+            raise Exception("Active account not found.")
 
         self.service = None
         self.advanced_unsubscribe = AdvancedUnsubscribeService()
         self._initialize_service()
 
     def _initialize_service(self):
-        """Gmail API 서비스 초기화"""
+        """Initialize Gmail API service"""
         try:
             credentials_data = get_user_credentials(self.user_id, self.account_id)
             if not credentials_data:
-                raise Exception("사용자 인증 정보를 찾을 수 없습니다.")
+                raise Exception("User credentials not found.")
 
-            # 딕셔너리를 Google OAuth credentials 객체로 변환
+            # Convert dictionary to Google OAuth credentials object
             from google.oauth2.credentials import Credentials
 
             credentials = Credentials(
@@ -53,41 +53,41 @@ class GmailService:
                 expiry=credentials_data.get("expiry"),
             )
 
-            # 토큰이 만료되었는지 확인하고 갱신 시도
+            # Check if token is expired and try to refresh
             if credentials.expired and credentials.refresh_token:
                 print(
-                    f"🔄 토큰이 만료되었습니다. 갱신을 시도합니다: user_id={self.user_id}, account_id={self.account_id}"
+                    f"🔄 Token expired. Attempting to refresh: user_id={self.user_id}, account_id={self.account_id}"
                 )
 
                 from google.auth.transport.requests import Request
 
                 credentials.refresh(Request())
 
-                # 갱신된 토큰 저장
+                # Save refreshed token
                 refresh_success = refresh_user_token(self.user_id, self.account_id)
 
                 if not refresh_success:
-                    raise Exception("토큰 갱신에 실패했습니다. 다시 로그인해주세요.")
+                    raise Exception("Token refresh failed. Please log in again.")
 
-            # Google API 클라이언트 빌드
+            # Build Google API client
             self.service = build("gmail", "v1", credentials=credentials)
         except Exception as e:
-            raise Exception(f"Gmail API 서비스 초기화 실패: {str(e)}")
+            raise Exception(f"Failed to initialize Gmail API service: {str(e)}")
 
     def fetch_emails_after_date(self, after_date: datetime) -> List[Dict]:
-        """특정 날짜 이후의 이메일 가져오기 (inbox만)"""
+        """Get emails after a specific date (only inbox)"""
         try:
-            # 날짜를 RFC 3339 형식으로 변환
+            # Convert date to RFC 3339 format
             after_date_str = after_date.strftime("%Y/%m/%d")
 
-            # Gmail API로 특정 날짜 이후의 이메일 목록 가져오기 (inbox만)
+            # Get email list from Gmail API for emails after a specific date (only inbox)
             results = (
                 self.service.users()
                 .messages()
                 .list(
                     userId="me",
-                    maxResults=100,  # 최대 100개
-                    q=f"after:{after_date_str} is:inbox",  # 특정 날짜 이후 + inbox만
+                    maxResults=100,  # Max 100
+                    q=f"after:{after_date_str} is:inbox",  # After specific date + only inbox
                 )
                 .execute()
             )
@@ -98,10 +98,10 @@ class GmailService:
             for message in messages:
                 email_data = self._get_email_details(message["id"])
                 if email_data:
-                    # 날짜 필터링 (Gmail API의 after 쿼리는 정확하지 않을 수 있음)
+                    # Date filtering (Gmail API's after query might not be accurate)
                     email_date = self._parse_date(email_data.get("date"))
                     if email_date and email_date >= after_date:
-                        # inbox 라벨이 있는지 확인
+                        # Check if inbox label exists
                         labels = email_data.get("labels", [])
                         if "INBOX" in labels:
                             emails.append(email_data)
@@ -109,7 +109,7 @@ class GmailService:
             return emails
 
         except HttpError as error:
-            raise Exception(f"Gmail API 오류: {error}")
+            raise Exception(f"Gmail API error: {error}")
 
     def fetch_recent_emails(
         self,
@@ -117,43 +117,43 @@ class GmailService:
         offset: int = 0,
         after_date: Optional[datetime] = None,
     ) -> List[Dict]:
-        """가입 날짜 이후의 이메일 가져오기 (페이지네이션 지원)"""
+        """Get emails after subscription date (pagination supported)"""
         try:
-            # 가입 날짜 이후의 이메일을 가져오기 위한 쿼리
+            # Query to get emails after subscription date
             if after_date:
-                # 가입 날짜 이후의 이메일만 가져오기
+                # Get only emails after subscription date
                 after_date_str = after_date.strftime("%Y/%m/%d")
                 query = f"after:{after_date_str} is:inbox"
-                print(f"🔍 Gmail API 호출 - 계정: {self.account_id}, 쿼리: {query}")
+                print(f"🔍 Gmail API call - Account: {self.account_id}, Query: {query}")
             else:
-                # 기본값: 최근 24시간 (하위 호환성)
+                # Default: last 24 hours (backward compatibility)
                 yesterday = datetime.utcnow() - timedelta(hours=24)
                 after_date_str = yesterday.strftime("%Y/%m/%d")
                 query = f"after:{after_date_str} is:inbox"
                 print(
-                    f"🔍 Gmail API 호출 - 계정: {self.account_id}, 쿼리: {query} (기본값)"
+                    f"🔍 Gmail API call - Account: {self.account_id}, Query: {query} (default)"
                 )
 
-            # Gmail API로 이메일 목록 가져오기
+            # Get email list from Gmail API
             results = (
                 self.service.users()
                 .messages()
                 .list(
                     userId="me",
                     maxResults=max_results,
-                    q=query,  # 가입 날짜 이후 받은 편지함 이메일
+                    q=query,  # Emails received in the inbox after subscription date
                 )
                 .execute()
             )
 
             messages = results.get("messages", [])
             print(
-                f"📧 Gmail API 응답 - 계정: {self.account_id}, 메시지 수: {len(messages)}"
+                f"📧 Gmail API response - Account: {self.account_id}, Message count: {len(messages)}"
             )
 
-            # 오프셋 적용 (Gmail API는 페이지네이션을 자체적으로 처리)
+            # Apply offset (Gmail API handles pagination internally)
             if offset > 0 and "nextPageToken" in results:
-                # 다음 페이지 토큰을 사용하여 오프셋 처리
+                # Process offset using nextPageToken
                 for _ in range(offset // max_results):
                     if "nextPageToken" not in results:
                         break
@@ -173,31 +173,31 @@ class GmailService:
             emails = []
             for i, message in enumerate(messages):
                 print(
-                    f"📨 이메일 처리 중 ({i+1}/{len(messages)}) - ID: {message['id']}"
+                    f"📨 Processing email ({i+1}/{len(messages)}) - ID: {message['id']}"
                 )
                 email_data = self._get_email_details(message["id"])
                 if email_data:
                     emails.append(email_data)
                     print(
-                        f"✅ 이메일 데이터 추출 완료 - 제목: {email_data.get('subject', '제목 없음')}"
+                        f"✅ Email data extraction complete - Subject: {email_data.get('subject', 'No subject')}"
                     )
                 else:
-                    print(f"❌ 이메일 상세 정보 가져오기 실패 - ID: {message['id']}")
+                    print(f"❌ Failed to get email details - ID: {message['id']}")
 
             print(
-                f"🎉 이메일 처리 완료 - 계정: {self.account_id}, 총 {len(emails)}개 처리됨"
+                f"🎉 Email processing complete - Account: {self.account_id}, Total {len(emails)} processed"
             )
             return emails
 
         except HttpError as error:
-            print(f"❌ Gmail API 오류 - 계정: {self.account_id}, 오류: {error}")
-            raise Exception(f"Gmail API 오류: {error}")
+            print(f"❌ Gmail API error - Account: {self.account_id}, Error: {error}")
+            raise Exception(f"Gmail API error: {error}")
         except Exception as e:
-            print(f"❌ 예상치 못한 오류 - 계정: {self.account_id}, 오류: {e}")
-            raise Exception(f"이메일 가져오기 실패: {str(e)}")
+            print(f"❌ Unexpected error - Account: {self.account_id}, Error: {e}")
+            raise Exception(f"Failed to fetch emails: {str(e)}")
 
     def _get_email_details(self, message_id: str) -> Optional[Dict]:
-        """이메일 상세 정보 가져오기"""
+        """Get email details"""
         try:
             message = (
                 self.service.users()
@@ -208,18 +208,18 @@ class GmailService:
 
             headers = message["payload"]["headers"]
             subject = next(
-                (h["value"] for h in headers if h["name"] == "Subject"), "제목 없음"
+                (h["value"] for h in headers if h["name"] == "Subject"), "No subject"
             )
             sender = next(
                 (h["value"] for h in headers if h["name"] == "From"),
-                "알 수 없는 발신자",
+                "Unknown sender",
             )
             date = next((h["value"] for h in headers if h["name"] == "Date"), None)
 
-            # 이메일 본문 추출
+            # Extract email body
             body = self._extract_email_body(message["payload"])
 
-            # 헤더 정보 추출 (구독해지용)
+            # Extract header information (for unsubscribe)
             email_headers = {}
             for header in headers:
                 email_headers[header["name"]] = header["value"]
@@ -237,11 +237,11 @@ class GmailService:
             }
 
         except HttpError as error:
-            print(f"이메일 상세 정보 가져오기 실패 (ID: {message_id}): {error}")
+            print(f"Failed to get email details (ID: {message_id}): {error}")
             return None
 
     def _extract_email_body(self, payload: Dict) -> str:
-        """이메일 본문 추출"""
+        """Extract email body"""
         if "body" in payload and payload["body"].get("data"):
             return base64.urlsafe_b64decode(payload["body"]["data"]).decode("utf-8")
 
@@ -258,12 +258,12 @@ class GmailService:
                             "utf-8"
                         )
 
-        return "본문을 추출할 수 없습니다."
+        return "Could not extract body."
 
     def save_email_to_db(self, email_data: Dict) -> Email:
-        """이메일을 DB에 저장 (개선된 버전)"""
+        """Save email to DB (improved version)"""
         try:
-            # 이미 저장된 이메일인지 확인 (계정별로)
+            # Check if email is already saved (per account)
             existing_email = Email.query.filter_by(
                 user_id=self.user_id,
                 account_id=self.account_id,
@@ -273,23 +273,23 @@ class GmailService:
             if existing_email:
                 return existing_email
 
-            # 발신자 정보 추출
-            sender = email_data.get("sender") or "알 수 없는 발신자"
+            # Extract sender information
+            sender = email_data.get("sender") or "Unknown sender"
 
-            # 새 이메일 생성 (기본값 처리)
+            # Create new email (with default values)
             email_obj = Email(
                 user_id=self.user_id,
                 account_id=self.account_id,
                 gmail_id=email_data["gmail_id"],
                 thread_id=email_data.get("thread_id"),
-                subject=email_data.get("subject") or "제목 없음",
+                subject=email_data.get("subject") or "No subject",
                 sender=sender,
-                content=email_data.get("body") or "본문 없음",
+                content=email_data.get("body") or "No body",
                 summary=email_data.get("snippet", ""),
                 received_at=self._parse_date(email_data.get("date")),
                 is_read=False,
                 is_archived=False,
-                is_unsubscribed=False,  # 새 이메일은 기본적으로 구독해지되지 않음
+                is_unsubscribed=False,  # New emails are not automatically unsubscribed by default
             )
 
             db.session.add(email_obj)
@@ -299,17 +299,17 @@ class GmailService:
 
         except Exception as e:
             db.session.rollback()
-            raise Exception(f"이메일 DB 저장 실패: {str(e)}")
+            raise Exception(f"Failed to save email to DB: {str(e)}")
 
     def _parse_date(self, date_str: Optional[str]) -> Optional[datetime]:
-        """날짜 문자열을 datetime으로 변환 (timezone-naive)"""
+        """Convert date string to datetime (timezone-naive)"""
         if not date_str:
             return None
 
         try:
-            # RFC 2822 형식 파싱
+            # Parse RFC 2822 format
             parsed_date = email.utils.parsedate_to_datetime(date_str)
-            # timezone 정보 제거하여 timezone-naive datetime 반환
+            # Remove timezone information to return timezone-naive datetime
             if parsed_date.tzinfo:
                 parsed_date = parsed_date.replace(tzinfo=None)
             return parsed_date
@@ -317,14 +317,14 @@ class GmailService:
             return datetime.utcnow()
 
     def archive_email(self, gmail_id: str) -> bool:
-        """이메일 아카이브"""
+        """Archive email"""
         try:
-            # Gmail에서 아카이브 처리
+            # Archive in Gmail
             self.service.users().messages().modify(
                 userId="me", id=gmail_id, body={"removeLabelIds": ["INBOX"]}
             ).execute()
 
-            # DB에서 아카이브 상태 업데이트
+            # Update archived status in DB
             email_obj = Email.query.filter_by(
                 user_id=self.user_id, account_id=self.account_id, gmail_id=gmail_id
             ).first()
@@ -337,17 +337,17 @@ class GmailService:
             return True
 
         except HttpError as error:
-            raise Exception(f"이메일 아카이브 실패: {error}")
+            raise Exception(f"Failed to archive email: {error}")
 
     def mark_as_read(self, gmail_id: str) -> bool:
-        """이메일을 읽음으로 표시"""
+        """Mark email as read"""
         try:
-            # Gmail에서 읽음 표시
+            # Mark as read in Gmail
             self.service.users().messages().modify(
                 userId="me", id=gmail_id, body={"removeLabelIds": ["UNREAD"]}
             ).execute()
 
-            # DB에서 읽음 상태 업데이트
+            # Update read status in DB
             email_obj = Email.query.filter_by(
                 user_id=self.user_id, account_id=self.account_id, gmail_id=gmail_id
             ).first()
@@ -360,14 +360,14 @@ class GmailService:
             return True
 
         except HttpError as error:
-            raise Exception(f"이메일 읽음 표시 실패: {error}")
+            raise Exception(f"Failed to mark email as read: {error}")
 
     def get_user_categories(self) -> List[Category]:
-        """사용자의 카테고리 목록 가져오기"""
+        """Get user's category list"""
         return Category.query.filter_by(user_id=self.user_id, is_active=True).all()
 
     def update_email_category(self, gmail_id: str, category_id: Optional[int]) -> bool:
-        """이메일 카테고리 업데이트"""
+        """Update email category"""
         try:
             email_obj = Email.query.filter_by(
                 user_id=self.user_id, account_id=self.account_id, gmail_id=gmail_id
@@ -383,12 +383,12 @@ class GmailService:
 
         except Exception as e:
             db.session.rollback()
-            raise Exception(f"이메일 카테고리 업데이트 실패: {str(e)}")
+            raise Exception(f"Failed to update email category: {str(e)}")
 
     def get_email_statistics(self) -> Dict:
-        """이메일 통계 가져오기"""
+        """Get email statistics"""
         try:
-            # 현재 계정의 이메일 통계
+            # Email statistics for the current account
             total_emails = Email.query.filter_by(
                 user_id=self.user_id, account_id=self.account_id
             ).count()
@@ -399,7 +399,7 @@ class GmailService:
                 user_id=self.user_id, account_id=self.account_id, is_archived=True
             ).count()
 
-            # 카테고리별 이메일 수
+            # Email count by category
             categories = self.get_user_categories()
             category_stats = {}
 
@@ -411,10 +411,10 @@ class GmailService:
                 ).count()
                 category_stats[category.name] = count
 
-            # 계정 정보
+            # Account information
             account = UserAccount.query.get(self.account_id)
             account_info = {
-                "email": account.account_email if account else "알 수 없음",
+                "email": account.account_email if account else "Unknown",
                 "name": account.account_name if account else "",
                 "is_primary": account.is_primary if account else False,
             }
@@ -428,80 +428,82 @@ class GmailService:
             }
 
         except Exception as e:
-            raise Exception(f"이메일 통계 가져오기 실패: {str(e)}")
+            raise Exception(f"Failed to get email statistics: {str(e)}")
 
     def delete_email(self, gmail_id: str) -> bool:
-        """이메일 삭제"""
+        """Delete email"""
         try:
-            # Gmail에서 이메일 삭제
+            # Delete email from Gmail
             self.service.users().messages().delete(userId="me", id=gmail_id).execute()
             return True
 
         except HttpError as error:
-            raise Exception(f"이메일 삭제 실패: {error}")
+            raise Exception(f"Failed to delete email: {error}")
 
     def process_unsubscribe(self, email_obj) -> Dict:
-        """고급 구독해지 처리 (개선된 버전)"""
-        print(f"🔍 GmailService.process_unsubscribe 시작 - 이메일 ID: {email_obj.id}")
-        print(f"📝 이메일 정보 - 제목: {email_obj.subject}, 발신자: {email_obj.sender}")
+        """Process advanced unsubscribe (improved version)"""
+        print(f"🔍 GmailService.process_unsubscribe started - Email ID: {email_obj.id}")
+        print(
+            f"📝 Email info - Subject: {email_obj.subject}, Sender: {email_obj.sender}"
+        )
 
         try:
-            # 사용자 이메일 주소 가져오기
+            # Get user email address
             user_email = self._get_user_email()
-            print(f"📝 사용자 이메일 주소: {user_email}")
+            print(f"📝 User email address: {user_email}")
 
-            # 고급 구독해지 서비스 사용 (사용자 이메일 전달)
-            print(f"📝 AdvancedUnsubscribeService 호출 시작")
+            # Use advanced unsubscribe service (pass user email)
+            print(f"📝 AdvancedUnsubscribeService call started")
             result = self.advanced_unsubscribe.process_unsubscribe_advanced(
                 email_obj.content, getattr(email_obj, "headers", {}), user_email
             )
-            print(f"📝 AdvancedUnsubscribeService 결과: {result}")
+            print(f"📝 AdvancedUnsubscribeService result: {result}")
 
             if result["success"]:
-                print(f"📝 DB 업데이트 시작 - is_unsubscribed = True")
-                # DB에서 구독해지 상태 업데이트
+                print(f"�� Starting DB update - is_unsubscribed = True")
+                # Update unsubscribed status in DB
                 email_obj.is_unsubscribed = True
                 email_obj.updated_at = datetime.utcnow()
 
-                # 동일한 발신자로부터 온 다른 이메일들도 일괄 업데이트
+                # Batch update other emails from the same sender
                 print(
-                    f"📝 동일 발신자 이메일 일괄 업데이트 시작 - 발신자: {email_obj.sender}"
+                    f"📝 Starting batch update of other emails from the same sender - Sender: {email_obj.sender}"
                 )
                 from ..models import Email
 
-                # 같은 사용자와 같은 발신자로부터 온 다른 이메일들 찾기
+                # Find other emails from the same user and sender
                 related_emails = Email.query.filter(
                     Email.user_id == self.user_id,
                     Email.sender == email_obj.sender,
-                    Email.id != email_obj.id,  # 현재 이메일 제외
-                    Email.is_unsubscribed == False,  # 아직 구독해지되지 않은 이메일만
+                    Email.id != email_obj.id,  # Exclude current email
+                    Email.is_unsubscribed == False,  # Only emails not yet unsubscribed
                 ).all()
 
                 if related_emails:
-                    print(f"📝 일괄 업데이트할 이메일 수: {len(related_emails)}")
+                    print(f"📝 Number of emails to batch update: {len(related_emails)}")
                     for related_email in related_emails:
                         related_email.is_unsubscribed = True
                         related_email.updated_at = datetime.utcnow()
                         print(
-                            f"📝 이메일 ID {related_email.id} 업데이트: {related_email.subject}"
+                            f"📝 Updating email ID {related_email.id} - Subject: {related_email.subject}"
                         )
 
-                    # 일괄 업데이트 결과를 결과에 추가
+                    # Add batch update results to the result
                     result["bulk_updated_count"] = len(related_emails)
                     result["bulk_updated_message"] = (
-                        f"동일 발신자로부터 온 {len(related_emails)}개의 이메일도 함께 구독해지 처리되었습니다."
+                        f"Other emails from the same sender ({len(related_emails)} emails) were also unsubscribed."
                     )
                 else:
-                    print(f"📝 일괄 업데이트할 이메일 없음")
+                    print(f"📝 No emails to batch update")
                     result["bulk_updated_count"] = 0
                     result["bulk_updated_message"] = (
-                        "동일 발신자로부터 온 다른 이메일이 없습니다."
+                        "No other emails from the same sender."
                     )
 
                 db.session.commit()
-                print(f"✅ DB 업데이트 완료")
+                print(f"✅ DB update complete")
             else:
-                # 에러 타입과 상세 정보를 결과에 추가
+                # Add error type and details to the result
                 result["error_type"] = result.get("error_type", "unknown")
                 result["error_details"] = result.get("error_details", "")
                 if "failed_links" in result:
@@ -510,61 +512,63 @@ class GmailService:
             return result
 
         except Exception as e:
-            print(f"❌ GmailService.process_unsubscribe 예외 발생: {str(e)}")
+            print(f"❌ GmailService.process_unsubscribe exception occurred: {str(e)}")
             return {
                 "success": False,
-                "message": f"구독해지 처리 실패: {str(e)}",
+                "message": f"Unsubscribe processing failed: {str(e)}",
                 "error_type": "system_error",
-                "error_details": f"시스템 오류: {str(e)}",
-                "steps": [f"오류 발생: {str(e)}"],
+                "error_details": f"System error: {str(e)}",
+                "steps": [f"Error occurred: {str(e)}"],
             }
 
     def _get_user_email(self) -> str:
-        """사용자 이메일 주소 가져오기"""
+        """Get user email address"""
         try:
-            # 현재 계정의 이메일 주소 가져오기
+            # Get user email address from current account
             account = UserAccount.query.filter_by(id=self.account_id).first()
             if account:
                 return account.account_email
 
-            # 기본값 반환
+            # Return default value
             return "user@example.com"
         except Exception as e:
-            print(f"❌ 사용자 이메일 주소 가져오기 실패: {str(e)}")
+            print(f"❌ Failed to get user email address: {str(e)}")
             return "user@example.com"
 
     def setup_gmail_watch(self, topic_name: str) -> bool:
-        """Gmail 웹훅 설정"""
+        """Set up Gmail webhook"""
         try:
-            print(f"🔧 웹훅 설정 시작 - 계정: {self.account_id}, 토픽: {topic_name}")
+            print(
+                f"🔧 Starting webhook setup - Account: {self.account_id}, Topic: {topic_name}"
+            )
 
-            # Gmail Watch 요청
+            # Gmail Watch request
             request = {
                 "labelIds": ["INBOX"],
                 "topicName": topic_name,
                 "labelFilterAction": "include",
             }
 
-            print(f"📤 Gmail API 요청 - 계정: {self.account_id}")
-            print(f"   토픽: {topic_name}")
-            print(f"   라벨: {request['labelIds']}")
+            print(f"📤 Gmail API request - Account: {self.account_id}")
+            print(f"   Topic: {topic_name}")
+            print(f"   Labels: {request['labelIds']}")
 
             response = self.service.users().watch(userId="me", body=request).execute()
 
-            print(f"✅ Gmail API 응답 성공 - 계정: {self.account_id}")
+            print(f"✅ Gmail API response successful - Account: {self.account_id}")
             print(f"   historyId: {response.get('historyId')}")
             print(f"   expiration: {response.get('expiration')}")
 
-            # DB에 웹훅 상태 저장
+            # Save webhook status to DB
             from ..models import WebhookStatus
             from datetime import datetime, timedelta
 
-            # 기존 웹훅 상태 비활성화
+            # Deactivate existing webhook status
             WebhookStatus.query.filter_by(
                 user_id=self.user_id, account_id=self.account_id, is_active=True
             ).update({"is_active": False})
 
-            # 새 웹훅 상태 저장 (7일 후 만료)
+            # Save new webhook status (expires in 7 days)
             webhook_status = WebhookStatus(
                 user_id=self.user_id,
                 account_id=self.account_id,
@@ -577,27 +581,27 @@ class GmailService:
             db.session.add(webhook_status)
             db.session.commit()
 
-            print(f"✅ Gmail 웹훅 설정 완료: {self.account_id}")
+            print(f"✅ Gmail webhook setup complete: {self.account_id}")
             return True
 
         except Exception as e:
-            print(f"❌ Gmail 웹훅 설정 실패: {self.account_id}")
-            print(f"   오류 타입: {type(e).__name__}")
-            print(f"   오류 메시지: {str(e)}")
+            print(f"❌ Failed to set up Gmail webhook: {self.account_id}")
+            print(f"   Error type: {type(e).__name__}")
+            print(f"   Error message: {str(e)}")
 
-            # HttpError인 경우 더 자세한 정보 출력
+            # Print more detailed info if it's an HttpError
             if hasattr(e, "resp") and hasattr(e, "content"):
-                print(f"   HTTP 상태 코드: {e.resp.status}")
-                print(f"   응답 내용: {e.content}")
+                print(f"   HTTP status code: {e.resp.status}")
+                print(f"   Response content: {e.content}")
 
             return False
 
     def stop_gmail_watch(self) -> bool:
-        """Gmail 웹훅 중지"""
+        """Stop Gmail webhook"""
         try:
             self.service.users().stop(userId="me").execute()
 
-            # DB에서 웹훅 상태 비활성화
+            # Deactivate webhook status in DB
             from ..models import WebhookStatus
 
             WebhookStatus.query.filter_by(
@@ -605,15 +609,15 @@ class GmailService:
             ).update({"is_active": False})
             db.session.commit()
 
-            print(f"✅ Gmail 웹훅 중지 완료: {self.account_id}")
+            print(f"✅ Gmail webhook stopped: {self.account_id}")
             return True
 
         except Exception as e:
-            print(f"❌ Gmail 웹훅 중지 실패: {self.account_id} - {e}")
+            print(f"❌ Failed to stop Gmail webhook: {self.account_id} - {e}")
             return False
 
     def get_webhook_status(self) -> Dict:
-        """웹훅 상태 확인"""
+        """Check webhook status"""
         try:
             from ..models import WebhookStatus
 
@@ -625,14 +629,14 @@ class GmailService:
                 return {
                     "is_active": False,
                     "status": "not_setup",
-                    "message": "웹훅이 설정되지 않았습니다.",
+                    "message": "Webhook is not set up.",
                 }
 
             if webhook_status.is_expired:
                 return {
                     "is_active": False,
                     "status": "expired",
-                    "message": "웹훅이 만료되었습니다.",
+                    "message": "Webhook has expired.",
                     "expires_at": webhook_status.expires_at.isoformat(),
                     "setup_at": webhook_status.setup_at.isoformat(),
                 }
@@ -641,7 +645,7 @@ class GmailService:
                 return {
                     "is_active": True,
                     "status": "unhealthy",
-                    "message": "웹훅이 비정상 상태입니다.",
+                    "message": "Webhook is in an unhealthy state.",
                     "last_webhook_received": (
                         webhook_status.last_webhook_received.isoformat()
                         if webhook_status.last_webhook_received
@@ -653,7 +657,7 @@ class GmailService:
             return {
                 "is_active": True,
                 "status": "healthy",
-                "message": "웹훅이 정상 작동 중입니다.",
+                "message": "Webhook is functioning normally.",
                 "last_webhook_received": (
                     webhook_status.last_webhook_received.isoformat()
                     if webhook_status.last_webhook_received
@@ -667,57 +671,59 @@ class GmailService:
             return {
                 "is_active": False,
                 "status": "error",
-                "message": f"웹훅 상태 확인 실패: {str(e)}",
+                "message": f"Failed to check webhook status: {str(e)}",
             }
 
     def check_and_renew_webhook(self, topic_name: str) -> bool:
-        """웹훅 상태 확인 후 필요시 재설정"""
+        """Check webhook status and renew if necessary"""
         try:
             status = self.get_webhook_status()
 
-            # 웹훅이 없거나 만료되었거나 비정상이면 재설정
+            # If webhook is not set up, expired, or unhealthy, renew it
             if status["status"] in ["not_setup", "expired", "unhealthy"]:
-                print(f"🔄 웹훅 재설정 필요: {self.account_id} - {status['status']}")
+                print(
+                    f"🔄 Webhook needs renewal: {self.account_id} - {status['status']}"
+                )
 
-                # 기존 웹훅 중지
+                # Stop existing webhook
                 self.stop_gmail_watch()
 
-                # 새 웹훅 설정
+                # Set up new webhook
                 return self.setup_gmail_watch(topic_name)
 
             return True
 
         except Exception as e:
-            print(f"❌ 웹훅 상태 확인 실패: {self.account_id} - {e}")
+            print(f"❌ Failed to check webhook status: {self.account_id} - {e}")
             return False
 
     def get_new_emails(self) -> List[Dict]:
-        """가입 날짜 이후의 새 이메일 가져오기"""
+        """Get new emails after subscription date"""
         try:
-            # 사용자 계정 정보에서 가입 날짜 가져오기
+            # Get subscription date from user account
             account = UserAccount.query.filter_by(id=self.account_id).first()
             if not account:
-                print(f"❌ 계정 정보를 찾을 수 없음: {self.account_id}")
+                print(f"❌ Account info not found: {self.account_id}")
                 return []
 
-            # 가입 날짜 이후의 이메일 가져오기
+            # Get emails after subscription date
             after_date = account.created_at
             print(
-                f"🔍 새 이메일 검색 - 계정: {account.account_email}, 가입일: {after_date}"
+                f"🔍 Searching for new emails - Account: {account.account_email}, Subscription date: {after_date}"
             )
 
-            # fetch_recent_emails 메서드를 사용하여 가입 날짜 이후의 이메일 가져오기
+            # Use fetch_recent_emails method to get emails after subscription date
             new_emails = self.fetch_recent_emails(
-                max_results=50, after_date=after_date  # 최대 50개
+                max_results=50, after_date=after_date  # Max 50
             )
 
             print(
-                f"📧 새 이메일 발견 - 계정: {account.account_email}, 개수: {len(new_emails)}"
+                f"📧 New emails found - Account: {account.account_email}, Count: {len(new_emails)}"
             )
             return new_emails
 
         except Exception as e:
             print(
-                f"❌ 새 이메일 가져오기 실패 - 계정: {self.account_id}, 오류: {str(e)}"
+                f"❌ Failed to get new emails - Account: {self.account_id}, Error: {str(e)}"
             )
             return []

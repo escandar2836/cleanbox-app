@@ -39,9 +39,9 @@ class TestGmailService:
         mock_email.query.filter_by.return_value.first.return_value = None
         email_data = {
             "gmail_id": "g1",
-            "subject": "제목",
+            "subject": "Subject",
             "sender": "a@b.com",
-            "body": "본문",
+            "body": "Body text",
         }
         email_obj = MagicMock()
         mock_email.return_value = email_obj
@@ -93,7 +93,7 @@ class TestGmailService:
         gs.user_id = "user1"
         gs.account_id = 1
         gs.advanced_unsubscribe = mock_unsub.return_value
-        email_obj = MagicMock(id=1, sender="a@b.com", content="본문", headers={})
+        email_obj = MagicMock(id=1, sender="a@b.com", content="Body text", headers={})
         mock_unsub.return_value.process_unsubscribe_advanced.return_value = {
             "success": True
         }

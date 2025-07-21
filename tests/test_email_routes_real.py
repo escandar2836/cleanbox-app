@@ -35,7 +35,7 @@ class TestEmailRoutes:
         response = client.get("/email/1/unsubscribe")
         if response.status_code == 302:
             pytest.skip(
-                "로그인/권한/라우트 문제로 리다이렉트 발생. 구현 후 테스트 필요."
+                "Redirect due to login/permission/layout issue. Test after implementation."
             )
         assert response.status_code in (200, 404)
 
@@ -43,13 +43,13 @@ class TestEmailRoutes:
     def test_view_email_success(self, mock_email, client):
         self.login(client)
         email_obj = MagicMock(
-            id=1, user_id="123", subject="제목", content="본문", category_id=1
+            id=1, user_id="123", subject="Subject", content="Body", category_id=1
         )
         mock_email.query.filter_by.return_value.first.return_value = email_obj
         response = client.get("/email/1")
         if response.status_code == 302:
             pytest.skip(
-                "로그인/권한/라우트 문제로 리다이렉트 발생. 구현 후 테스트 필요."
+                "Redirect due to login/permission/layout issue. Test after implementation."
             )
         assert response.status_code == 200
 
@@ -58,7 +58,7 @@ class TestEmailRoutes:
         response = client.get("/email/statistics")
         if response.status_code == 302:
             pytest.skip(
-                "로그인/권한/라우트 문제로 리다이렉트 발생. 구현 후 테스트 필요."
+                "Redirect due to login/permission/layout issue. Test after implementation."
             )
         assert response.status_code == 200
         assert "statistics" in response.json
@@ -68,7 +68,7 @@ class TestEmailRoutes:
         response = client.get("/email/ai-analysis-stats")
         if response.status_code == 302:
             pytest.skip(
-                "로그인/권한/라우트 문제로 리다이렉트 발생. 구현 후 테스트 필요."
+                "Redirect due to login/permission/layout issue. Test after implementation."
             )
         assert response.status_code == 200
         assert "statistics" in response.json
@@ -78,7 +78,7 @@ class TestEmailRoutes:
         response = client.get("/email/ai-analyzed-emails")
         if response.status_code == 302:
             pytest.skip(
-                "로그인/권한/라우트 문제로 리다이렉트 발생. 구현 후 테스트 필요."
+                "Redirect due to login/permission/layout issue. Test after implementation."
             )
         assert response.status_code == 200
         assert "data" in response.json
@@ -88,7 +88,7 @@ class TestEmailRoutes:
         response = client.get("/email/api/check-new-emails?last_seen_email_id=0")
         if response.status_code == 302:
             pytest.skip(
-                "로그인/권한/라우트 문제로 리다이렉트 발생. 구현 후 테스트 필요."
+                "Redirect due to login/permission/layout issue. Test after implementation."
             )
         assert response.status_code == 200
         assert "has_new_emails" in response.json
@@ -98,7 +98,7 @@ class TestEmailRoutes:
         response = client.post("/email/process-missed-emails")
         if response.status_code == 302:
             pytest.skip(
-                "로그인/권한/라우트 문제로 리다이렉트 발생. 구현 후 테스트 필요."
+                "Redirect due to login/permission/layout issue. Test after implementation."
             )
         assert response.status_code == 200
         assert "success" in response.json

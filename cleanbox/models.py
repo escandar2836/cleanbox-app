@@ -13,7 +13,7 @@ db = SQLAlchemy()
 
 
 class User(UserMixin, db.Model):
-    """CleanBox 사용자 모델"""
+    """CleanBox user model"""
 
     __tablename__ = "users"
 
@@ -29,11 +29,11 @@ class User(UserMixin, db.Model):
     last_activity = db.Column(db.DateTime, default=datetime.utcnow)
     first_service_access = db.Column(
         db.DateTime, default=datetime.utcnow
-    )  # 최초 서비스 접속 시간
+    )  # First service access time
     is_online = db.Column(db.Boolean, default=False)
     session_id = db.Column(db.String(255))
 
-    # 관계
+    # Relationships
     accounts = db.relationship(
         "UserAccount", backref="user", lazy=True, cascade="all, delete-orphan"
     )
@@ -49,7 +49,7 @@ class User(UserMixin, db.Model):
 
 
 class UserAccount(db.Model):
-    """사용자별 연결된 Gmail 계정 모델"""
+    """Gmail account model linked per user"""
 
     __tablename__ = "user_accounts"
 
@@ -64,7 +64,7 @@ class UserAccount(db.Model):
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )
 
-    # 관계
+    # Relationships
     tokens = db.relationship(
         "UserToken", backref="account", lazy=True, cascade="all, delete-orphan"
     )
@@ -77,7 +77,7 @@ class UserAccount(db.Model):
 
 
 class UserToken(db.Model):
-    """사용자 OAuth 토큰 모델 (암호화 저장)"""
+    """User OAuth token model (encrypted storage)"""
 
     __tablename__ = "user_tokens"
 
@@ -86,12 +86,12 @@ class UserToken(db.Model):
     account_id = db.Column(
         db.Integer, db.ForeignKey("user_accounts.id"), nullable=False
     )
-    access_token = db.Column(db.Text, nullable=False)  # 암호화된 토큰
-    refresh_token = db.Column(db.Text)  # 암호화된 토큰
+    access_token = db.Column(db.Text, nullable=False)  # Encrypted token
+    refresh_token = db.Column(db.Text)  # Encrypted token
     token_uri = db.Column(db.String(255))
     client_id = db.Column(db.String(255))
     client_secret = db.Column(db.String(255))
-    scopes = db.Column(db.Text)  # JSON 형태로 저장
+    scopes = db.Column(db.Text)  # Stored as JSON
     expires_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(
@@ -99,14 +99,14 @@ class UserToken(db.Model):
     )
 
     def set_tokens(self, credentials):
-        """토큰을 암호화하여 저장"""
+        """Encrypt and store tokens"""
         from flask import current_app
 
-        # 설정에서 키를 가져옴 (config.py에서 이미 검증됨)
+        # Get key from config (already validated in config.py)
         key = current_app.config.get("CLEANBOX_ENCRYPTION_KEY")
         cipher = Fernet(key)
 
-        # None 값 처리
+        # Handle None values
         if credentials.token:
             self.access_token = cipher.encrypt(credentials.token.encode()).decode()
         else:
@@ -130,10 +130,10 @@ class UserToken(db.Model):
             self.expires_at = credentials.expiry
 
     def get_tokens(self):
-        """암호화된 토큰을 복호화하여 반환"""
+        """Decrypt and return tokens"""
         from flask import current_app
 
-        # 설정에서 키를 가져옴 (config.py에서 이미 검증됨)
+        # Get key from config (already validated in config.py)
         key = current_app.config.get("CLEANBOX_ENCRYPTION_KEY")
         cipher = Fernet(key)
 
@@ -144,7 +144,7 @@ class UserToken(db.Model):
             "scopes": json.loads(self.scopes) if self.scopes else [],
         }
 
-        # None 값 처리
+        # Handle None values
         if self.access_token:
             tokens["token"] = cipher.decrypt(self.access_token.encode()).decode()
         else:
@@ -165,7 +165,7 @@ class UserToken(db.Model):
 
 
 class Category(db.Model):
-    """이메일 카테고리 모델"""
+    """Email category model"""
 
     __tablename__ = "categories"
 
@@ -173,7 +173,7 @@ class Category(db.Model):
     user_id = db.Column(db.String(255), db.ForeignKey("users.id"), nullable=False)
     name = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text)
-    color = db.Column(db.String(7), default="#007bff")  # HEX 색상
+    color = db.Column(db.String(7), default="#007bff")  # HEX color
     icon = db.Column(db.String(50), default="fas fa-tag")
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -181,7 +181,7 @@ class Category(db.Model):
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )
 
-    # 관계
+    # Relationships
     emails = db.relationship("Email", backref="category", lazy=True)
 
     def __repr__(self):
@@ -189,7 +189,7 @@ class Category(db.Model):
 
 
 class Email(db.Model):
-    """이메일 모델"""
+    """Email model"""
 
     __tablename__ = "emails"
 
@@ -203,7 +203,7 @@ class Email(db.Model):
     thread_id = db.Column(db.String(255))
     subject = db.Column(db.String(500))
     sender = db.Column(db.String(255))
-    recipients = db.Column(db.Text)  # JSON 형태로 저장
+    recipients = db.Column(db.Text)  # Stored as JSON
     content = db.Column(db.Text)
     summary = db.Column(db.Text)
     is_read = db.Column(db.Boolean, default=False)
@@ -220,7 +220,7 @@ class Email(db.Model):
 
 
 class WebhookStatus(db.Model):
-    """웹훅 상태 추적 모델"""
+    """Webhook status tracking model"""
 
     __tablename__ = "webhook_status"
 
@@ -232,14 +232,16 @@ class WebhookStatus(db.Model):
     topic_name = db.Column(db.String(500), nullable=False)
     is_active = db.Column(db.Boolean, default=True)
     setup_at = db.Column(db.DateTime, default=datetime.utcnow)
-    expires_at = db.Column(db.DateTime, nullable=False)  # Gmail 웹훅은 7일 후 만료
-    last_webhook_received = db.Column(db.DateTime)  # 마지막 웹훅 수신 시간
+    expires_at = db.Column(
+        db.DateTime, nullable=False
+    )  # Gmail webhook expires after 7 days
+    last_webhook_received = db.Column(db.DateTime)  # Last webhook received time
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )
 
-    # 관계
+    # Relationships
     user = db.relationship("User", backref="webhook_statuses")
     account = db.relationship("UserAccount", backref="webhook_statuses")
 
@@ -248,22 +250,22 @@ class WebhookStatus(db.Model):
 
     @property
     def is_expired(self):
-        """웹훅이 만료되었는지 확인"""
+        """Check if webhook is expired"""
         return datetime.utcnow() > self.expires_at
 
     @property
     def is_healthy(self):
-        """웹훅이 정상 작동하는지 확인"""
+        """Check if webhook is healthy"""
         if not self.is_active:
             return False
 
-        # 7일 이내에 설정되었고, 최근 24시간 내에 웹훅을 받았으면 정상
+        # If set within 7 days and received webhook in last 24 hours, it's healthy
         if self.is_expired:
             return False
 
         if self.last_webhook_received:
-            # 최근 24시간 내에 웹훅을 받았으면 정상
+            # If received webhook in last 24 hours, it's healthy
             return datetime.utcnow() - self.last_webhook_received < timedelta(hours=24)
 
-        # 웹훅을 한 번도 받지 못했으면 설정 후 1시간 이내면 정상
+        # If never received a webhook, it's healthy within 1 hour after setup
         return datetime.utcnow() - self.setup_at < timedelta(hours=1)
