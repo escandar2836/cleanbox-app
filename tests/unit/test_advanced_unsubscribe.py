@@ -14,13 +14,13 @@ class TestAdvancedUnsubscribeService:
         assert links == ["http://unsubscribe.com"]
 
     @pytest.mark.asyncio
-    @patch.object(AdvancedUnsubscribeService, "playwright_service", create=True)
+    @patch("cleanbox.email.advanced_unsubscribe.PlaywrightUnsubscribeService")
     @patch("cleanbox.email.advanced_unsubscribe.process_unsubscribe_sync")
     async def test_process_unsubscribe_advanced_success(
         self, mock_sync, mock_playwright
     ):
-        mock_playwright.extract_unsubscribe_links_with_ai_fallback = AsyncMock(
-            return_value=["http://unsubscribe.com"]
+        mock_playwright.return_value.extract_unsubscribe_links_with_ai_fallback = (
+            AsyncMock(return_value=["http://unsubscribe.com"])
         )
         mock_sync.return_value = {"success": True, "message": "ok"}
         service = AdvancedUnsubscribeService()
