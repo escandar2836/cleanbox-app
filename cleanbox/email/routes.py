@@ -55,6 +55,7 @@ def list_emails():
     """이메일 목록 페이지 (모든 계정 통합)"""
     try:
         # 세션에서 bulk action 메시지 복원
+        print(f"🔍 페이지 로드 시 세션 전체 내용: {dict(session)}")
         if "bulk_action_message" in session:
             print(f"🔍 세션에서 메시지 복원: {session['bulk_action_message']}")
             print(f"🔍 세션 타입: {session.get('bulk_action_type', 'info')}")
@@ -201,6 +202,7 @@ def category_emails(category_id):
     """카테고리별 이메일 목록 (모든 계정 통합)"""
     try:
         # 세션에서 bulk action 메시지 복원
+        print(f"🔍 페이지 로드 시 세션 전체 내용: {dict(session)}")
         if "bulk_action_message" in session:
             print(f"🔍 세션에서 메시지 복원: {session['bulk_action_message']}")
             print(f"🔍 세션 타입: {session.get('bulk_action_type', 'info')}")
@@ -784,6 +786,10 @@ def bulk_actions():
             session["bulk_action_type"] = "success" if success_count > 0 else "warning"
             print(f"🔍 세션에 메시지 저장: {result_message}")
             print(f"🔍 세션 타입: {session.get('bulk_action_type')}")
+            print(
+                f"🔍 세션 저장 직후 확인: {session.get('bulk_action_message', '없음')}"
+            )
+            print(f"🔍 세션 전체 내용: {dict(session)}")
             # URL 파라미터로도 메시지 전달 (백업용)
             redirect_url = request.referrer or url_for("email.list_emails")
             if "?" in redirect_url:
