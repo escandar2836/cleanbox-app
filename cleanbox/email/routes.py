@@ -1857,9 +1857,10 @@ def check_and_repair_webhooks_for_user(user_id: str) -> dict:
 
 
 def monitor_and_renew_webhooks():
-    """모든 사용자의 웹훅 상태를 모니터링하고 만료된 웹훅을 자동 재설정"""
+    """모든 사용자의 웹훅 상태를 모니터링하고 만료된 웹훅을 자동 재설정 + 누락 메일 자동 처리"""
     try:
         from datetime import datetime, timedelta
+        from .models import User
 
         print("🔄 웹훅 모니터링 시작...")
 
@@ -1873,6 +1874,8 @@ def monitor_and_renew_webhooks():
 
         renewed_count = 0
         failed_count = 0
+        missed_email_total = 0
+        missed_email_results = []
 
         for webhook in expiring_webhooks:
             try:
@@ -1887,6 +1890,30 @@ def monitor_and_renew_webhooks():
                     print(
                         f"✅ 웹훅 갱신 성공 - 사용자: {webhook.user_id}, 계정: {webhook.account_id}"
                     )
+
+                    # 누락 메일 처리 기준: 만료시점 이후, 없으면 서비스 가입일자
+                    from_date = None
+                    if webhook.expires_at:
+                        from_date = webhook.expires_at
+                    else:
+                        user = User.query.get(webhook.user_id)
+                        from_date = (
+                            user.first_service_access
+                            if user
+                            else datetime.utcnow() - timedelta(days=7)
+                        )
+
+                    missed_result = process_missed_emails_for_account(
+                        webhook.user_id, webhook.account_id, from_date
+                    )
+                    missed_email_total += missed_result.get("processed_count", 0)
+                    missed_email_results.append(
+                        {
+                            "user_id": webhook.user_id,
+                            "account_id": webhook.account_id,
+                            "missed_result": missed_result,
+                        }
+                    )
                 else:
                     failed_count += 1
                     print(
@@ -1900,7 +1927,7 @@ def monitor_and_renew_webhooks():
                 )
 
         print(
-            f"🎉 웹훅 모니터링 완료 - 갱신: {renewed_count}개, 실패: {failed_count}개"
+            f"🎉 웹훅 모니터링 완료 - 갱신: {renewed_count}개, 실패: {failed_count}개, 누락 메일 처리: {missed_email_total}개"
         )
 
         return {
@@ -1908,6 +1935,8 @@ def monitor_and_renew_webhooks():
             "renewed_count": renewed_count,
             "failed_count": failed_count,
             "total_checked": len(expiring_webhooks),
+            "missed_email_total": missed_email_total,
+            "missed_email_results": missed_email_results,
         }
 
     except Exception as e:

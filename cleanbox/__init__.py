@@ -78,6 +78,21 @@ def create_app(config_class=Config):
     scheduler.init_app(app)
     scheduler.start()
 
+    # 30분 주기 웹훅 모니터링 작업 등록
+    from .email.routes import monitor_and_renew_webhooks
+
+    def scheduled_webhook_monitoring():
+        with app.app_context():
+            monitor_and_renew_webhooks()
+
+    scheduler.add_job(
+        id="webhook_monitor",
+        func=scheduled_webhook_monitoring,
+        trigger="interval",
+        minutes=30,
+        replace_existing=True,
+    )
+
     # 캐시 초기화
     cache.init_app(app)
 
