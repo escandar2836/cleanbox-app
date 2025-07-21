@@ -190,16 +190,7 @@ class AdvancedUnsubscribeService:
         try:
             print(f"🔧 고급 구독해지 처리 시작")
 
-            # 1. 개인 이메일 감지
-            if self._detect_personal_email(email_content, email_headers):
-                return {
-                    "success": False,
-                    "message": "개인 이메일로 감지되어 구독해지 처리를 건너뜁니다.",
-                    "error_type": "personal_email",
-                    "is_personal_email": True,
-                }
-
-            # 2. 구독해지 링크 추출
+            # 구독해지 링크 추출
             unsubscribe_links = self.extract_unsubscribe_links(
                 email_content, email_headers
             )
@@ -214,7 +205,7 @@ class AdvancedUnsubscribeService:
 
             print(f"📝 발견된 구독해지 링크: {unsubscribe_links}")
 
-            # 3. 각 링크에 대해 구독해지 시도
+            # 각 링크에 대해 구독해지 시도
             failed_links = []
             for i, link in enumerate(unsubscribe_links):
                 print(f"📝 링크 {i + 1}/{len(unsubscribe_links)} 처리: {link}")

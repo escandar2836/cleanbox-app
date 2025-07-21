@@ -1041,9 +1041,7 @@ def bulk_actions():
                             "message", "구독해지 처리에 실패했습니다."
                         )
 
-                        if error_type == "personal_email":
-                            error_message = "개인 이메일로 감지됨"
-                        elif error_type == "already_unsubscribed":
+                        if error_type == "already_unsubscribed":
                             already_unsubscribed_senders.append(sender)
                             continue
 
@@ -1101,7 +1099,6 @@ def bulk_actions():
                         "processing_error": "처리 오류",
                         "network_error": "네트워크 오류",
                         "timeout_error": "시간 초과",
-                        "personal_email": "개인 이메일",
                         "unknown": "알 수 없는 오류",
                     }.get(sender_info["error_type"], sender_info["error_type"])
 
@@ -1229,7 +1226,6 @@ def unsubscribe_email(email_id):
                         "error_details": error_details,
                         "steps": result.get("steps", []),
                         "email_id": email_id,
-                        "is_personal_email": result.get("is_personal_email", False),
                     }
                 ),
                 400,

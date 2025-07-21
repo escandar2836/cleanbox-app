@@ -504,7 +504,6 @@ class GmailService:
                 # 에러 타입과 상세 정보를 결과에 추가
                 result["error_type"] = result.get("error_type", "unknown")
                 result["error_details"] = result.get("error_details", "")
-                result["is_personal_email"] = result.get("is_personal_email", False)
                 if "failed_links" in result:
                     result["failed_links"] = result["failed_links"]
 
