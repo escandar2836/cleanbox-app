@@ -321,16 +321,16 @@ class PlaywrightUnsubscribeService:
         # 2. Search for unsubscribe link patterns in email body
         print(f"📝 Pattern search in email body started")
         patterns = [
-            r'https?://[^\s<>"]*unsubscribe[^\s<>"]*',
-            r'https?://[^\s<>"]*opt-out[^\s<>"]*',
-            r'https?://[^\s<>"]*remove[^\s<>"]*',
-            r'https?://[^\s<>"]*cancel[^\s<>"]*',
-            r'https?://[^\s<>"]*subscription[^\s<>"]*',
-            r'https?://[^\s<>"]*email[^\s<>"]*preferences[^\s<>"]*',
-            r'https?://[^\s<>"]*manage[^\s<>"]*subscription[^\s<>"]*',
-            r'https?://[^\s<>"]*preferences[^\s<>"]*',
-            r'https?://[^\s<>"]*settings[^\s<>"]*',
-            r'https?://[^\s<>"]*account[^\s<>"]*',
+            r"https?://[^\s<>\"]*unsubscribe[^\s<>\"]*",
+            r"https?://[^\s<>\"]*opt-out[^\s<>\"]*",
+            r"https?://[^\s<>\"]*remove[^\s<>\"]*",
+            r"https?://[^\s<>\"]*cancel[^\s<>\"]*",
+            r"https?://[^\s<>\"]*subscription[^\s<>\"]*",
+            r"https?://[^\s<>\"]*email[^\s<>\"]*preferences[^\s<>\"]*",
+            r"https?://[^\s<>\"]*manage[^\s<>\"]*subscription[^\s<>\"]*",
+            r"https?://[^\s<>\"]*preferences[^\s<>\"]*",
+            r"https?://[^\s<>\"]*settings[^\s<>\"]*",
+            r"https?://[^\s<>\"]*account[^\s<>\"]*",
         ]
 
         for i, pattern in enumerate(patterns):
@@ -366,7 +366,7 @@ class PlaywrightUnsubscribeService:
 
             generic_texts = ["여기", "click", "link", "here", "보기", "확인"]
             found = False
-            # 1. 일반적 텍스트라면 부모/조부모 텍스트까지 합쳐서 검사
+            # 1. If the anchor text is generic, check parent/grandparent text for keywords
             if link_text in generic_texts:
                 parent_text = ""
                 if link.parent:
@@ -380,7 +380,7 @@ class PlaywrightUnsubscribeService:
                         f"📝 Unsubscribe link found in HTML (parent context): {link['href']} (parent context matched)"
                     )
                     found = True
-            # 2. 기존 방식: href나 텍스트에 키워드가 있으면 추가
+            # 2. If keyword is in href or text, add as unsubscribe link
             if not found:
                 for keyword in unsubscribe_keywords:
                     if keyword in href or keyword in link_text:
@@ -3136,7 +3136,7 @@ Response format:
     async def extract_unsubscribe_links_with_ai_judgement(
         self, email_content: str, email_headers: Dict = None, user_email: str = None
     ) -> List[str]:
-        """AI를 이용해 모든 a태그 후보의 구독 해제 여부를 판단한다."""
+        """Use AI to judge whether each anchor tag is an unsubscribe link."""
         from bs4 import BeautifulSoup
 
         soup = BeautifulSoup(email_content, "html.parser")
@@ -3161,10 +3161,10 @@ Response format:
         if not candidates:
             return []
         prompt = (
-            "아래는 이메일 본문에서 추출한 a태그 후보들입니다. 각 후보가 구독 해제(수신거부, opt-out, unsubscribe) 링크인지 판단해 주세요. "
-            "각 항목별로 {href, is_unsubscribe, reason} 형태의 JSON 배열로 답변해 주세요. "
-            "is_unsubscribe는 true/false로, reason에는 근거를 간단히 적어주세요.\n"
-            "후보 목록:\n"
+            "Below are anchor tag candidates extracted from the email body. Please judge whether each candidate is an unsubscribe (opt-out) link. "
+            "For each item, respond as a JSON array in the form {href, is_unsubscribe, reason}. "
+            "is_unsubscribe should be true/false, and reason should briefly state the basis.\n"
+            "Candidates:\n"
             + "\n".join(
                 [
                     f"- href: {c['href']}, text: {c['text']}, parent: {c['parent_text']}, grandparent: {c['grandparent_text']}"
@@ -3172,16 +3172,18 @@ Response format:
                 ]
             )
         )
-        # OpenAI API 호출 (기존 _call_openai_api 활용)
+        # Call OpenAI API (reuse _call_openai_api)
         ai_response = await self._call_openai_api(prompt)
-        # 응답 파싱
+        # Parse response
         try:
-            # JSON 배열 형태로 파싱
+            # Parse as JSON array
             result = json.loads(ai_response)
             links = [item["href"] for item in result if item.get("is_unsubscribe")]
             return links
         except Exception as e:
-            print(f"⚠️ AI 링크 판별 응답 파싱 실패: {str(e)} | 원본: {ai_response}")
+            print(
+                f"⚠️ Failed to parse AI link judgement response: {str(e)} | Raw: {ai_response}"
+            )
             return []
 
 
@@ -3196,7 +3198,7 @@ def process_unsubscribe_sync(unsubscribe_url: str, user_email: str = None) -> Di
 
     if loop and loop.is_running():
         raise RuntimeError(
-            "process_unsubscribe_sync는 이미 실행 중인 이벤트 루프 내에서 호출할 수 없습니다. Flask 등 동기 환경에서만 사용하세요. 비동기 환경에서는 직접 await service.process_unsubscribe_with_playwright_ai(...)를 호출하세요."
+            "process_unsubscribe_sync cannot be called from a running event loop. Use this only in synchronous environments like Flask. In async environments, directly await service.process_unsubscribe_with_playwright_ai(...)."
         )
     else:
         return asyncio.run(
