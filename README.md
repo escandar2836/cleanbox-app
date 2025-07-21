@@ -1,166 +1,142 @@
-# CleanBox - 이메일 관리 및 구독 해지 자동화 서비스
+# CleanBox: AI 이메일 분류 및 구독해지 자동화
 
-CleanBox는 이메일 관리와 함께 웹 스크래핑을 통한 구독 해지 자동화 기능을 제공하는 Flask 기반 웹 애플리케이션입니다.
+CleanBox는 Gmail과 연동하여 AI가 이메일을 자동 분류·요약하고, 구독해지까지 지원하는 통합 이메일 관리 서비스입니다.
 
-## 🚀 주요 기능
+---
 
-### 이메일 관리
-- Gmail API를 통한 이메일 수신 및 처리
-- AI 기반 이메일 분류 및 카테고리 관리
-- 웹훅을 통한 실시간 이메일 알림
-- 구독 해지 이메일 자동 감지
+## 🏗️ 시스템 아키텍처
 
-### 구독 해지 자동화
-- **Playwright** 기반 headless 브라우저 자동화 (메모리 최적화)
-- 이메일에서 구독해지 링크 자동 추출
-- JavaScript 지원으로 동적 콘텐츠 처리
-- AI 연동으로 지능형 페이지 분석
-- 다단계 구독해지 플로우 지원
-- 브라우저 재사용으로 메모리 효율성 향상
+```mermaid
+flowchart TD
+    subgraph "사용자"
+        A1["Google 로그인"]
+        A2["카테고리 추가/관리"]
+        A3["이메일 동기화"]
+        A4["카테고리별 이메일/요약 확인"]
+        A5["이메일 선택/삭제/구독해지"]
+        A6["이메일 상세 보기"]
+    end
+    subgraph "CleanBox 백엔드"
+        B1["OAuth 인증 및 계정 관리"]
+        B2["카테고리 DB 관리"]
+        B3["Gmail API 연동"]
+        B4["AI 이메일 분류/요약"]
+        B5["이메일 DB 저장"]
+        B6["Gmail 아카이브"]
+        B7["구독해지 자동화 (Playwright+AI)"]
+    end
+    A1-->|"OAuth"|B1
+    A2-->|"카테고리 추가/수정"|B2
+    A3-->|"동기화 요청"|B3
+    B3-->|"신규 이메일"|B5
+    B5-->|"분류/요약"|B4
+    B4-->|"카테고리 지정/요약"|B5
+    B5-->|"DB 저장"|B2
+    B5-->|"아카이브"|B6
+    A4-->|"카테고리별 목록"|B2
+    B2-->|"이메일 목록"|A4
+    A5-->|"구독해지 요청"|B7
+    B7-->|"Playwright+AI"|B3
+    A6-->|"상세 보기"|B5
+    B5-->|"본문/요약"|A6
+```
 
-## 🛠️ 기술 스택
+---
 
-- **Backend**: Flask, Python 3.11
-- **Database**: PostgreSQL
-- **Browser Automation**: Playwright
-- **Deployment**: Docker, Render
-- **Frontend**: Bootstrap, JavaScript
+## 주요 기능
 
-## 📦 설치 및 실행
+### 1. Google OAuth 로그인 및 멀티 계정 지원
+- Google OAuth로 안전하게 로그인
+- 여러 Gmail 계정 연동 및 전환 가능
 
-### 로컬 개발 환경
+### 2. 카테고리 관리
+- 사용자 정의 카테고리(이름/설명) 추가·수정·삭제
+- 카테고리별로 이메일 자동 분류
 
-1. **저장소 클론**
+### 3. AI 기반 이메일 분류 및 요약
+- OpenAI API를 활용해 이메일 본문/제목/발신자 기반으로 카테고리 분류
+- 각 이메일에 대해 AI가 요약 생성
+
+### 4. 이메일 동기화 및 아카이브
+- Gmail API로 신규 이메일 실시간 동기화 (웹훅/수동 동기화)
+- 분류/요약 후 Gmail에서 자동 아카이브 처리
+
+### 5. 카테고리별 이메일 목록/요약/상세
+- 카테고리 클릭 시 해당 이메일 목록 및 AI 요약 제공
+- 개별 이메일 클릭 시 원본 본문/요약/메타데이터 확인
+
+### 6. 대량 작업 및 구독해지 자동화
+- 여러 이메일 선택 후 삭제/구독해지 일괄 처리
+- 구독해지: 이메일 내 "unsubscribe" 링크 탐색 → Playwright+AI로 실제 구독해지 페이지 자동 방문 및 폼 처리
+
+---
+
+## 기술 스택
+- **Backend**: Python, Flask, SQLAlchemy
+- **AI**: OpenAI API (GPT)
+- **Email**: Google Gmail API, Webhook
+- **Browser Automation**: Playwright (headless, AI agent)
+- **DB**: PostgreSQL
+- **Frontend**: Bootstrap, Jinja2
+- **배포**: Docker, Render
+
+---
+
+## 설치 및 실행
+
+1. 저장소 클론
 ```bash
 git clone https://github.com/your-username/cleanbox-app.git
 cd cleanbox-app
 ```
-
-2. **가상환경 생성 및 활성화**
+2. 가상환경 및 의존성 설치
 ```bash
 python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-```
-
-3. **의존성 설치**
-```bash
-# 프로덕션용
+source venv/bin/activate
 pip install -r requirements.txt
-
-# 개발용 (테스트 포함)
-pip install -r requirements-dev.txt
 ```
-
-4. **환경 변수 설정**
+3. 환경변수 설정
 ```bash
 cp env.example .env
-# .env 파일을 편집하여 필요한 환경 변수 설정
+# .env 파일 편집 (Google, OpenAI, DB 등)
 ```
-
-5. **데이터베이스 초기화**
+4. 실행
 ```bash
 python app.py
 ```
 
-### Docker를 통한 실행
-
-1. **Docker 이미지 빌드**
+### Docker
 ```bash
 docker build -t cleanbox-app .
-```
-
-2. **컨테이너 실행**
-```bash
 docker run -p 8000:8000 cleanbox-app
 ```
 
-## 🌐 사용 방법
+---
 
-### 웹 인터페이스
-
-1. 브라우저에서 `http://localhost:8000` 접속
-2. 로그인 후 대시보드에서 이메일 관리 기능 사용
-3. 구독 해지 기능은 이메일 카테고리에서 자동 처리
-
-### 이메일 기반 구독 해지
-
-1. **이메일 수신**: Gmail API를 통해 이메일 수신
-2. **자동 분류**: AI가 이메일을 카테고리별로 분류
-3. **구독해지 감지**: 구독해지 링크가 포함된 이메일 자동 감지
-4. **자동 처리**: Playwright를 사용한 자동 구독해지 실행
-
-## 🔧 구독 해지 시스템
-
-### Playwright 기반 시스템
-- **범용 처리**: 이메일에서 추출한 구독해지 링크 처리
-- **JavaScript 지원**: 동적 콘텐츠 및 SPA 처리
-- **AI 연동**: OpenAI API를 통한 지능형 페이지 분석
-- **다단계 처리**: 복잡한 구독해지 플로우 지원
-- **에러 처리**: 실패 시 재시도 및 로깅
-- **메모리 최적화**: 브라우저 재사용으로 메모리 사용량 50-70% 감소
-
-### 주요 기능
-- **링크 추출**: 이메일 헤더 및 본문에서 구독해지 링크 자동 추출
-- **페이지 분석**: AI를 통한 페이지 구조 분석
-- **자동 클릭**: 구독해지 버튼/링크 자동 클릭
-- **폼 처리**: 이메일 입력 및 폼 제출 자동화
-- **결과 확인**: 구독해지 성공/실패 결과 확인
-
-## 📊 모니터링 및 로깅
-
-- 구독해지 시도 및 결과 로깅
-- 성공률 및 처리 시간 통계
-- 실패 케이스 분석
-- 시스템 상태 모니터링
-
-## 🚀 배포
-
-### Render 배포
-
-1. **Render 대시보드에서 새 서비스 생성**
-2. **GitHub 저장소 연결**
-3. **환경 변수 설정**
-4. **Docker 이미지 자동 빌드 및 배포**
-
-### 환경 변수
-
-```bash
-# 필수 환경 변수
-GOOGLE_CLIENT_ID=your-google-client-id
-GOOGLE_CLIENT_SECRET=your-google-client-secret
-OPENAI_API_KEY=your-openai-api-key
-DATABASE_URL=your-postgresql-url
-
-# 선택적 환경 변수
-CLEANBOX_SECRET_KEY=your-secret-key
-CLEANBOX_ENCRYPTION_KEY=your-encryption-key
+## 환경 변수 예시
+```env
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+OPENAI_API_KEY=...
+DATABASE_URL=...
+CLEANBOX_SECRET_KEY=...
+CLEANBOX_ENCRYPTION_KEY=...
 ```
 
-## 🧪 테스트
+---
 
+## 테스트
 ```bash
-# 전체 테스트 실행
 pytest
-
-# 특정 테스트 실행
-pytest tests/test_unsubscribe.py
-
-# 커버리지 리포트
-pytest --cov=cleanbox --cov-report=html
 ```
 
-## 📝 라이센스
+---
 
+## 라이선스
 MIT License
 
-## 🤝 기여
+---
 
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
-
-## 📞 지원
-
-문제가 발생하거나 질문이 있으시면 이슈를 생성해주세요.
+## 문의/기여
+- 이슈/PR 환영
+- 궁금한 점은 GitHub Issue로 남겨주세요.
