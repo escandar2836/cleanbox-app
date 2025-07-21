@@ -44,11 +44,14 @@ def load_user(user_id):
         return None
 
 
-def create_app(config_class=Config):
+def create_app(config_class=Config, testing=False):
     """CleanBox Flask 애플리케이션 팩토리"""
 
     app = Flask(__name__)
     app.config.from_object(config_class)
+    if testing:
+        app.config["TESTING"] = True
+        app.config["WTF_CSRF_ENABLED"] = False  # 테스트 시 CSRF 비활성화(필요시)
 
     # 로깅 설정
     if not app.debug and not app.testing:
@@ -74,24 +77,25 @@ def create_app(config_class=Config):
     # 로그인 매니저 초기화
     login_manager.init_app(app)
 
-    # 스케줄러 초기화
-    scheduler.init_app(app)
-    scheduler.start()
+    # 스케줄러 초기화 (테스트 환경에서는 건너뜀)
+    if not testing:
+        scheduler.init_app(app)
+        scheduler.start()
 
-    # 30분 주기 웹훅 모니터링 작업 등록
-    from .email.routes import monitor_and_renew_webhooks
+        # 30분 주기 웹훅 모니터링 작업 등록
+        from .email.routes import monitor_and_renew_webhooks
 
-    def scheduled_webhook_monitoring():
-        with app.app_context():
-            monitor_and_renew_webhooks()
+        def scheduled_webhook_monitoring():
+            with app.app_context():
+                monitor_and_renew_webhooks()
 
-    scheduler.add_job(
-        id="webhook_monitor",
-        func=scheduled_webhook_monitoring,
-        trigger="interval",
-        minutes=30,
-        replace_existing=True,
-    )
+        scheduler.add_job(
+            id="webhook_monitor",
+            func=scheduled_webhook_monitoring,
+            trigger="interval",
+            minutes=30,
+            replace_existing=True,
+        )
 
     # 캐시 초기화
     cache.init_app(app)

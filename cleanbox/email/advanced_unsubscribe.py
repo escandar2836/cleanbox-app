@@ -73,7 +73,7 @@ class AdvancedUnsubscribeService:
         """유효한 구독해지 URL인지 확인"""
         try:
             parsed = urlparse(url)
-            return parsed.scheme in ["http", "https"] and parsed.netloc
+            return parsed.scheme in ["http", "https"] and bool(parsed.netloc)
         except:
             return False
 
