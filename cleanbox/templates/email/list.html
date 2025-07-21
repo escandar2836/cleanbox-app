@@ -471,8 +471,13 @@ function bulkUnsubscribe() {
     if (emailIds.length === 0) return;
     
     if (confirm(`${emailIds.length}개의 이메일에서 구독 해지를 시도하시겠습니까?`)) {
+        // 구독 해지는 처리 시간이 길어서 modal을 먼저 표시
         showBulkProcessingModal('구독 해지', emailIds.length);
-        performBulkAction('unsubscribe', emailIds);
+        
+        // 약간의 지연 후 bulk action 실행 (modal이 완전히 표시되도록)
+        setTimeout(() => {
+            performBulkAction('unsubscribe', emailIds);
+        }, 100);
     }
 }
 
@@ -487,7 +492,14 @@ function showBulkProcessingModal(action, totalCount) {
     const totalCountElement = document.getElementById('totalEmailCount');
     
     title.textContent = `${action} 중`;
-    message.textContent = `${totalCount}개의 이메일을 ${action}하고 있습니다...`;
+    
+    // 구독 해지인 경우 더 자세한 메시지 표시
+    if (action === '구독 해지') {
+        message.textContent = `${totalCount}개의 이메일에서 구독 해지 링크를 찾아 처리하고 있습니다...`;
+    } else {
+        message.textContent = `${totalCount}개의 이메일을 ${action}하고 있습니다...`;
+    }
+    
     totalCountElement.textContent = totalCount;
     
     modal.show();
