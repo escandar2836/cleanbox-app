@@ -1184,6 +1184,7 @@ Page title: {title}
 Page URL: {current_url}
 Page content: {page_text[:2000]}  # Using only the first 2000 characters
 
+For any message in a language other than English, translate it to English before matching with the "already unsubscribed" or "unsubscribe success" patterns.
 The following messages indicate "already unsubscribed":
 - "You are not subscribed to this newsletter"
 - "Already unsubscribed"
