@@ -60,30 +60,20 @@ def setup_scheduler_jobs():
 
 def main() -> None:
     """메인 애플리케이션 실행 함수."""
-    # 전역 app 사용 (새로 생성하지 않음)
-    # app = create_app()  # 제거 - 전역 app 사용
-    # init_db(app)        # 제거 - 전역에서 이미 실행됨
+    app = create_app()
 
-    # 스케줄러 작업 설정 (전역에서 이미 설정됨)
-    # with app.app_context():
-    #     setup_scheduler_jobs()  # 제거 - 전역에서 이미 실행됨
+    # 개발 환경에서 DB 초기화
+    init_db(app)
+
+    # 스케줄러 작업 설정
+    with app.app_context():
+        setup_scheduler_jobs()
 
     # 환경변수에서 포트 설정 읽기
     port = get_port()
 
     # Flask 서버 실행 (프로덕션에서는 debug=False)
     app.run(debug=False, host="0.0.0.0", port=port)
-
-
-# Gunicorn을 위한 app 변수 (전역)
-app = create_app()
-
-# DB 초기화 (전역에서)
-init_db(app)
-
-# 스케줄러 작업 설정 (app 생성 후)
-with app.app_context():
-    setup_scheduler_jobs()
 
 
 if __name__ == "__main__":
