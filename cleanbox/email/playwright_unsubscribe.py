@@ -424,14 +424,14 @@ class PlaywrightUnsubscribeService:
                 await page.goto(unsubscribe_url, wait_until="domcontentloaded")
                 await page.wait_for_timeout(2000)  # 페이지 로딩 대기
 
-                # 2단계: 이미 구독해지됨 상태 확인
-                print(f"📝 2단계: 이미 구독해지됨 상태 확인")
-                if await self._check_already_unsubscribed(page):
+                # 2단계: 구독해지 성공 상태 확인
+                print(f"📝 2단계: 구독해지 성공 상태 확인")
+                if await self._check_unsubscribe_success(page):
                     await self.cleanup_page()
                     return {
                         "success": True,
-                        "message": "이미 구독해지된 상태입니다.",
-                        "error_type": "already_unsubscribed",
+                        "message": "구독해지가 완료되었습니다.",
+                        "error_type": "unsubscribe_success",
                         "processing_time": time.time() - start_time,
                     }
 
@@ -458,14 +458,14 @@ class PlaywrightUnsubscribeService:
                     await self.cleanup_page()
                     return self._finalize_success(ai_result, start_time)
 
-                # 6단계: 최종 이미 구독해지됨 상태 확인
-                print(f"📝 6단계: 최종 이미 구독해지됨 상태 확인")
-                if await self._check_already_unsubscribed(page):
+                # 6단계: 최종 구독해지 성공 상태 확인
+                print(f"📝 6단계: 최종 구독해지 성공 상태 확인")
+                if await self._check_unsubscribe_success(page):
                     await self.cleanup_page()
                     return {
                         "success": True,
-                        "message": "이미 구독해지된 상태입니다.",
-                        "error_type": "already_unsubscribed",
+                        "message": "구독해지가 완료되었습니다.",
+                        "error_type": "unsubscribe_success",
                         "processing_time": time.time() - start_time,
                     }
 
@@ -593,7 +593,7 @@ class PlaywrightUnsubscribeService:
                                     )
 
                                 # 구독해지 완료 확인
-                                if await self._check_already_unsubscribed(page):
+                                if await self._check_unsubscribe_success(page):
                                     return {
                                         "success": True,
                                         "message": "기존 방식 클릭 후 구독해지 완료 확인",
@@ -1092,16 +1092,17 @@ JSON 형식으로 답변해주세요:
             print(f"⚠️ 성공 지표 확인 실패: {str(e)}")
             return False
 
-    async def _check_already_unsubscribed(self, page: Page) -> bool:
-        """이미 구독해지된 상태인지 확인"""
+    async def _check_unsubscribe_success(self, page: Page) -> bool:
+        """구독해지 성공 상태인지 확인 (이미 구독해지됨 + 구독해지 성공)"""
         try:
             content = await page.content()
             content_lower = content.lower()
             current_url = page.url
             title = await page.title()
 
-            # 이미 구독해지됨을 나타내는 지표들
-            already_unsubscribed_indicators = [
+            # 기본 키워드 체크 (빠른 필터링)
+            basic_indicators = [
+                # 이미 구독해지됨 지표
                 "already unsubscribed",
                 "already cancelled",
                 "already removed",
@@ -1113,31 +1114,113 @@ JSON 형식으로 답변해주세요:
                 "이미 해지",
                 "이미 수신거부",
                 "이미 수신취소",
-                "이미 해지됨",
+                "이미 구독해지됨",
                 "이미 취소됨",
+                "이미 해지됨",
                 "이미 수신거부됨",
                 "이미 수신취소됨",
-                "이미 구독해지됨",
-                "이미 구독취소됨",
                 "이미 구독해지되었습니다",
                 "이미 취소되었습니다",
                 "이미 해지되었습니다",
                 "이미 수신거부되었습니다",
                 "이미 수신취소되었습니다",
+                # 구독해지 성공 지표
+                "unsubscribe successful",
+                "successfully unsubscribed",
+                "unsubscribe completed",
+                "you have been unsubscribed",
+                "구독해지가 완료되었습니다",
+                "구독해지 성공",
+                "구독해지 완료",
+                "구독이 해지되었습니다",
+                "구독해지 처리 완료",
+                "unsubscribe processed",
             ]
 
-            # URL, 제목, 내용에서 이미 구독해지됨 지표 확인
+            # URL, 제목, 내용에서 기본 지표 확인
             all_text = f"{current_url} {title} {content_lower}"
 
-            for indicator in already_unsubscribed_indicators:
+            for indicator in basic_indicators:
                 if indicator in all_text:
-                    print(f"📝 이미 구독해지됨 지표 발견: {indicator}")
+                    print(f"📝 구독해지 성공 지표 발견: {indicator}")
                     return True
 
-            return False
+            # AI 기반 분석 (기본 키워드가 없는 경우)
+            print(f"📝 AI 기반 구독해지 상태 분석 시작")
+
+            # 페이지 텍스트 추출 (HTML 태그 제거)
+            from bs4 import BeautifulSoup
+
+            soup = BeautifulSoup(content, "html.parser")
+            page_text = soup.get_text(separator=" ", strip=True)
+
+            # AI 프롬프트 생성
+            ai_prompt = f"""
+다음 웹페이지의 내용을 분석하여 사용자의 구독해지 상태를 판단해주세요.
+
+페이지 제목: {title}
+페이지 URL: {current_url}
+페이지 내용: {page_text[:2000]}  # 처음 2000자만 사용
+
+다음과 같은 메시지들이 있으면 "이미 구독해지됨"으로 판단합니다:
+- "현재 이메일은 구독중인 이메일이 아닙니다"
+- "이미 구독해지된 상태입니다"
+- "You are not subscribed to this newsletter"
+- "Already unsubscribed"
+- "구독 중인 이메일이 아닙니다"
+- "이미 구독해지되었습니다"
+- "구독 상태가 아닙니다"
+- "not subscribed"
+- "no longer subscribed"
+- "subscription not found"
+- "이메일이 구독 목록에 없습니다"
+- "구독 정보를 찾을 수 없습니다"
+
+다음과 같은 메시지들이 있으면 "구독해지 성공"으로 판단합니다:
+- "구독해지가 완료되었습니다"
+- "Unsubscribe successful"
+- "Successfully unsubscribed"
+- "구독해지 성공"
+- "구독해지 완료"
+- "Unsubscribe completed"
+- "You have been unsubscribed"
+- "구독이 해지되었습니다"
+- "구독해지 처리 완료"
+- "Unsubscribe processed"
+
+답변은 다음 형식으로만 해주세요:
+- 이미 구독해지됨: "ALREADY_UNSUBSCRIBED"
+- 구독해지 성공: "SUCCESS"
+- 구독해지 실패: "FAILED"
+- 판단 불가: "UNKNOWN"
+
+답변:
+"""
+
+            # AI API 호출
+            try:
+                ai_response = await self._call_simple_ai_api(ai_prompt)
+                print(f"📝 AI 응답: {ai_response}")
+
+                if "ALREADY_UNSUBSCRIBED" in ai_response.upper():
+                    print(f"📝 AI가 이미 구독해지됨으로 판단")
+                    return True
+                elif "SUCCESS" in ai_response.upper():
+                    print(f"📝 AI가 구독해지 성공으로 판단")
+                    return True
+                elif "FAILED" in ai_response.upper():
+                    print(f"📝 AI가 구독해지 실패로 판단")
+                    return False
+                else:
+                    print(f"📝 AI가 판단 불가로 응답")
+                    return False
+
+            except Exception as ai_error:
+                print(f"⚠️ AI 분석 실패: {str(ai_error)}")
+                return False
 
         except Exception as e:
-            print(f"⚠️ 이미 구독해지됨 확인 실패: {str(e)}")
+            print(f"⚠️ 구독해지 상태 확인 실패: {str(e)}")
             return False
 
     async def _create_temp_page_from_response(
@@ -1197,7 +1280,7 @@ JSON 형식으로 답변해주세요:
         try:
             temp_page = await self._parse_post_response(response)
             if temp_page:
-                return await self._check_already_unsubscribed(temp_page)
+                return await self._check_unsubscribe_success(temp_page)
             return False
         finally:
             if temp_page:
@@ -1221,7 +1304,7 @@ JSON 형식으로 답변해주세요:
                 print(f"📝 URL 변경 감지: {before_url} → {after_url}")
 
                 # 새 페이지에서 구독해지 완료 확인
-                if await self._check_already_unsubscribed(page):
+                if await self._check_unsubscribe_success(page):
                     return {
                         "success": True,
                         "message": "페이지 이동 후 구독해지 완료 확인",
@@ -1242,7 +1325,7 @@ JSON 형식으로 답변해주세요:
                 print(f"📝 제목 변경 감지: {before_title} → {after_title}")
 
                 # 제목 변경 후 구독해지 완료 확인
-                if await self._check_already_unsubscribed(page):
+                if await self._check_unsubscribe_success(page):
                     return {
                         "success": True,
                         "message": "제목 변경 후 구독해지 완료 확인",
@@ -1251,7 +1334,7 @@ JSON 형식으로 답변해주세요:
                     }
 
             # 페이지 이동이 없었지만 구독해지 완료 확인
-            if await self._check_already_unsubscribed(page):
+            if await self._check_unsubscribe_success(page):
                 return {
                     "success": True,
                     "message": "페이지 이동 없이 구독해지 완료 확인",
@@ -1284,7 +1367,7 @@ JSON 형식으로 답변해주세요:
             print("📝 네트워크 요청 완료 대기 성공")
 
             # 구독해지 완료 확인
-            if await self._check_already_unsubscribed(page):
+            if await self._check_unsubscribe_success(page):
                 return {
                     "success": True,
                     "message": "네트워크 요청 완료 후 구독해지 완료 확인",
@@ -1302,7 +1385,7 @@ JSON 형식으로 답변해주세요:
             # 네트워크 대기 실패 시 기본 대기로 전환
             await page.wait_for_timeout(3000)
 
-            if await self._check_already_unsubscribed(page):
+            if await self._check_unsubscribe_success(page):
                 return {
                     "success": True,
                     "message": "기본 대기 후 구독해지 완료 확인",
@@ -1427,7 +1510,7 @@ JSON 형식으로 답변해주세요:
                                     await page.wait_for_timeout(3000)
 
                                     # 구독해지 완료 확인
-                                    if await self._check_already_unsubscribed(page):
+                                    if await self._check_unsubscribe_success(page):
                                         print("✅ 이메일 확인 후 구독해지 완료")
                                         return True
 
@@ -1698,7 +1781,7 @@ JSON 형식으로 답변해주세요:
                 print("📝 2단계: 완료 페이지 확인")
                 await page.wait_for_timeout(3000)  # 페이지 로딩 대기
 
-                final_result = await self._check_already_unsubscribed(page)
+                final_result = await self._check_unsubscribe_success(page)
                 if final_result:
                     steps.append("2단계 완료")
                     print("✅ 2단계 완료")
@@ -1788,7 +1871,7 @@ JSON 형식으로 답변해주세요:
                             print(f"📝 POST 요청 완료: {response.status}")
 
                             if response.status in [200, 201, 302]:
-                                # 응답 내용을 임시 페이지로 파싱하여 _check_already_unsubscribed 사용
+                                # 응답 내용을 임시 페이지로 파싱하여 _check_unsubscribe_success 사용
                                 if await self._check_response_with_temp_page(response):
                                     return {
                                         "success": True,
@@ -1816,7 +1899,7 @@ JSON 형식으로 답변해주세요:
                             await page.wait_for_timeout(2000)
 
                             # 구독해지 완료 확인
-                            if await self._check_already_unsubscribed(page):
+                            if await self._check_unsubscribe_success(page):
                                 return {
                                     "success": True,
                                     "message": "Form Action GET 후 구독해지 완료 확인",
@@ -1854,7 +1937,7 @@ JSON 형식으로 답변해주세요:
             # 1단계: 이메일 확인 요구 처리
             if await self._handle_email_confirmation(page, user_email):
                 # 이메일 입력 후 구독해지 완료 확인
-                if await self._check_already_unsubscribed(page):
+                if await self._check_unsubscribe_success(page):
                     return {
                         "success": True,
                         "message": "이메일 확인 후 구독해지 완료",
@@ -1889,7 +1972,7 @@ JSON 형식으로 답변해주세요:
 
                         # SPA 네비게이션 감지
                         if await self._detect_spa_navigation(page, before_url):
-                            if await self._check_already_unsubscribed(page):
+                            if await self._check_unsubscribe_success(page):
                                 return {
                                     "success": True,
                                     "message": "SPA 네비게이션 후 구독해지 완료",
@@ -1956,7 +2039,7 @@ JSON 형식으로 답변해주세요:
             # 4단계: 복잡한 JavaScript 로직 실행
             if await self._execute_complex_javascript(page):
                 # 복잡한 JavaScript 실행 후 구독해지 완료 확인
-                if await self._check_already_unsubscribed(page):
+                if await self._check_unsubscribe_success(page):
                     return {
                         "success": True,
                         "message": "복잡한 JavaScript 실행 후 구독해지 완료",
@@ -2095,7 +2178,7 @@ JSON 형식으로 답변해주세요:
 
                                 # SPA 네비게이션 감지
                                 if await self._detect_spa_navigation(page, before_url):
-                                    if await self._check_already_unsubscribed(page):
+                                    if await self._check_unsubscribe_success(page):
                                         return {
                                             "success": True,
                                             "message": "SPA 네비게이션 후 구독해지 완료",
@@ -2299,7 +2382,7 @@ JSON 형식으로 답변해주세요:
                                     )
 
                                 # 구독해지 완료 확인
-                                if await self._check_already_unsubscribed(page):
+                                if await self._check_unsubscribe_success(page):
                                     return {
                                         "success": True,
                                         "message": "개선된 선택자 클릭 후 구독해지 완료 확인",
@@ -2383,7 +2466,7 @@ JSON 형식으로 답변해주세요:
                             await page.wait_for_timeout(5000)
 
                         # 구독해지 완료 확인
-                        if await self._check_already_unsubscribed(page):
+                        if await self._check_unsubscribe_success(page):
                             return {
                                 "success": True,
                                 "message": "링크 클릭 후 구독해지 완료 확인",
