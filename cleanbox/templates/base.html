@@ -127,6 +127,12 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
     
     <script>
+    // 전역 소켓 연결 변수
+    let globalSocket = null;
+    let reconnectAttempts = 0;
+    const maxReconnectAttempts = 5;
+    const reconnectDelay = 3000; // 3초
+    
     // Flash 메시지 자동 제거 함수
     function hideFlashMessages() {
         const flashMessages = document.querySelectorAll('.flash-message-container .alert');
@@ -142,8 +148,188 @@
         modal.show();
     }
     
+    // 브라우저 알림 권한 요청
+    function requestNotificationPermission() {
+        if ('Notification' in window) {
+            Notification.requestPermission().then(function(permission) {
+                console.log('알림 권한:', permission);
+            });
+        }
+    }
+    
+    // 브라우저 알림 표시
+    function showBrowserNotification(title, body, icon = null) {
+        if ('Notification' in window && Notification.permission === 'granted') {
+            const notification = new Notification(title, {
+                body: body,
+                icon: icon || '/static/favicon.ico',
+                badge: '/static/favicon.ico',
+                tag: 'cleanbox-notification'
+            });
+            
+            // 알림 클릭 시 페이지 새로고침
+            notification.onclick = function() {
+                window.focus();
+                location.reload();
+                notification.close();
+            };
+            
+            // 5초 후 자동으로 닫기
+            setTimeout(() => {
+                notification.close();
+            }, 5000);
+        }
+    }
+    
+    // 토스트 알림 표시
+    function showToastNotification(data) {
+        const toastContainer = document.getElementById('toastContainer') || createToastContainer();
+        
+        const toastElement = document.createElement('div');
+        toastElement.className = 'toast';
+        toastElement.innerHTML = `
+            <div class="toast-header bg-success text-white">
+                <i class="fas fa-envelope-open me-2"></i>
+                <strong class="me-auto">새 이메일 알림</strong>
+                <small>${new Date().toLocaleTimeString()}</small>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast"></button>
+            </div>
+            <div class="toast-body">
+                <p class="mb-1">${data.message}</p>
+                <small class="text-muted">처리된 이메일: ${data.processed_count}개</small>
+                <div class="mt-2">
+                    <button class="btn btn-sm btn-primary" onclick="location.reload()">새로고침</button>
+                </div>
+            </div>
+        `;
+        
+        toastContainer.appendChild(toastElement);
+        const toast = new bootstrap.Toast(toastElement, { delay: 10000 });
+        toast.show();
+        
+        // 10초 후 자동 제거
+        setTimeout(() => {
+            if (toastElement.parentNode) {
+                toastElement.remove();
+            }
+        }, 10000);
+    }
+    
+    // 토스트 컨테이너 생성
+    function createToastContainer() {
+        const container = document.createElement('div');
+        container.id = 'toastContainer';
+        container.className = 'toast-container position-fixed top-0 end-0 p-3';
+        container.style.cssText = 'z-index: 9999;';
+        document.body.appendChild(container);
+        return container;
+    }
+    
+    // 전역 WebSocket 연결 초기화
+    function initializeGlobalWebSocket() {
+        {% if current_user and current_user.is_authenticated %}
+        console.log('🔌 전역 WebSocket 연결 초기화 시작...');
+        
+        // 기존 연결이 있으면 정리
+        if (globalSocket) {
+            globalSocket.disconnect();
+        }
+        
+        // Socket.IO 연결 (타임아웃 설정)
+        globalSocket = io({
+            timeout: 60000, // 60초 타임아웃
+            reconnection: true,
+            reconnectionAttempts: maxReconnectAttempts,
+            reconnectionDelay: reconnectDelay,
+            reconnectionDelayMax: 10000
+        });
+        
+        // 연결 성공
+        globalSocket.on('connect', function() {
+            console.log('✅ 전역 WebSocket 연결 성공');
+            reconnectAttempts = 0;
+            
+            // 사용자별 방에 조인
+            globalSocket.emit('join', { user_id: '{{ current_user.id }}' });
+            console.log('👤 사용자 방 조인:', '{{ current_user.id }}');
+        });
+        
+        // 연결 실패
+        globalSocket.on('connect_error', function(error) {
+            console.error('❌ 전역 WebSocket 연결 실패:', error);
+            reconnectAttempts++;
+            
+            if (reconnectAttempts < maxReconnectAttempts) {
+                console.log(`🔄 재연결 시도 ${reconnectAttempts}/${maxReconnectAttempts}...`);
+                setTimeout(() => {
+                    initializeGlobalWebSocket();
+                }, reconnectDelay);
+            } else {
+                console.error('❌ 최대 재연결 시도 횟수 초과');
+            }
+        });
+        
+        // 재연결 시도
+        globalSocket.on('reconnect_attempt', function(attemptNumber) {
+            console.log(`🔄 재연결 시도 ${attemptNumber}/${maxReconnectAttempts}`);
+        });
+        
+        // 재연결 성공
+        globalSocket.on('reconnect', function(attemptNumber) {
+            console.log(`✅ 재연결 성공 (시도 ${attemptNumber})`);
+            reconnectAttempts = 0;
+            
+            // 사용자 방에 다시 조인
+            globalSocket.emit('join', { user_id: '{{ current_user.id }}' });
+        });
+        
+        // 새 이메일 알림 수신
+        globalSocket.on('new_emails_notification', function(data) {
+            console.log('📧 새 이메일 알림 수신:', data);
+            
+            // 브라우저 알림 표시
+            showBrowserNotification(
+                '새 이메일 도착! 📧',
+                data.message,
+                '/static/favicon.ico'
+            );
+            
+            // 화면에 토스트 알림 표시
+            showToastNotification(data);
+        });
+        
+        // 연결 해제
+        globalSocket.on('disconnect', function(reason) {
+            console.log('🔌 전역 WebSocket 연결 해제:', reason);
+            
+            if (reason === 'io server disconnect') {
+                // 서버에서 연결을 끊은 경우 재연결 시도
+                console.log('🔄 서버에서 연결 해제됨, 재연결 시도...');
+                setTimeout(() => {
+                    initializeGlobalWebSocket();
+                }, reconnectDelay);
+            }
+        });
+        
+        // 연결 해제 실패
+        globalSocket.on('disconnect_error', function(error) {
+            console.error('❌ 연결 해제 오류:', error);
+        });
+        
+        {% else %}
+        console.log('👤 로그인되지 않은 사용자 - WebSocket 연결 건너뜀');
+        {% endif %}
+    }
+    
     // 페이지 로드 시 flash 메시지 5초 후 자동 제거
     document.addEventListener('DOMContentLoaded', function() {
+        // 브라우저 알림 권한 요청
+        requestNotificationPermission();
+        
+        // 전역 WebSocket 연결 초기화
+        initializeGlobalWebSocket();
+        
+        // Flash 메시지 자동 제거
         setTimeout(() => {
             const flashMessages = document.querySelectorAll('.flash-message-container .alert');
             flashMessages.forEach(message => {
@@ -151,6 +337,13 @@
                 bsAlert.close();
             });
         }, 5000);
+    });
+    
+    // 페이지 언로드 시 WebSocket 연결 해제
+    window.addEventListener('beforeunload', function() {
+        if (globalSocket) {
+            globalSocket.disconnect();
+        }
     });
     
     // Flash 스타일 메시지 표시 함수

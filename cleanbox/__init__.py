@@ -78,8 +78,14 @@ def create_app(config_class=Config):
     scheduler.init_app(app)
     scheduler.start()
 
-    # SocketIO 초기화
-    socketio.init_app(app)
+    # SocketIO 초기화 (타임아웃 및 안정성 설정)
+    socketio.init_app(
+        app,
+        cors_allowed_origins="*",
+        ping_timeout=60,
+        ping_interval=25,
+        max_http_buffer_size=1e8,
+    )
 
     # SocketIO 이벤트 핸들러
     @socketio.on("connect")
