@@ -56,11 +56,23 @@ def list_emails():
     try:
         # 세션에서 bulk action 메시지 복원
         if "bulk_action_message" in session:
+            print(f"🔍 세션에서 메시지 복원: {session['bulk_action_message']}")
+            print(f"🔍 세션 타입: {session.get('bulk_action_type', 'info')}")
             flash(
                 session["bulk_action_message"], session.get("bulk_action_type", "info")
             )
             del session["bulk_action_message"]
             del session["bulk_action_type"]
+        else:
+            print("🔍 세션에 bulk_action_message 없음")
+
+        # URL 파라미터에서 bulk action 메시지 복원 (백업용)
+        bulk_message = request.args.get("bulk_message")
+        bulk_type = request.args.get("bulk_type", "info")
+        if bulk_message:
+            print(f"🔍 URL 파라미터에서 메시지 복원: {bulk_message}")
+            print(f"🔍 URL 파라미터 타입: {bulk_type}")
+            flash(bulk_message, bulk_type)
 
         # 새 이메일 처리 알림 확인
         new_emails_notification = None
@@ -190,11 +202,23 @@ def category_emails(category_id):
     try:
         # 세션에서 bulk action 메시지 복원
         if "bulk_action_message" in session:
+            print(f"🔍 세션에서 메시지 복원: {session['bulk_action_message']}")
+            print(f"🔍 세션 타입: {session.get('bulk_action_type', 'info')}")
             flash(
                 session["bulk_action_message"], session.get("bulk_action_type", "info")
             )
             del session["bulk_action_message"]
             del session["bulk_action_type"]
+        else:
+            print("🔍 세션에 bulk_action_message 없음")
+
+        # URL 파라미터에서 bulk action 메시지 복원 (백업용)
+        bulk_message = request.args.get("bulk_message")
+        bulk_type = request.args.get("bulk_type", "info")
+        if bulk_message:
+            print(f"🔍 URL 파라미터에서 메시지 복원: {bulk_message}")
+            print(f"🔍 URL 파라미터 타입: {bulk_type}")
+            flash(bulk_message, bulk_type)
 
         # 사용자별 카테고리 확인
         category = Category.query.filter_by(
@@ -758,7 +782,15 @@ def bulk_actions():
             # 세션에 flash 메시지 저장
             session["bulk_action_message"] = result_message
             session["bulk_action_type"] = "success" if success_count > 0 else "warning"
-            return redirect(request.referrer or url_for("email.list_emails"))
+            print(f"🔍 세션에 메시지 저장: {result_message}")
+            print(f"🔍 세션 타입: {session.get('bulk_action_type')}")
+            # URL 파라미터로도 메시지 전달 (백업용)
+            redirect_url = request.referrer or url_for("email.list_emails")
+            if "?" in redirect_url:
+                redirect_url += f"&bulk_message={result_message}&bulk_type={'success' if success_count > 0 else 'warning'}"
+            else:
+                redirect_url += f"?bulk_message={result_message}&bulk_type={'success' if success_count > 0 else 'warning'}"
+            return redirect(redirect_url)
 
         elif action == "archive":
             # 대량 아카이브 (개선된 버전)
