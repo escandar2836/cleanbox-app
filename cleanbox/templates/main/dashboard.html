@@ -1,38 +1,38 @@
 {% extends "base.html" %}
 
-{% block title %}CleanBox - 메인 대시보드{% endblock %}
+{% block title %}CleanBox - Main Dashboard{% endblock %}
 
 {% block content %}
 <div class="row">
     <div class="col-12">
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <h1><i class="fas fa-home"></i> CleanBox 대시보드</h1>
+            <h1><i class="fas fa-home"></i> CleanBox Dashboard</h1>
             <div>
                 <a href="{{ url_for('email.list_emails') }}" class="btn btn-success me-2">
-                    <i class="fas fa-envelope"></i> 이메일 관리
+                    <i class="fas fa-envelope"></i> Manage Emails
                 </a>
                 <button onclick="processNewEmails()" class="btn btn-primary me-2">
-                    <i class="fas fa-robot"></i> 새 이메일 처리
+                    <i class="fas fa-robot"></i> Process New Emails
                 </button>
                 <button onclick="checkAndRenewWebhook()" class="btn btn-outline-info">
-                    <i class="fas fa-sync-alt"></i> 웹훅 상태 확인
+                    <i class="fas fa-sync-alt"></i> Check Webhook Status
                 </button>
             </div>
         </div>
     </div>
 </div>
 
-<!-- 3개 섹션 메인 페이지 -->
+<!-- 3 Main Sections -->
 <div class="row">
-    <!-- 섹션 1: Gmail 계정 연결 -->
+    <!-- Section 1: Gmail Account Connection -->
     <div class="col-md-4">
         <div class="card cleanbox-card h-100">
             <div class="card-header bg-primary text-white">
-                <h5 class="mb-0"><i class="fas fa-link"></i> Gmail 계정 연결</h5>
+                <h5 class="mb-0"><i class="fas fa-link"></i> Gmail Account Connection</h5>
             </div>
             <div class="card-body">
                 <div class="mb-3">
-                    <h6><i class="fas fa-user"></i> 현재 연결된 계정</h6>
+                    <h6><i class="fas fa-user"></i> Connected Accounts</h6>
                     
                     {% if accounts %}
                         <div class="list-group list-group-flush">
@@ -47,12 +47,12 @@
                                 </div>
                                 <div class="d-flex align-items-center">
                                     {% if account.is_primary %}
-                                        <span class="badge bg-warning text-dark me-2">기본</span>
+                                        <span class="badge bg-warning text-dark me-2">Primary</span>
                                     {% endif %}
                                     {% if account.is_active %}
-                                        <span class="badge bg-success">활성</span>
+                                        <span class="badge bg-success">Active</span>
                                     {% else %}
-                                        <span class="badge bg-secondary">비활성</span>
+                                        <span class="badge bg-secondary">Inactive</span>
                                     {% endif %}
                                 </div>
                             </div>
@@ -61,37 +61,37 @@
                         <div class="mt-3">
                             <small class="text-muted">
                                 <i class="fas fa-info-circle"></i> 
-                                총 {{ accounts|length }}개의 Gmail 계정이 연결되어 있습니다.
+                                Total {{ accounts|length }} Gmail accounts connected.
                             </small>
                         </div>
                     {% else %}
                         <div class="text-center py-3">
                             <i class="fas fa-envelope fa-2x text-muted mb-2"></i>
-                            <h6 class="text-muted">연결된 Gmail 계정이 없습니다</h6>
-                            <p class="text-muted small">첫 번째 Gmail 계정을 연결하여 CleanBox를 시작해보세요!</p>
+                            <h6 class="text-muted">No Gmail accounts connected</h6>
+                            <p class="text-muted small">Connect your first Gmail account to start using CleanBox!</p>
                         </div>
                     {% endif %}
                 </div>
                 
                 <div class="mb-3">
-                    <h6><i class="fas fa-plus"></i> 추가 계정 연결</h6>
-                    <p class="text-muted small">다른 Gmail 계정을 연결하여 여러 받은 편지함을 관리할 수 있습니다.</p>
+                    <h6><i class="fas fa-plus"></i> Connect Another Account</h6>
+                    <p class="text-muted small">Connect multiple Gmail accounts to manage all your emails in CleanBox.</p>
                     <a href="{{ url_for('auth.add_account') }}" class="btn btn-outline-primary btn-sm">
-                        <i class="fas fa-plus"></i> 계정 추가
+                        <i class="fas fa-plus"></i> Add Account
                     </a>
                     <a href="{{ url_for('auth.manage_accounts') }}" class="btn btn-outline-secondary btn-sm ms-2">
-                        <i class="fas fa-cogs"></i> 계정 관리
+                        <i class="fas fa-cogs"></i> Manage Accounts
                     </a>
                 </div>
             </div>
         </div>
     </div>
     
-    <!-- 섹션 2: 카테고리 목록 -->
+    <!-- Section 2: Category List -->
     <div class="col-md-4">
         <div class="card cleanbox-card h-100">
             <div class="card-header bg-success text-white">
-                <h5 class="mb-0"><i class="fas fa-list"></i> 내 카테고리</h5>
+                <h5 class="mb-0"><i class="fas fa-list"></i> My Categories</h5>
             </div>
             <div class="card-body">
                 {% if categories %}
@@ -102,12 +102,12 @@
                             <i class="{{ category.icon }}" style="color: {{ category.color }}; margin-right: 10px;"></i>
                             <div>
                                 <h6 class="mb-1">{{ category.name }}</h6>
-                                <small class="text-muted">{{ category.description or '설명 없음' }}</small>
+                                <small class="text-muted">{{ category.description or 'No description' }}</small>
                             </div>
                         </div>
                         <div class="d-flex align-items-center">
                             <span class="badge bg-primary rounded-pill me-2">{{ category.emails|length if category.emails else 0 }}</span>
-                            <a href="{{ url_for('email.category_emails', category_id=category.id) }}" class="btn btn-outline-primary btn-sm" title="이메일 보기">
+                            <a href="{{ url_for('email.category_emails', category_id=category.id) }}" class="btn btn-outline-primary btn-sm" title="View Emails">
                                 <i class="fas fa-envelope"></i>
                             </a>
                         </div>
@@ -116,7 +116,7 @@
                     {% if categories|length > 5 %}
                     <div class="text-center mt-3">
                         <a href="{{ url_for('category.list_categories') }}" class="btn btn-outline-success btn-sm">
-                            모든 카테고리 보기 ({{ categories|length }}개)
+                            View All Categories ({{ categories|length }})
                         </a>
                     </div>
                     {% endif %}
@@ -124,10 +124,10 @@
                 {% else %}
                 <div class="text-center py-4">
                     <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
-                    <h6 class="text-muted">아직 카테고리가 없습니다</h6>
-                    <p class="text-muted small">첫 번째 카테고리를 추가하여 CleanBox를 시작해보세요!</p>
+                    <h6 class="text-muted">No categories yet</h6>
+                    <p class="text-muted small">Add your first category to start using CleanBox!</p>
                     <a href="{{ url_for('category.add_category') }}" class="btn btn-warning btn-sm">
-                        <i class="fas fa-plus"></i> 첫 카테고리 추가
+                        <i class="fas fa-plus"></i> Add First Category
                     </a>
                 </div>
                 {% endif %}
@@ -135,19 +135,19 @@
         </div>
     </div>
     
-    <!-- 섹션 3: 새 카테고리 추가 -->
+    <!-- Section 3: Add New Category -->
     <div class="col-md-4">
         <div class="card cleanbox-card h-100">
             <div class="card-header bg-warning text-dark">
-                <h5 class="mb-0"><i class="fas fa-plus"></i> 새 카테고리 추가</h5>
+                <h5 class="mb-0"><i class="fas fa-plus"></i> Add New Category</h5>
             </div>
             <div class="card-body">
                 <div class="text-center py-4">
                     <i class="fas fa-folder-plus fa-3x text-warning mb-3"></i>
-                    <h6>새 카테고리를 만들어보세요</h6>
-                    <p class="text-muted small">카테고리를 만들면 AI가 이메일을 자동으로 분류합니다.</p>
+                    <h6>Create a new category</h6>
+                    <p class="text-muted small">Once you create a category, AI will automatically classify your emails.</p>
                     <a href="{{ url_for('category.add_category') }}" class="btn btn-warning">
-                        <i class="fas fa-plus"></i> 새 카테고리 추가
+                        <i class="fas fa-plus"></i> Add New Category
                     </a>
                 </div>
             </div>
@@ -155,80 +155,93 @@
     </div>
 </div>
 
+<!-- Process New Emails Modal -->
+<div class="modal fade" id="processNewEmailsModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-robot text-primary"></i> Processing New Emails
+                </h5>
+            </div>
+            <div class="modal-body">
+                <div class="text-center">
+                    <div class="spinner-border text-primary mb-3" role="status">
+                        <span class="visually-hidden">Processing...</span>
+                    </div>
+                    <h6 id="processNewEmailsMessage">Processing new emails...</h6>
+                    <div class="progress mt-3">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                             role="progressbar" style="width: 0%" id="processNewEmailsProgress">0%</div>
+                    </div>
+                    <div class="mt-3">
+                        <small class="text-muted" id="processNewEmailsDetails">
+                            Processing by account...
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
-// 새 이메일 처리 함수
+// Process new emails function
 function processNewEmails() {
-    const button = event.target;
-    const originalText = button.innerHTML;
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('processNewEmailsModal'));
+    modal.show();
     
-    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 처리 중...';
-    button.disabled = true;
+    // Initialize progress
+    const progressBar = document.getElementById('processNewEmailsProgress');
+    const message = document.getElementById('processNewEmailsMessage');
+    const details = document.getElementById('processNewEmailsDetails');
     
-    const formData = new FormData();
+    progressBar.style.width = '0%';
+    progressBar.textContent = '0%';
+    message.textContent = 'Processing new emails...';
+    details.textContent = 'Processing by account...';
     
-    fetch('/email/process-new', {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            // 새로운 이메일이 없는 경우 간단한 메시지 표시
-            if (data.no_new_emails) {
-                alert('새로운 이메일이 없습니다.');
-            } else {
-                // 계정별 결과 표시
-                let message = `새 이메일 처리 완료: ${data.processed}개 처리, ${data.classified}개 AI 분류`;
-                
-                if (data.account_results && data.account_results.length > 0) {
-                    message += '\n\n계정별 결과:';
-                    data.account_results.forEach(result => {
-                        if (result.status === 'success') {
-                            message += `\n• ${result.account}: ${result.processed}개 처리, ${result.classified}개 분류`;
-                        } else if (result.status === 'no_new_emails') {
-                            message += `\n• ${result.account}: 새 이메일 없음`;
-                        } else {
-                            message += `\n• ${result.account}: 오류 - ${result.error}`;
-                        }
-                    });
-                }
-                
-                alert(message);
-                
-                // 페이지 새로고침 (새 이메일이 있을 때만)
-                location.reload();
-            }
-        } else {
-            alert('새 이메일 처리 실패: ' + data.message);
-        }
-    })
-    .catch(error => {
-        alert('새 이메일 처리 중 오류가 발생했습니다: ' + error);
-    })
-    .finally(() => {
-        button.innerHTML = originalText;
-        button.disabled = false;
-    });
+    // Simulate progress
+    let progress = 0;
+    const progressInterval = setInterval(() => {
+        progress += Math.random() * 10;
+        if (progress > 90) progress = 90;
+        
+        progressBar.style.width = progress + '%';
+        progressBar.textContent = Math.round(progress) + '%';
+    }, 500);
+    
+    // Create and submit form
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/email/process-new';
+    document.body.appendChild(form);
+    
+    // Submit after 2 seconds
+    setTimeout(() => {
+        form.submit();
+    }, 2000);
 }
 
-// 웹훅 상태 확인 및 자동 재설정 함수
+// Check and renew webhook function
 function checkAndRenewWebhook() {
     const button = event.target;
     const originalText = button.innerHTML;
     
-    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 확인 중...';
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking...';
     button.disabled = true;
     
-    // 먼저 웹훅 상태 확인
+    // First, check webhook status
     fetch('/email/webhook-status')
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                let message = `웹훅 상태: ${data.healthy_accounts}/${data.total_accounts}개 계정 정상`;
+                let message = `Webhook status: ${data.healthy_accounts}/${data.total_accounts} accounts healthy`;
                 
-                // 비정상 상태가 있으면 자동 재설정 제안
+                // If there are unhealthy accounts, offer auto-renew
                 if (data.healthy_accounts < data.total_accounts) {
-                    if (confirm(`${message}\n\n비정상 상태의 웹훅을 자동으로 재설정하시겠습니까?`)) {
+                    if (confirm(`${message}\n\nDo you want to auto-renew webhooks for unhealthy accounts?`)) {
                         return fetch('/email/auto-renew-webhook', {
                             method: 'POST'
                         });
@@ -253,7 +266,7 @@ function checkAndRenewWebhook() {
             }
         })
         .catch(error => {
-            showAlert('error', '웹훅 상태 확인 중 오류가 발생했습니다.');
+            showAlert('error', 'Error occurred while checking webhook status.');
         })
         .finally(() => {
             button.innerHTML = originalText;
@@ -261,12 +274,12 @@ function checkAndRenewWebhook() {
         });
 }
 
-// 웹훅 재설정 함수
+// Setup webhook function
 function setupWebhook() {
     const button = event.target;
     const originalText = button.innerHTML;
     
-    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 설정 중...';
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Setting up...';
     button.disabled = true;
     
     fetch('/email/setup-webhook', {
@@ -277,11 +290,11 @@ function setupWebhook() {
         if (data.success) {
             alert(data.message);
         } else {
-            alert('웹훅 설정 실패: ' + data.message);
+            alert('Webhook setup failed: ' + data.message);
         }
     })
     .catch(error => {
-        alert('웹훅 설정 중 오류가 발생했습니다: ' + error);
+        alert('Error occurred during webhook setup: ' + error);
     })
     .finally(() => {
         button.innerHTML = originalText;

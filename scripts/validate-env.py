@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-환경변수 검증 스크립트
-Docker 환경에서 환경변수가 제대로 로드되는지 확인
+Environment variable validation script
+Check if environment variables are properly loaded in Docker environment
 """
 
 import os
@@ -10,7 +10,7 @@ from cryptography.fernet import Fernet
 
 
 def validate_fernet_key(key):
-    """Fernet 키가 유효한지 검증"""
+    """Validate if Fernet key is valid"""
     try:
         if isinstance(key, str):
             key_bytes = key.encode()
@@ -25,12 +25,12 @@ def validate_fernet_key(key):
 
 
 def main():
-    print("🔍 환경변수 검증 시작...")
+    print("🔍 Starting environment variable validation...")
 
-    # .env 파일 로드
+    # Load .env file
     load_dotenv()
 
-    # 필수 환경변수 목록
+    # List of required environment variables
     required_vars = [
         "CLEANBOX_ENCRYPTION_KEY",
         "CLEANBOX_SECRET_KEY",
@@ -39,7 +39,7 @@ def main():
         "GOOGLE_CLIENT_SECRET",
     ]
 
-    print("\n📋 환경변수 상태:")
+    print("\n📋 Environment variable status:")
     print("-" * 50)
 
     all_valid = True
@@ -47,29 +47,31 @@ def main():
     for var in required_vars:
         value = os.environ.get(var)
         if value:
-            print(f"✅ {var}: 설정됨")
+            print(f"✅ {var}: Set")
 
-            # Fernet 키 특별 검증
+            # Special check for Fernet key
             if var == "CLEANBOX_ENCRYPTION_KEY":
                 if validate_fernet_key(value):
-                    print(f"   🔐 Fernet 키 유효함")
+                    print(f"   🔐 Fernet key is valid")
                 else:
-                    print(f"   ❌ Fernet 키 유효하지 않음")
+                    print(f"   ❌ Fernet key is invalid")
                     all_valid = False
         else:
-            print(f"❌ {var}: 설정되지 않음")
+            print(f"❌ {var}: Not set")
             all_valid = False
 
     print("-" * 50)
 
     if all_valid:
-        print("🎉 모든 환경변수가 올바르게 설정되었습니다!")
+        print("🎉 All environment variables are set correctly!")
     else:
-        print("⚠️  일부 환경변수가 누락되었거나 잘못 설정되었습니다.")
-        print("\n💡 해결 방법:")
-        print("1. .env 파일이 존재하는지 확인")
-        print("2. docker-compose.yml에서 환경변수가 제대로 전달되는지 확인")
-        print("3. CLEANBOX_ENCRYPTION_KEY가 올바른 Fernet 키인지 확인")
+        print("⚠️  Some environment variables are missing or incorrectly set.")
+        print("\n💡 How to fix:")
+        print("1. Check if .env file exists")
+        print(
+            "2. Check if environment variables are properly passed in docker-compose.yml"
+        )
+        print("3. Check if CLEANBOX_ENCRYPTION_KEY is a valid Fernet key")
 
     return all_valid
 

@@ -1,43 +1,39 @@
 {% extends "base.html" %}
 
-{% block title %}CleanBox - 이메일 목록{% endblock %}
+{% block title %}CleanBox - Email List{% endblock %}
 
 {% block content %}
 <div class="row">
     <div class="col-12">
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <h1><i class="fas fa-envelope"></i> CleanBox 이메일</h1>
+            <h1><i class="fas fa-envelope"></i> CleanBox Emails</h1>
             <div>
-                <!-- 기존 동기화 버튼 -->
-                <form method="POST" action="{{ url_for('email.process_new_emails') }}" id="processForm">
-                    <button type="submit" class="btn btn-success" id="processButton">
-                        <i class="fas fa-robot"></i> 새 이메일 처리
-                    </button>
-                </form>
-
-                <!-- 웹훅 재설정 버튼 -->
-                <button type="button" class="btn btn-outline-info ms-2" onclick="checkAndRenewWebhook()">
-                    <i class="fas fa-sync-alt"></i> 웹훅 상태 확인
+                <!-- Sync Button -->
+                <button type="button" class="btn btn-success" id="processButton" onclick="processNewEmails()">
+                    <i class="fas fa-robot"></i> Process New Emails
                 </button>
 
-                <!-- 더 보기 버튼 (처음에는 숨김) -->
+                <!-- Webhook Status Button -->
+                <button type="button" class="btn btn-outline-info ms-2" onclick="checkAndRenewWebhook()">
+                    <i class="fas fa-sync-alt"></i> Check Webhook Status
+                </button>
+
+                <!-- Load More Button (hidden initially) -->
                 <button type="button" class="btn btn-outline-primary" id="loadMoreButton" style="display: none;">
-                    <i class="fas fa-plus"></i> 더 보기
+                    <i class="fas fa-plus"></i> Load More
                 </button>
             </div>
         </div>
     </div>
 </div>
 
-
-
-<!-- 계정별 통계 -->
+<!-- Account Statistics -->
 {% if accounts and accounts|length > 1 %}
 <div class="row mb-4">
     <div class="col-12">
         <div class="card cleanbox-card">
             <div class="card-header bg-info text-white">
-                <h5 class="mb-0"><i class="fas fa-users"></i> 계정별 이메일 현황</h5>
+                <h5 class="mb-0"><i class="fas fa-users"></i> Account Email Status</h5>
             </div>
             <div class="card-body">
                 <div class="row">
@@ -48,20 +44,20 @@
                                 <i class="fas fa-envelope text-primary me-2"></i>
                                 <strong>{{ account.account_email }}</strong>
                                 {% if account.is_primary %}
-                                <span class="badge bg-success ms-2">기본</span>
+                                <span class="badge bg-success ms-2">Primary</span>
                                 {% endif %}
                             </div>
                             <div class="row text-center">
                                 <div class="col-4">
-                                    <small class="text-muted">전체</small><br>
+                                    <small class="text-muted">Total</small><br>
                                     <strong>{{ stats.account_stats[account.id].count if stats.account_stats else 0 }}</strong>
                                 </div>
                                 <div class="col-4">
-                                    <small class="text-muted">읽지 않음</small><br>
+                                    <small class="text-muted">Unread</small><br>
                                     <strong class="text-warning">{{ stats.account_stats[account.id].unread if stats.account_stats else 0 }}</strong>
                                 </div>
                                 <div class="col-4">
-                                    <small class="text-muted">아카이브</small><br>
+                                    <small class="text-muted">Archived</small><br>
                                     <strong class="text-success">{{ stats.account_stats[account.id].archived if stats.account_stats else 0 }}</strong>
                                 </div>
                             </div>
@@ -75,14 +71,14 @@
 </div>
 {% endif %}
 
-<!-- 통계 카드 -->
+<!-- Statistics Cards -->
 <div class="row mb-4">
     <div class="col-md-3">
         <div class="card cleanbox-card text-center">
             <div class="card-body">
                 <i class="fas fa-envelope fa-2x text-primary mb-2"></i>
                 <h5 class="card-title">{{ stats.total }}</h5>
-                <p class="card-text text-muted">전체 이메일</p>
+                <p class="card-text text-muted">Total Emails</p>
             </div>
         </div>
     </div>
@@ -91,7 +87,7 @@
             <div class="card-body">
                 <i class="fas fa-envelope-open fa-2x text-warning mb-2"></i>
                 <h5 class="card-title">{{ stats.unread }}</h5>
-                <p class="card-text text-muted">읽지 않은 이메일</p>
+                <p class="card-text text-muted">Unread Emails</p>
             </div>
         </div>
     </div>
@@ -100,7 +96,7 @@
             <div class="card-body">
                 <i class="fas fa-archive fa-2x text-success mb-2"></i>
                 <h5 class="card-title">{{ stats.archived }}</h5>
-                <p class="card-text text-muted">아카이브된 이메일</p>
+                <p class="card-text text-muted">Archived Emails</p>
             </div>
         </div>
     </div>
@@ -109,33 +105,33 @@
             <div class="card-body">
                 <i class="fas fa-robot fa-2x text-info mb-2"></i>
                 <h5 class="card-title" id="aiClassified">-</h5>
-                <p class="card-text text-muted">AI 분류된 이메일</p>
+                <p class="card-text text-muted">AI Classified Emails</p>
             </div>
         </div>
     </div>
 </div>
 
-<!-- 대량 작업 도구바 -->
+<!-- Bulk Actions Toolbar -->
 <div class="row mb-3" id="bulkActionsToolbar" style="display: none;">
     <div class="col-12">
         <div class="card cleanbox-card">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
-                        <span class="badge bg-primary" id="selectedCount">0</span> 개의 이메일이 선택되었습니다
+                        <span class="badge bg-primary" id="selectedCount">0</span> emails selected
                     </div>
                     <div class="btn-group">
                         <button class="btn btn-outline-success" onclick="bulkMarkAsRead()">
-                            <i class="fas fa-check"></i> 읽음 표시
+                            <i class="fas fa-check"></i> Mark as Read
                         </button>
                         <button class="btn btn-outline-warning" onclick="bulkArchive()">
-                            <i class="fas fa-archive"></i> 아카이브
+                            <i class="fas fa-archive"></i> Archive
                         </button>
                         <button class="btn btn-outline-danger" onclick="bulkDelete()">
-                            <i class="fas fa-trash"></i> 삭제
+                            <i class="fas fa-trash"></i> Delete
                         </button>
                         <button class="btn btn-outline-info" onclick="bulkUnsubscribe()">
-                            <i class="fas fa-unlink"></i> 구독 해지
+                            <i class="fas fa-unlink"></i> Unsubscribe
                         </button>
                     </div>
                 </div>
@@ -144,20 +140,20 @@
     </div>
 </div>
 
-<!-- 이메일 목록 -->
+<!-- Email List -->
 <div class="row">
     <div class="col-12">
         <div class="card cleanbox-card">
             <div class="card-header bg-primary text-white">
                 <div class="d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0"><i class="fas fa-list"></i> 최근 이메일</h5>
+                    <h5 class="mb-0"><i class="fas fa-list"></i> Recent Emails</h5>
                     <div>
                         <div class="btn-group btn-group-sm">
                             <button class="btn btn-light btn-sm" onclick="selectAll()">
-                                <i class="fas fa-check-square"></i> 전체 선택
+                                <i class="fas fa-check-square"></i> Select All
                             </button>
                             <button class="btn btn-light btn-sm" onclick="deselectAll()">
-                                <i class="fas fa-square"></i> 선택 해제
+                                <i class="fas fa-square"></i> Deselect All
                             </button>
                         </div>
                     </div>
@@ -167,28 +163,28 @@
                 {% if emails %}
                 <div class="list-group">
                     {% for email in emails %}
-                    <div class="list-group-item">
+                    <div class="list-group-item" data-email-id="{{ email.id }}">
                         <div class="d-flex align-items-start">
-                            <!-- 체크박스 -->
+                            <!-- Checkbox -->
                             <div class="me-3 mt-1">
                                 <input type="checkbox" class="form-check-input email-checkbox" 
                                        value="{{ email.id }}" onchange="updateBulkActions()">
                             </div>
                             
-                            <!-- 이메일 내용 -->
+                            <!-- Email Content -->
                             <div class="flex-grow-1">
                                 <div class="d-flex justify-content-between align-items-start">
                                     <div class="flex-grow-1">
                                         <div class="d-flex align-items-center mb-2">
                                             {% if not email.is_read %}
-                                            <span class="badge bg-warning me-2">새</span>
+                                            <span class="badge bg-warning me-2">New</span>
                                             {% endif %}
                                             {% if email.category %}
                                             <a href="{{ url_for('email.category_emails', category_id=email.category.id) }}" class="badge me-2 text-decoration-none" style="background-color: {{ email.category.color }};">
                                                 <i class="{{ email.category.icon }}"></i> {{ email.category.name }}
                                             </a>
                                             {% else %}
-                                            <span class="badge bg-secondary me-2">미분류</span>
+                                            <span class="badge bg-secondary me-2">Unclassified</span>
                                             {% endif %}
                                             <h6 class="mb-1">{{ email.subject }}</h6>
                                         </div>
@@ -202,7 +198,7 @@
                                                 {% if email.account_info %}
                                                     {{ email.account_info.account_email }}
                                                 {% else %}
-                                                    알 수 없는 계정
+                                                    Unknown Account
                                                 {% endif %}
                                             </small>
                                             {% endif %}
@@ -213,26 +209,35 @@
                                         {% endif %}
                                         <small class="text-muted">
                                             <i class="fas fa-clock"></i> 
-                                            {{ email.received_at.strftime('%Y년 %m월 %d일 %H:%M') if email.received_at else email.created_at.strftime('%Y년 %m월 %d일 %H:%M') }}
+                                            {{ email.received_at.strftime('%Y-%m-%d %H:%M') if email.received_at else email.created_at.strftime('%Y-%m-%d %H:%M') }}
                                         </small>
                                     </div>
                                     <div class="btn-group btn-group-sm">
-                                        <a href="{{ url_for('email.view_email', email_id=email.id) }}" class="btn btn-outline-primary" title="상세 보기">
+                                        <a href="{{ url_for('email.view_email', email_id=email.id) }}" class="btn btn-outline-primary" title="View Details">
                                             <i class="fas fa-eye"></i>
                                         </a>
                                         {% if not email.is_read %}
-                                        <a href="{{ url_for('email.mark_as_read', email_id=email.id) }}" class="btn btn-outline-success" title="읽음 표시">
+                                        <a href="{{ url_for('email.mark_as_read', email_id=email.id) }}" class="btn btn-outline-success" title="Mark as Read">
                                             <i class="fas fa-check"></i>
                                         </a>
                                         {% endif %}
                                         {% if not email.is_archived %}
-                                        <a href="{{ url_for('email.archive_email', email_id=email.id) }}" class="btn btn-outline-warning" title="아카이브">
+                                        <a href="{{ url_for('email.archive_email', email_id=email.id) }}" class="btn btn-outline-warning" title="Archive">
                                             <i class="fas fa-archive"></i>
                                         </a>
                                         {% endif %}
-                                        <button class="btn btn-outline-info" onclick="analyzeEmail({{ email.id }})" title="AI 분석">
+                                        <button class="btn btn-outline-info" onclick="analyzeEmail({{ email.id }})" title="AI Analysis">
                                             <i class="fas fa-robot"></i>
                                         </button>
+                                        {% if not email.is_unsubscribed %}
+                                        <button class="btn btn-outline-danger" onclick="unsubscribeEmail({{ email.id }})" title="Unsubscribe">
+                                            <i class="fas fa-unlink"></i>
+                                        </button>
+                                        {% else %}
+                                        <button class="btn btn-outline-secondary" disabled title="Already Unsubscribed">
+                                            <i class="fas fa-check"></i>
+                                        </button>
+                                        {% endif %}
                                     </div>
                                 </div>
                             </div>
@@ -243,11 +248,11 @@
                 {% else %}
                 <div class="text-center py-5">
                     <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
-                    <h4 class="text-muted">아직 이메일이 없습니다</h4>
-                    <p class="text-muted">새 이메일 처리를 통해 이메일을 가져와보세요!</p>
+                    <h4 class="text-muted">No emails yet</h4>
+                    <p class="text-muted">Get new emails by processing them!</p>
                     <form method="POST" action="{{ url_for('email.process_new_emails') }}">
                         <button type="submit" class="btn btn-success">
-                            <i class="fas fa-robot"></i> 새 이메일 처리
+                            <i class="fas fa-robot"></i> Process New Emails
                         </button>
                     </form>
                 </div>
@@ -257,54 +262,147 @@
     </div>
 </div>
 
-<!-- AI 분석 모달 -->
-<div class="modal fade" id="analysisModal" tabindex="-1">
+<!-- Process New Emails Modal -->
+<div class="modal fade" id="processNewEmailsModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-robot text-primary"></i> Processing New Emails
+                </h5>
+            </div>
+            <div class="modal-body">
+                <div class="text-center">
+                    <div class="spinner-border text-primary mb-3" role="status">
+                        <span class="visually-hidden">Processing...</span>
+                    </div>
+                    <h6 id="processNewEmailsMessage">Processing new emails...</h6>
+                    <div class="progress mt-3">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                             role="progressbar" style="width: 0%" id="processNewEmailsProgress">0%</div>
+                    </div>
+                    <div class="mt-3">
+                        <small class="text-muted" id="processNewEmailsDetails">
+                            Processing by account...
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- AI Analysis Modal -->
+<div class="modal fade" id="analysisModal" tabindex="-1" data-bs-backdrop="false">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header bg-info text-white">
-                <h5 class="modal-title"><i class="fas fa-robot"></i> AI 분석 결과</h5>
+                <h5 class="modal-title"><i class="fas fa-robot"></i> AI Analysis Result</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body" id="analysisContent">
                 <div class="text-center">
                     <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">분석 중...</span>
+                        <span class="visually-hidden">Analyzing...</span>
                     </div>
-                    <p class="mt-2">AI가 이메일을 분석하고 있습니다...</p>
+                    <p class="mt-2">AI is analyzing your email...</p>
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">닫기</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
     </div>
 </div>
 
-<!-- 구독 해지 모달 -->
-<div class="modal fade" id="unsubscribeModal" tabindex="-1">
+<!-- Unsubscribe Modal -->
+<div class="modal fade" id="unsubscribeModal" tabindex="-1" data-bs-backdrop="false">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
-            <div class="modal-header bg-warning text-dark">
-                <h5 class="modal-title"><i class="fas fa-unlink"></i> 구독 해지 진행</h5>
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-unlink text-warning"></i> Unsubscribing
+                </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body" id="unsubscribeContent">
-                <div class="text-center">
-                    <div class="spinner-border text-warning" role="status">
-                        <span class="visually-hidden">구독 해지 중...</span>
+            <div class="modal-body">
+                <div id="unsubscribeContent">
+                    <div class="text-center">
+                        <div class="spinner-border text-warning" role="status">
+                            <span class="visually-hidden">Unsubscribing...</span>
+                        </div>
+                        <p class="mt-2">AI is finding and processing the unsubscribe link...</p>
+                        <div class="progress mt-3">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                 role="progressbar" style="width: 0%" id="unsubscribeProgress">0%</div>
+                        </div>
+                        <div class="mt-3" id="unsubscribeSteps">
+                            <small class="text-muted">Initializing...</small>
+                        </div>
                     </div>
-                    <p class="mt-2">AI가 구독 해지 링크를 찾아 처리하고 있습니다...</p>
                 </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">닫기</button>
             </div>
         </div>
     </div>
 </div>
 
+<!-- Bulk Processing Modal -->
+        <div class="modal fade" id="bulkProcessingModal" tabindex="-1" data-bs-backdrop="false" data-bs-keyboard="false">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-cogs text-primary"></i> <span id="bulkActionTitle">Bulk Processing</span>
+                </h5>
+            </div>
+            <div class="modal-body">
+                <div class="text-center">
+                    <div class="spinner-border text-primary mb-3" role="status">
+                        <span class="visually-hidden">Processing...</span>
+                    </div>
+                    <h6 id="bulkProcessingMessage">Processing emails...</h6>
+                    <div class="progress mt-3">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                             role="progressbar" style="width: 0%" id="bulkProgress">0%</div>
+                    </div>
+                    <div class="mt-3">
+                        <small class="text-muted" id="bulkProcessingDetails">
+                            Processing email: <span id="currentEmailCount">0</span> / <span id="totalEmailCount">0</span>
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- New Email Notification Modal -->
+{% if new_emails_notification %}
+<div class="modal fade" id="newEmailNotificationModal" tabindex="-1" aria-labelledby="newEmailNotificationModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title" id="newEmailNotificationModalLabel">
+                    <i class="fas fa-envelope-open"></i> New Emails Processed
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p><strong>{{ new_emails_notification.count }} new emails</strong> have been processed.</p>
+                <p class="text-muted small">Processed at: {{ new_emails_notification.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+                <p>Refresh the page to see the latest emails.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="location.reload()">Refresh</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <script>
-// 대량 작업 관련 함수들
+// Bulk operation related functions
 function updateBulkActions() {
     const checkboxes = document.querySelectorAll('.email-checkbox:checked');
     const toolbar = document.getElementById('bulkActionsToolbar');
@@ -335,32 +433,14 @@ function getSelectedEmailIds() {
     return Array.from(checkboxes).map(cb => cb.value);
 }
 
-// 대량 작업 함수들
+// Bulk operation functions
 function bulkMarkAsRead() {
     const emailIds = getSelectedEmailIds();
     if (emailIds.length === 0) return;
     
-    if (confirm(`${emailIds.length}개의 이메일을 읽음으로 표시하시겠습니까?`)) {
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = '{{ url_for("email.bulk_actions") }}';
-        
-        const actionInput = document.createElement('input');
-        actionInput.type = 'hidden';
-        actionInput.name = 'action';
-        actionInput.value = 'mark_read';
-        form.appendChild(actionInput);
-        
-        emailIds.forEach(id => {
-            const input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = 'email_ids';
-            input.value = id;
-            form.appendChild(input);
-        });
-        
-        document.body.appendChild(form);
-        form.submit();
+    if (confirm(`${emailIds.length} emails to mark as read?`)) {
+        showBulkProcessingModal('Mark as Read', emailIds.length);
+        performBulkAction('mark_read', emailIds);
     }
 }
 
@@ -368,27 +448,9 @@ function bulkArchive() {
     const emailIds = getSelectedEmailIds();
     if (emailIds.length === 0) return;
     
-    if (confirm(`${emailIds.length}개의 이메일을 아카이브하시겠습니까?`)) {
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = '{{ url_for("email.bulk_actions") }}';
-        
-        const actionInput = document.createElement('input');
-        actionInput.type = 'hidden';
-        actionInput.name = 'action';
-        actionInput.value = 'archive';
-        form.appendChild(actionInput);
-        
-        emailIds.forEach(id => {
-            const input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = 'email_ids';
-            input.value = id;
-            form.appendChild(input);
-        });
-        
-        document.body.appendChild(form);
-        form.submit();
+    if (confirm(`${emailIds.length} emails to archive?`)) {
+        showBulkProcessingModal('Archive', emailIds.length);
+        performBulkAction('archive', emailIds);
     }
 }
 
@@ -396,27 +458,9 @@ function bulkDelete() {
     const emailIds = getSelectedEmailIds();
     if (emailIds.length === 0) return;
     
-    if (confirm(`${emailIds.length}개의 이메일을 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다.`)) {
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = '{{ url_for("email.bulk_actions") }}';
-        
-        const actionInput = document.createElement('input');
-        actionInput.type = 'hidden';
-        actionInput.name = 'action';
-        actionInput.value = 'delete';
-        form.appendChild(actionInput);
-        
-        emailIds.forEach(id => {
-            const input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = 'email_ids';
-            input.value = id;
-            form.appendChild(input);
-        });
-        
-        document.body.appendChild(form);
-        form.submit();
+    if (confirm(`${emailIds.length} emails to delete?\n\nThis action cannot be undone.`)) {
+        showBulkProcessingModal('Delete', emailIds.length);
+        performBulkAction('delete', emailIds);
     }
 }
 
@@ -424,34 +468,105 @@ function bulkUnsubscribe() {
     const emailIds = getSelectedEmailIds();
     if (emailIds.length === 0) return;
     
-    if (confirm(`${emailIds.length}개의 이메일에서 구독 해지를 시도하시겠습니까?`)) {
-        const modal = new bootstrap.Modal(document.getElementById('unsubscribeModal'));
-        modal.show();
-        
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = '{{ url_for("email.bulk_actions") }}';
-        
-        const actionInput = document.createElement('input');
-        actionInput.type = 'hidden';
-        actionInput.name = 'action';
-        actionInput.value = 'unsubscribe';
-        form.appendChild(actionInput);
-        
-        emailIds.forEach(id => {
-            const input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = 'email_ids';
-            input.value = id;
-            form.appendChild(input);
-        });
-        
-        document.body.appendChild(form);
-        form.submit();
+    if (confirm(`${emailIds.length} emails to unsubscribe?`)) {
+        showBulkProcessingModal('Unsubscribe', emailIds.length);
+        performBulkAction('unsubscribe', emailIds);
     }
 }
 
-// AI 분석 함수
+// Show bulk processing modal
+function showBulkProcessingModal(action, totalCount) {
+    const modal = new bootstrap.Modal(document.getElementById('bulkProcessingModal'));
+    const title = document.getElementById('bulkActionTitle');
+    const message = document.getElementById('bulkProcessingMessage');
+    const totalCountElement = document.getElementById('totalEmailCount');
+    
+    title.textContent = `${action} in progress`;
+    message.textContent = `${totalCount} emails are being ${action}...`;
+    totalCountElement.textContent = totalCount;
+    
+    modal.show();
+}
+
+// Bulk processing via AJAX (improved version)
+function performBulkAction(action, emailIds) {
+    const formData = new FormData();
+    formData.append('action', action);
+    emailIds.forEach(id => formData.append('email_ids', id));
+    
+    fetch('{{ url_for("email.bulk_actions") }}', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        // Update modal content to completed state
+        setTimeout(() => {
+            const modalBody = document.querySelector('#bulkProcessingModal .modal-body');
+            modalBody.innerHTML = `
+                <div class="text-center">
+                    <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+                    <h5 class="text-success">${action} complete!</h5>
+                    <p class="text-muted">Processing has been completed.</p>
+                </div>
+            `;
+            
+            // Close modal and show toast notification after 1 second
+            setTimeout(() => {
+                const modal = bootstrap.Modal.getInstance(document.getElementById('bulkProcessingModal'));
+                modal.hide();
+                
+                // Show toast notification - use message field from server response
+                const successMessage = data.message || `${action} action completed.`;
+                showBulkActionToast(successMessage, 'success');
+
+                // Auto-refresh after 5 seconds
+                setTimeout(() => {
+                    window.location.reload();
+                }, 5000);
+            }, 1000);
+        }, 500);
+    })
+    .catch(error => {
+        console.error('Bulk processing error:', error);
+        
+        // Show error message
+        showFlashMessage('An error occurred during processing: ' + error.message, 'danger');
+        
+        // Update modal content
+        const modalBody = document.querySelector('#bulkProcessingModal .modal-body');
+        modalBody.innerHTML = `
+            <div class="text-center">
+                <i class="fas fa-exclamation-triangle fa-3x text-danger mb-3"></i>
+                <h5 class="text-danger">Processing failed</h5>
+                <p class="text-muted">An error occurred during processing.</p>
+            </div>
+        `;
+        
+        // Close modal after 3 seconds
+        setTimeout(() => {
+            const modal = bootstrap.Modal.getInstance(document.getElementById('bulkProcessingModal'));
+            modal.hide();
+        }, 3000);
+    });
+}
+
+// New email processing notification display
+function showNewEmailNotification() {
+    const modal = new bootstrap.Modal(document.getElementById('newEmailNotificationModal'));
+    modal.show();
+}
+
+// Check for new email processing notification on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Check for new email processing notification in URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('new_emails_processed') === 'true') {
+        showNewEmailNotification();
+    }
+});
+
+// AI analysis function
 function analyzeEmail(emailId) {
     const modal = new bootstrap.Modal(document.getElementById('analysisModal'));
     modal.show();
@@ -472,13 +587,13 @@ function analyzeEmail(emailId) {
         .catch(error => {
             document.getElementById('analysisContent').innerHTML = `
                 <div class="alert alert-danger">
-                    <i class="fas fa-exclamation-triangle"></i> 분석 중 오류가 발생했습니다: ${error}
+                    <i class="fas fa-exclamation-triangle"></i> An error occurred during analysis: ${error}
                 </div>
             `;
         });
 }
 
-// 분석 결과 표시 (경량화)
+// Display analysis result (lightweight)
 function displayAnalysis(analysis) {
     const content = document.getElementById('analysisContent');
     
@@ -486,11 +601,11 @@ function displayAnalysis(analysis) {
     if (analysis.has_unsubscribe && analysis.unsubscribe_links.length > 0) {
         unsubscribeHtml = `
             <div class="col-md-6">
-                <h6><i class="fas fa-unlink"></i> 구독해지 링크</h6>
+                <h6><i class="fas fa-unlink"></i> Unsubscribe Links</h6>
                 <div class="mb-3">
                     ${analysis.unsubscribe_links.map(link => 
                         `<a href="${link}" target="_blank" class="btn btn-outline-danger btn-sm me-2 mb-2">
-                            <i class="fas fa-external-link-alt"></i> 구독해지
+                            <i class="fas fa-external-link-alt"></i> Unsubscribe
                         </a>`
                     ).join('')}
                 </div>
@@ -501,7 +616,7 @@ function displayAnalysis(analysis) {
     content.innerHTML = `
         <div class="row">
             <div class="col-md-6">
-                <h6><i class="fas fa-file-alt"></i> AI 요약</h6>
+                <h6><i class="fas fa-file-alt"></i> AI Summary</h6>
                 <p class="small">${analysis.summary}</p>
             </div>
             ${unsubscribeHtml}
@@ -509,15 +624,15 @@ function displayAnalysis(analysis) {
     `;
 }
 
-// 통계 업데이트 함수
+// Update statistics function
 function updateStatistics(data) {
-    // AI 분류된 이메일 수 업데이트
+    // Update AI classified email count
     if (data.classified !== undefined) {
         const currentClassified = parseInt(document.getElementById('aiClassified').textContent) || 0;
         document.getElementById('aiClassified').textContent = currentClassified + data.classified;
     }
     
-    // 전체 이메일 수 업데이트
+    // Update total email count
     if (data.processed !== undefined) {
         const totalElement = document.querySelector('.card-title');
         if (totalElement) {
@@ -527,7 +642,7 @@ function updateStatistics(data) {
     }
 }
 
-// 페이지 로드 시 통계 업데이트
+// Update statistics on page load
 document.addEventListener('DOMContentLoaded', function() {
     fetch('/email/statistics')
         .then(response => response.json())
@@ -538,90 +653,54 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         })
         .catch(error => {
-            console.error('통계 조회 실패:', error);
+            console.error('Failed to fetch statistics:', error);
         });
 });
 
 let currentPage = 1;
 let hasMore = false;
 
-// 동기화 폼 제출 처리
-document.getElementById('processForm').addEventListener('submit', function(e) {
-    e.preventDefault();
+// New email processing function
+function processNewEmails() {
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('processNewEmailsModal'));
+    modal.show();
     
-    const formData = new FormData(this);
-    const button = document.getElementById('processButton');
-    const originalText = button.innerHTML;
+    // Initialize progress
+    const progressBar = document.getElementById('processNewEmailsProgress');
+    const message = document.getElementById('processNewEmailsMessage');
+    const details = document.getElementById('processNewEmailsDetails');
     
-    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 처리 중...';
-    button.disabled = true;
+    progressBar.style.width = '0%';
+    progressBar.textContent = '0%';
+    message.textContent = 'Processing new emails...';
+    details.textContent = 'Processing by account...';
     
-    fetch('{{ url_for("email.process_new_emails") }}', {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            // 새로운 이메일이 없는 경우 간단한 메시지 표시
-            if (data.no_new_emails) {
-                showAlert('info', '새로운 이메일이 없습니다.');
-            } else {
-                // 계정별 결과 표시
-                let message = `모든 계정 처리 완료: ${data.processed}개 처리, ${data.classified}개 AI 분류`;
-                
-                if (data.account_results && data.account_results.length > 0) {
-                    message += '\n\n계정별 결과:';
-                    data.account_results.forEach(result => {
-                        if (result.status === 'success') {
-                            message += `\n• ${result.account}: ${result.processed}개 처리, ${result.classified}개 분류`;
-                        } else if (result.status === 'no_new_emails') {
-                            message += `\n• ${result.account}: 새 이메일 없음`;
-                        } else {
-                            message += `\n• ${result.account}: 오류 - ${result.error}`;
-                        }
-                    });
-                }
-                
-                showAlert('success', message);
-            }
-            
-            // 더 보기 버튼 표시/숨김 (현재는 사용하지 않음)
-            hasMore = data.has_more || false;
-            currentPage = data.next_page || currentPage;
-            
-            if (hasMore) {
-                document.getElementById('loadMoreButton').style.display = 'inline-block';
-            } else {
-                document.getElementById('loadMoreButton').style.display = 'none';
-            }
-            
-            // 새 이메일이 있을 때만 리스트 업데이트
-            if (!data.no_new_emails && data.processed > 0) {
-                // 통계 업데이트
-                updateStatistics(data);
-                
-                // 잠시 후 페이지 새로고침 (새 이메일 반영)
-                setTimeout(() => {
-                    location.reload();
-                }, 1500);
-            }
-        } else {
-            showAlert('error', data.message);
-        }
-    })
-    .catch(error => {
-        showAlert('error', '처리 중 오류가 발생했습니다.');
-    })
-    .finally(() => {
-        button.innerHTML = originalText;
-        button.disabled = false;
-    });
-});
+    // Simulate progress
+    let progress = 0;
+    const progressInterval = setInterval(() => {
+        progress += Math.random() * 10;
+        if (progress > 90) progress = 90;
+        
+        progressBar.style.width = progress + '%';
+        progressBar.textContent = Math.round(progress) + '%';
+    }, 500);
+    
+    // Create and submit form
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '{{ url_for("email.process_new_emails") }}';
+    document.body.appendChild(form);
+    
+    // Submit form after 2 seconds (modal display time)
+    setTimeout(() => {
+        form.submit();
+    }, 2000);
+}
 
-// 더 보기 버튼 클릭 처리
+// Load more button click handler
 document.getElementById('loadMoreButton').addEventListener('click', function() {
-    document.getElementById('processForm').dispatchEvent(new Event('submit'));
+    processNewEmails();
 });
 
 function showAlert(type, message) {
@@ -634,24 +713,24 @@ function showAlert(type, message) {
     document.querySelector('.container').insertBefore(alertDiv, document.querySelector('.container').firstChild);
 }
 
-// 웹훅 상태 확인 및 자동 재설정 함수
+// Webhook status check and auto-reset function
 function checkAndRenewWebhook() {
     const button = event.target;
     const originalText = button.innerHTML;
     
-    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 확인 중...';
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking...';
     button.disabled = true;
     
-    // 먼저 웹훅 상태 확인
+    // First, check webhook status
     fetch('{{ url_for("email.webhook_status") }}')
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                let message = `웹훅 상태: ${data.healthy_accounts}/${data.total_accounts}개 계정 정상`;
+                let message = `Webhook status: ${data.healthy_accounts}/${data.total_accounts} accounts healthy`;
                 
-                // 비정상 상태가 있으면 자동 재설정 제안
+                // If there are unhealthy statuses, propose auto-renewal
                 if (data.healthy_accounts < data.total_accounts) {
-                    if (confirm(`${message}\n\n비정상 상태의 웹훅을 자동으로 재설정하시겠습니까?`)) {
+                    if (confirm(`${message}\n\nWould you like to automatically renew the webhook for unhealthy accounts?`)) {
                         return fetch('{{ url_for("email.auto_renew_webhook") }}', {
                             method: 'POST'
                         });
@@ -676,7 +755,7 @@ function checkAndRenewWebhook() {
             }
         })
         .catch(error => {
-            showAlert('error', '웹훅 상태 확인 중 오류가 발생했습니다.');
+            showAlert('error', 'An error occurred while checking webhook status.');
         })
         .finally(() => {
             button.innerHTML = originalText;
@@ -684,12 +763,233 @@ function checkAndRenewWebhook() {
         });
 }
 
-// 웹훅 재설정 함수
+// Unsubscribe function
+function unsubscribeEmail(emailId) {
+    console.log('🔍 [list.html] unsubscribeEmail() called');
+    console.log('📧 Email ID:', emailId);
+    console.log('📧 Email ID type:', typeof emailId);
+    
+    // Bootstrap check and improvement
+    if (typeof bootstrap === 'undefined') {
+        console.error('❌ Bootstrap is not loaded');
+        showFallbackAlert('Bootstrap is not loaded. Please refresh the page.', 'danger');
+        return;
+    }
+    
+    // Modal element check and improvement
+    const modalElement = document.getElementById('unsubscribeModal');
+    if (!modalElement) {
+        console.error('❌ Unsubscribe modal not found');
+        showFallbackAlert('Modal not found. Please refresh the page.', 'danger');
+        return;
+    }
+    
+    if (!confirm('Would you like to unsubscribe from this email?')) {
+        console.log('❌ User cancelled');
+        return;
+    }
+    
+    console.log('✅ User confirmed, showing modal');
+    
+    try {
+        // Hide flash messages
+        hideFlashMessages();
+        
+        // Show modal
+        const modal = new bootstrap.Modal(modalElement);
+        modal.show();
+        
+        // Initialize progress display
+        const modalBody = modalElement.querySelector('.modal-body');
+        if (modalBody) {
+            modalBody.innerHTML = `
+                <div class="text-center">
+                    <div class="spinner-border text-warning" role="status">
+                        <span class="visually-hidden">Unsubscribing...</span>
+                    </div>
+                    <p class="mt-2">AI is finding and processing the unsubscribe link...</p>
+                    <div class="progress mt-3">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                             role="progressbar" style="width: 0%" id="unsubscribeProgress">0%</div>
+                    </div>
+                    <div class="mt-3" id="unsubscribeSteps">
+                        <small class="text-muted">Initializing...</small>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Send unsubscribe request
+        const requestUrl = `/email/${emailId}/unsubscribe`;
+        console.log('🚀 Request URL:', requestUrl);
+        console.log('📡 fetch request started');
+        
+        // Set timeout (30 seconds)
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
+        
+        fetch(requestUrl, {
+            signal: controller.signal
+        })
+        .then(response => {
+            clearTimeout(timeoutId);
+            if (!response.ok) {
+                // If HTTP error status, check response content
+                return response.text().then(text => {
+                    try {
+                        // Check if it's a JSON response
+                        const jsonData = JSON.parse(text);
+                        throw new Error(jsonData.message || `An error occurred on the server. (${response.status})`);
+                    } catch (parseError) {
+                        // If not JSON (e.g., HTML error page)
+                        throw new Error(`An error occurred on the server. (${response.status})`);
+                    }
+                });
+            }
+            return response.json();
+        })
+        .then(data => {
+            handleUnsubscribeResult(data, modalElement);
+        })
+        .catch(error => {
+            clearTimeout(timeoutId);
+            console.error('Unsubscribe request failed:', error);
+            
+            // Check for network errors
+            if (error.name === 'AbortError') {
+                handleUnsubscribeError(new Error('Request timed out. Please try again.'), modalElement);
+            } else if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                handleUnsubscribeError(new Error('Please check your network connection.'), modalElement);
+            } else {
+                handleUnsubscribeError(error, modalElement);
+            }
+        });
+    } catch (error) {
+        console.error('Failed to show modal:', error);
+        showFallbackAlert('An error occurred while showing the modal.', 'danger');
+    }
+}
+
+// Unsubscribe result handling function
+function handleUnsubscribeResult(data, modalElement) {
+    const modalBody = modalElement.querySelector('.modal-body');
+    if (!modalBody) {
+        // Safe handling if modal is not found
+        console.error('Modal body not found:', data);
+        showFallbackAlert('An error occurred during unsubscribe processing. Please refresh the page.', 'danger');
+        return;
+    }
+    
+    const progressBar = document.getElementById('unsubscribeProgress');
+    const stepsDiv = document.getElementById('unsubscribeSteps');
+    
+    if (data.success) {
+        // Update progress
+        if (data.progress && progressBar) {
+            progressBar.style.width = data.progress + '%';
+            progressBar.textContent = data.progress + '%';
+        }
+        
+        // Display steps
+        if (data.steps && data.steps.length > 0 && stepsDiv) {
+            stepsDiv.innerHTML = `
+                <strong>Processing Steps:</strong>
+                <ul class="text-start mt-2">
+                    ${data.steps.map(step => `<li class="small">${step}</li>`).join('')}
+                </ul>
+            `;
+        }
+        
+        // Include bulk update info
+        let bulkUpdateInfo = '';
+        if (data.bulk_updated_count && data.bulk_updated_count > 0) {
+            bulkUpdateInfo = `
+                <div class="alert alert-info mt-3">
+                    <i class="fas fa-info-circle"></i>
+                    <strong>Bulk Update Complete:</strong> ${data.bulk_updated_message}
+                </div>
+            `;
+        }
+        
+        // Success message
+        setTimeout(() => {
+            modalBody.innerHTML = `
+                <div class="text-center">
+                    <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+                    <h5 class="text-success">Unsubscribe complete!</h5>
+                    <div style="white-space: pre-line; text-align: left; font-size: 0.9em; color: #666;">
+                        ${data.message}
+                    </div>
+                    ${data.steps ? `<div class="mt-3"><strong>Processing Steps:</strong><ul class="text-start">${data.steps.map(step => `<li>${step}</li>`).join('')}</ul></div>` : ''}
+                    ${bulkUpdateInfo}
+                </div>
+            `;
+            
+            // Update status via page reload
+            setTimeout(() => {
+                location.reload();
+            }, 2000);
+        }, 1000);
+    } else {
+        // Update progress
+        if (data.progress && progressBar) {
+            progressBar.style.width = data.progress + '%';
+            progressBar.textContent = data.progress + '%';
+        }
+        
+        // Display steps
+        if (data.steps && data.steps.length > 0 && stepsDiv) {
+            stepsDiv.innerHTML = `
+                <strong>Attempted Steps:</strong>
+                <ul class="text-start mt-2">
+                    ${data.steps.map(step => `<li class="small">${step}</li>`).join('')}
+                </ul>
+            `;
+        }
+        
+        // Failure message
+        setTimeout(() => {
+            modalBody.innerHTML = `
+                <div class="text-center">
+                    <i class="fas fa-exclamation-triangle fa-3x text-danger mb-3"></i>
+                    <h5 class="text-danger">Unsubscribe failed</h5>
+                    <div style="white-space: pre-line; text-align: left; font-size: 0.9em; color: #666;">
+                        ${data.message}
+                    </div>
+                    ${data.steps ? `<div class="mt-3"><strong>Attempted Steps:</strong><ul class="text-start">${data.steps.map(step => `<li>${step}</li>`).join('')}</ul></div>` : ''}
+                </div>
+            `;
+        }, 1000);
+    }
+}
+
+// Unsubscribe error handling function
+function handleUnsubscribeError(error, modalElement) {
+    const modalBody = modalElement.querySelector('.modal-body');
+    if (!modalBody) {
+        // Safe handling if modal is not found
+        console.error('Modal body not found:', error);
+        showFallbackAlert('An error occurred during unsubscribe processing. Please refresh the page.', 'danger');
+        return;
+    }
+    
+    modalBody.innerHTML = `
+        <div class="text-center">
+            <i class="fas fa-exclamation-triangle fa-3x text-danger mb-3"></i>
+            <h5 class="text-danger">Error Occurred</h5>
+            <p>An error occurred during unsubscribe processing.</p>
+            <small class="text-muted">${error.message}</small>
+        </div>
+    `;
+}
+
+
+// Webhook reset function
 function setupWebhook() {
     const button = event.target;
     const originalText = button.innerHTML;
     
-    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 설정 중...';
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Setting up...';
     button.disabled = true;
     
     fetch('{{ url_for("email.setup_webhook") }}', {
@@ -704,7 +1004,7 @@ function setupWebhook() {
         }
     })
     .catch(error => {
-        showAlert('error', '웹훅 설정 중 오류가 발생했습니다.');
+        showAlert('error', 'An error occurred while setting up the webhook.');
     })
     .finally(() => {
         button.innerHTML = originalText;
@@ -712,6 +1012,74 @@ function setupWebhook() {
     });
 }
 
+// Fallback alert function (for when modal is not available)
+function showFallbackAlert(message, type = 'info') {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+    alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+    alertDiv.innerHTML = `
+        <i class="fas fa-${type === 'danger' ? 'exclamation-triangle' : 'info-circle'}"></i>
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    document.body.appendChild(alertDiv);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        if (alertDiv.parentNode) {
+            alertDiv.remove();
+        }
+    }, 5000);
+}
 
 </script>
-{% endblock %} 
+
+<!-- New Email Notification Modal -->
+{% if new_emails_notification %}
+<div class="modal fade" id="newEmailNotificationModal" tabindex="-1" aria-labelledby="newEmailNotificationModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title" id="newEmailNotificationModalLabel">
+                    <i class="fas fa-envelope-open"></i> New Emails Processed
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p><strong>{{ new_emails_notification.count }} new emails</strong> have been processed.</p>
+                <p class="text-muted small">Processed at: {{ new_emails_notification.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+                <p>Refresh the page to see the latest emails.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="location.reload()">Refresh</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Auto-display new email notification modal on page load
+document.addEventListener('DOMContentLoaded', function() {
+    const notificationModal = document.getElementById('newEmailNotificationModal');
+    if (notificationModal) {
+        const modal = new bootstrap.Modal(notificationModal);
+        modal.show();
+    }
+});
+</script>
+{% endif %}
+
+{% block scripts %}
+<script>
+// Auto-display new email notification modal on page load (global socket connection handled in base.html)
+document.addEventListener('DOMContentLoaded', function() {
+    const notificationModal = document.getElementById('newEmailNotificationModal');
+    if (notificationModal) {
+        const modal = new bootstrap.Modal(notificationModal);
+        modal.show();
+    }
+});
+</script>
+{% endblock %}
+{% endblock %}

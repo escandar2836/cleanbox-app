@@ -4,49 +4,53 @@ import os
 from logging.handlers import RotatingFileHandler
 
 # Third-party imports
-from flask import Flask, render_template, redirect, url_for, flash
+from flask import Flask, render_template, redirect, url_for, flash, request
 from flask_login import LoginManager, current_user
 from flask_sqlalchemy import SQLAlchemy
 from flask_apscheduler import APScheduler
+from flask_caching import Cache
 from sqlalchemy.exc import OperationalError, DisconnectionError
 
-# psycopg3는 자동으로 binary 구현을 사용합니다
+# psycopg3 uses binary implementation automatically
 
 # Local imports
 from .config import Config
 from .models import db, User
 
-# 확장 초기화
 login_manager = LoginManager()
 
-# 스케줄러 초기화
 scheduler = APScheduler()
+
+cache = Cache()
 
 
 @login_manager.user_loader
 def load_user(user_id):
-    """Flask-Login 사용자 로더"""
+    """Flask-Login user loader"""
     try:
         return User.query.get(user_id)
     except (OperationalError, DisconnectionError) as e:
-        # 데이터베이스 연결 오류 시 로그 기록
+        # Log on database connection error
         logger = logging.getLogger(__name__)
-        logger.error(f"데이터베이스 연결 오류 (사용자 로딩): {e}")
+        logger.error(f"Database connection error (user loading): {e}")
         return None
     except Exception as e:
-        # 기타 예외 처리
+        # Handle other exceptions
         logger = logging.getLogger(__name__)
-        logger.error(f"사용자 로딩 오류: {e}")
+        logger.error(f"User loading error: {e}")
         return None
 
 
-def create_app(config_class=Config):
-    """CleanBox Flask 애플리케이션 팩토리"""
+def create_app(config_class=Config, testing=False):
+    """CleanBox Flask application factory"""
 
     app = Flask(__name__)
     app.config.from_object(config_class)
+    if testing:
+        app.config["TESTING"] = True
+        app.config["WTF_CSRF_ENABLED"] = False  # Disable CSRF for testing if needed
 
-    # 로깅 설정
+    # Logging setup
     if not app.debug and not app.testing:
         if not os.path.exists("logs"):
             os.mkdir("logs")
@@ -62,42 +66,38 @@ def create_app(config_class=Config):
         app.logger.addHandler(file_handler)
 
         app.logger.setLevel(logging.INFO)
-        app.logger.info("CleanBox 시작")
+        app.logger.info("CleanBox started")
 
-    # 데이터베이스 초기화
+    # Initialize database
     db.init_app(app)
 
-    # 로그인 매니저 초기화
+    # Initialize login manager
     login_manager.init_app(app)
 
-    # 스케줄러 초기화
-    scheduler.init_app(app)
-    scheduler.start()
+    # Initialize scheduler (skip in test environment)
+    if not testing:
+        scheduler.init_app(app)
+        scheduler.start()
 
-    # 주기적 웹훅 모니터링 스케줄러 설정
-    @scheduler.task("interval", id="webhook_monitor", hours=6)
-    def scheduled_webhook_monitoring():
-        """6시간마다 모든 사용자의 웹훅 상태를 모니터링"""
-        try:
-            from .email.routes import monitor_and_renew_webhooks
+        # Register 30-min interval webhook monitoring job
+        from .email.routes import monitor_and_renew_webhooks
 
-            print("🕐 스케줄된 웹훅 모니터링 시작...")
+        def scheduled_webhook_monitoring():
+            with app.app_context():
+                monitor_and_renew_webhooks()
 
-            result = monitor_and_renew_webhooks()
+        scheduler.add_job(
+            id="webhook_monitor",
+            func=scheduled_webhook_monitoring,
+            trigger="interval",
+            minutes=30,
+            replace_existing=True,
+        )
 
-            if result["success"]:
-                print(
-                    f"✅ 스케줄된 웹훅 모니터링 완료 - 갱신: {result['renewed_count']}개, 실패: {result['failed_count']}개"
-                )
-            else:
-                print(
-                    f"❌ 스케줄된 웹훅 모니터링 실패: {result.get('error', 'Unknown error')}"
-                )
+    # Initialize cache
+    cache.init_app(app)
 
-        except Exception as e:
-            print(f"❌ 스케줄된 웹훅 모니터링 중 오류: {str(e)}")
-
-    # 블루프린트 등록
+    # Register blueprints
     from .auth.routes import auth_bp
     from .main.routes import main_bp
     from .category.routes import category_bp
@@ -110,39 +110,39 @@ def create_app(config_class=Config):
     app.register_blueprint(email_bp, url_prefix="/email")
     app.register_blueprint(webhook_bp, url_prefix="/webhook")
 
-    # 메인 라우트 (루트 URL)
+    # Main route (root URL)
     @app.route("/")
     def index():
-        # 로그인된 사용자는 대시보드로 리다이렉트
+        # Redirect logged-in users to dashboard
         if current_user and current_user.is_authenticated:
             return redirect(url_for("main.dashboard"))
 
-        # 로그인되지 않은 사용자는 랜딩 페이지 표시
+        # Show landing page for non-logged-in users
         return render_template("landing.html")
 
-    # home 엔드포인트 추가
+    # home endpoint
     @app.route("/home")
     def home():
         return redirect(url_for("main.dashboard"))
 
-    # Unauthorized 에러 핸들러
+    # Unauthorized error handler
     @app.errorhandler(401)
     def unauthorized(error):
         if current_user and current_user.is_authenticated:
-            # 로그인된 사용자지만 권한이 없는 경우
-            flash("해당 기능에 대한 권한이 없습니다.", "error")
+            # Logged-in user but no permission
+            flash("You do not have permission for this feature.", "error")
             return redirect(url_for("main.dashboard"))
         else:
-            # 로그인되지 않은 사용자
-            flash("로그인이 필요합니다.", "error")
+            # Not logged in
+            flash("Login required.", "error")
             return redirect(url_for("auth.login"))
 
     @app.errorhandler(403)
     def forbidden(error):
-        flash("해당 기능에 대한 접근 권한이 없습니다.", "error")
+        flash("You do not have access rights to this feature.", "error")
         return redirect(url_for("main.dashboard"))
 
-    # 데이터베이스 초기화 (테스트 환경이 아닌 경우에만)
+    # Initialize database (only if not testing)
     if not app.config.get("TESTING", False):
         with app.app_context():
             db.create_all()
@@ -151,7 +151,7 @@ def create_app(config_class=Config):
 
 
 def init_db(app):
-    """데이터베이스 초기화"""
+    """Initialize database"""
     with app.app_context():
         db.create_all()
-        print("CleanBox 데이터베이스가 초기화되었습니다.")
+        print("CleanBox database initialized.")

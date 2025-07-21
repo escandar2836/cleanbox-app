@@ -1,13 +1,9 @@
 services:
   - type: web
     name: cleanbox
-    env: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app
+    env: docker
+    dockerfilePath: ./Dockerfile
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.11.0
-
       - key: DATABASE_URI
         fromDatabase:
           name: cleanbox-db

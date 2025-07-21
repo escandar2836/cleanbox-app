@@ -2,105 +2,162 @@
 import logging
 import re
 import time
+import os
+import json
 from typing import List, Dict, Optional, Tuple
 from urllib.parse import urlparse, urljoin
 
 # Third-party imports
 import requests
 from bs4 import BeautifulSoup
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.options import Options
-from selenium.common.exceptions import TimeoutException, NoSuchElementException
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.chrome.service import Service
+
+# Local imports
+from .playwright_unsubscribe import (
+    PlaywrightUnsubscribeService,
+    process_unsubscribe_sync,
+)
 
 
 class AdvancedUnsubscribeService:
-    """고급 구독해지 서비스"""
+    """Advanced Unsubscribe Service (Playwright-based)"""
 
     def __init__(self):
-        self.driver = None
         self.setup_logging()
+        self.playwright_service = PlaywrightUnsubscribeService()
+
+        # Timeout settings
+        self.timeouts = {
+            "page_load": 30,
+            "element_wait": 10,
+            "api_call": 15,
+            "retry_delay": 2,
+        }
 
     def setup_logging(self):
-        """로깅 설정"""
+        """Setup logging"""
         logging.basicConfig(
             level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
         )
         self.logger = logging.getLogger(__name__)
 
-    def setup_driver(self, headless: bool = True):
-        """Selenium 드라이버 설정"""
-        try:
-            chrome_options = Options()
-            if headless:
-                chrome_options.add_argument("--headless")
-            chrome_options.add_argument("--no-sandbox")
-            chrome_options.add_argument("--disable-dev-shm-usage")
-            chrome_options.add_argument("--disable-gpu")
-            chrome_options.add_argument("--window-size=1920,1080")
-            chrome_options.add_argument(
-                "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            )
+        # Add file logging
+        if not os.path.exists("logs"):
+            os.makedirs("logs")
+        file_handler = logging.FileHandler("logs/unsubscribe_service.log")
+        file_handler.setLevel(logging.INFO)
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        )
+        file_handler.setFormatter(formatter)
+        self.logger.addHandler(file_handler)
 
-            service = Service(ChromeDriverManager().install())
-            self.driver = webdriver.Chrome(service=service, options=chrome_options)
-            self.driver.set_page_load_timeout(30)
-            return True
-        except Exception as e:
-            self.logger.error(f"드라이버 설정 실패: {str(e)}")
-            return False
-
-    def close_driver(self):
-        """드라이버 종료"""
-        if self.driver:
-            try:
-                self.driver.quit()
-            except Exception as e:
-                self.logger.error(f"드라이버 종료 실패: {str(e)}")
+        # Initialize stats
+        self.stats = {
+            "total_attempts": 0,
+            "successful_unsubscribes": 0,
+            "failed_unsubscribes": 0,
+            "processing_times": [],
+            "service_success_rates": {},
+            "error_counts": {},
+        }
 
     def extract_unsubscribe_links(
         self, email_content: str, email_headers: Dict = None
     ) -> List[str]:
-        """이메일에서 구독해지 링크 추출 (고급)"""
-        unsubscribe_links = []
+        """Extract unsubscribe links from email (using Playwright service)"""
+        return self.playwright_service.extract_unsubscribe_links(
+            email_content, email_headers
+        )
 
-        # 1. 이메일 헤더에서 List-Unsubscribe 필드 확인
-        if email_headers:
-            list_unsubscribe = email_headers.get("List-Unsubscribe", "")
-            if list_unsubscribe:
-                # 여러 링크가 있을 수 있음 (쉼표로 구분)
-                links = [link.strip() for link in list_unsubscribe.split(",")]
-                unsubscribe_links.extend(links)
+    def _is_valid_unsubscribe_url(self, url: str) -> bool:
+        """Check if URL is a valid unsubscribe link"""
+        try:
+            parsed = urlparse(url)
+            return parsed.scheme in ["http", "https"] and bool(parsed.netloc)
+        except:
+            return False
 
-        # 2. 이메일 본문에서 구독해지 링크 패턴 검색
-        patterns = [
-            r'https?://[^\s<>"]*unsubscribe[^\s<>"]*',
-            r'https?://[^\s<>"]*opt-out[^\s<>"]*',
-            r'https?://[^\s<>"]*remove[^\s<>"]*',
-            r'https?://[^\s<>"]*cancel[^\s<>"]*',
-            r'https?://[^\s<>"]*subscription[^\s<>"]*',
-            r'https?://[^\s<>"]*email[^\s<>"]*preferences[^\s<>"]*',
-            r'https?://[^\s<>"]*manage[^\s<>"]*subscription[^\s<>"]*',
-            r'https?://[^\s<>"]*preferences[^\s<>"]*',
-            r'https?://[^\s<>"]*settings[^\s<>"]*',
-            r'https?://[^\s<>"]*account[^\s<>"]*',
-        ]
+    def _detect_personal_email(
+        self, email_content: str, email_headers: Dict = None
+    ) -> bool:
+        """Detect personal email"""
+        try:
+            # 1. Check sender domain
+            if email_headers:
+                from_header = email_headers.get("From", "").lower()
+                personal_domains = [
+                    "gmail.com",
+                    "naver.com",
+                    "daum.net",
+                    "outlook.com",
+                    "hotmail.com",
+                    "yahoo.com",
+                    "icloud.com",
+                    "me.com",
+                ]
 
-        for pattern in patterns:
-            matches = re.findall(pattern, email_content, re.IGNORECASE)
-            unsubscribe_links.extend(matches)
+                for domain in personal_domains:
+                    if domain in from_header:
+                        print(f"Personal domain detected: {domain}")
+                        return True
 
-        # 3. HTML 태그에서 링크 추출
-        soup = BeautifulSoup(email_content, "html.parser")
-        for link in soup.find_all("a", href=True):
-            href = link.get("href", "").lower()
-            link_text = link.get_text().lower()
+            # 2. Analyze email content
+            content_lower = email_content.lower()
 
-            # 구독해지 관련 텍스트가 포함된 링크
+            # Check for marketing keywords
+            marketing_keywords = [
+                "unsubscribe",
+                "opt-out",
+                "구독해지",
+                "수신거부",
+                "marketing",
+                "promotion",
+                "offer",
+                "deal",
+                "sale",
+                "newsletter",
+                "news letter",
+                "email preferences",
+                "manage subscription",
+                "subscription settings",
+            ]
+
+            has_marketing_content = any(
+                keyword in content_lower for keyword in marketing_keywords
+            )
+
+            if not has_marketing_content:
+                print(f"No marketing content - considered personal email")
+                return True
+
+            return False
+
+        except Exception as e:
+            print(f"Error detecting personal email: {str(e)}")
+            return False
+
+    def process_unsubscribe_simple(self, unsubscribe_url: str) -> Dict:
+        """Simple unsubscribe processing (using Playwright service)"""
+        try:
+            print(f"🔧 Starting simple unsubscribe processing: {unsubscribe_url}")
+
+            # Use Playwright service for processing (sync wrapper)
+            result = process_unsubscribe_sync(unsubscribe_url)
+
+            return result
+
+        except Exception as e:
+            print(f"❌ Failed simple unsubscribe processing: {str(e)}")
+            return {
+                "success": False,
+                "message": f"Unsubscribe processing failed: {str(e)}",
+                "error_details": str(e),
+            }
+
+    def _find_unsubscribe_link_simple(self, soup: BeautifulSoup) -> Optional[str]:
+        """Find simple unsubscribe link"""
+        try:
+            # Find unsubscribe-related links
             unsubscribe_keywords = [
                 "unsubscribe",
                 "opt-out",
@@ -110,251 +167,325 @@ class AdvancedUnsubscribeService:
                 "구독취소",
                 "수신거부",
                 "수신취소",
-                "email preferences",
-                "manage subscription",
-                "subscription settings",
             ]
 
-            for keyword in unsubscribe_keywords:
-                if keyword in href or keyword in link_text:
-                    unsubscribe_links.append(link["href"])
-                    break
+            for link in soup.find_all("a", href=True):
+                href = link.get("href", "").lower()
+                link_text = link.get_text().lower()
 
-        # 중복 제거 및 유효한 URL만 필터링
-        valid_links = []
-        for link in set(unsubscribe_links):
-            if self._is_valid_unsubscribe_url(link):
-                valid_links.append(link)
+                for keyword in unsubscribe_keywords:
+                    if keyword in href or keyword in link_text:
+                        return link["href"]
 
-        return valid_links
-
-    def _is_valid_unsubscribe_url(self, url: str) -> bool:
-        """유효한 구독해지 URL인지 확인"""
-        try:
-            parsed = urlparse(url)
-            return parsed.scheme in ["http", "https"] and parsed.netloc
-        except:
-            return False
-
-    def process_unsubscribe_with_selenium(self, unsubscribe_url: str) -> Dict:
-        """Selenium을 사용한 고급 구독해지 처리"""
-        result = {"success": False, "message": "", "steps": []}
-
-        try:
-            if not self.setup_driver():
-                result["message"] = "브라우저 드라이버 설정 실패"
-                return result
-
-            self.logger.info(f"구독해지 페이지 접속: {unsubscribe_url}")
-            result["steps"].append(f"페이지 접속: {unsubscribe_url}")
-
-            # 페이지 로드
-            self.driver.get(unsubscribe_url)
-            time.sleep(3)  # 페이지 로딩 대기
-
-            # 구독해지 버튼/링크 찾기 및 클릭
-            unsubscribe_found = self._find_and_click_unsubscribe_elements()
-
-            if unsubscribe_found:
-                result["success"] = True
-                result["message"] = "구독해지가 성공적으로 처리되었습니다"
-                result["steps"].append("구독해지 버튼 클릭 완료")
-            else:
-                result["message"] = "구독해지 버튼을 찾을 수 없습니다"
-                result["steps"].append("구독해지 버튼을 찾을 수 없음")
-
-        except TimeoutException:
-            result["message"] = "페이지 로딩 시간 초과"
-            result["steps"].append("페이지 로딩 시간 초과")
-        except Exception as e:
-            result["message"] = f"구독해지 처리 중 오류: {str(e)}"
-            result["steps"].append(f"오류 발생: {str(e)}")
-        finally:
-            self.close_driver()
-
-        return result
-
-    def _find_and_click_unsubscribe_elements(self) -> bool:
-        """구독해지 요소 찾기 및 클릭"""
-        unsubscribe_selectors = [
-            # 버튼
-            "button[contains(text(), 'Unsubscribe')]",
-            "button[contains(text(), '구독해지')]",
-            "button[contains(text(), 'Cancel')]",
-            "button[contains(text(), 'Remove')]",
-            "button[contains(text(), 'Opt-out')]",
-            # 링크
-            "a[contains(text(), 'Unsubscribe')]",
-            "a[contains(text(), '구독해지')]",
-            "a[contains(text(), 'Cancel')]",
-            "a[contains(text(), 'Remove')]",
-            "a[contains(text(), 'Opt-out')]",
-            # input 버튼
-            "input[value*='Unsubscribe']",
-            "input[value*='구독해지']",
-            "input[value*='Cancel']",
-            # 일반적인 클래스명
-            ".unsubscribe",
-            ".opt-out",
-            ".cancel",
-            ".remove",
-            "[class*='unsubscribe']",
-            "[class*='opt-out']",
-            # ID 기반
-            "#unsubscribe",
-            "#opt-out",
-            "#cancel",
-        ]
-
-        for selector in unsubscribe_selectors:
-            try:
-                # 요소 찾기
-                element = WebDriverWait(self.driver, 5).until(
-                    EC.element_to_be_clickable((By.CSS_SELECTOR, selector))
-                )
-
-                # 스크롤하여 요소가 보이도록
-                self.driver.execute_script(
-                    "arguments[0].scrollIntoView(true);", element
-                )
-                time.sleep(1)
-
-                # 클릭
-                element.click()
-                self.logger.info(f"구독해지 요소 클릭: {selector}")
-
-                # 클릭 후 페이지 변화 대기
-                time.sleep(3)
-
-                return True
-
-            except (TimeoutException, NoSuchElementException):
-                continue
-
-        # 폼 제출 시도
-        return self._try_form_submission()
-
-    def _try_form_submission(self) -> bool:
-        """폼 제출 시도"""
-        try:
-            # 구독해지 관련 폼 찾기
-            forms = self.driver.find_elements(By.TAG_NAME, "form")
-
-            for form in forms:
-                form_html = form.get_attribute("innerHTML").lower()
-
-                # 구독해지 관련 키워드가 포함된 폼
-                unsubscribe_keywords = ["unsubscribe", "opt-out", "cancel", "구독해지"]
-                if any(keyword in form_html for keyword in unsubscribe_keywords):
-
-                    # 폼 내의 submit 버튼 찾기
-                    submit_buttons = form.find_elements(
-                        By.CSS_SELECTOR,
-                        "input[type='submit'], button[type='submit'], button",
-                    )
-
-                    for button in submit_buttons:
-                        button_text = button.text.lower()
-                        if any(
-                            keyword in button_text for keyword in unsubscribe_keywords
-                        ):
-                            button.click()
-                            time.sleep(3)
-                            self.logger.info("구독해지 폼 제출 완료")
-                            return True
+            return None
 
         except Exception as e:
-            self.logger.error(f"폼 제출 시도 실패: {str(e)}")
-
-        return False
-
-    def process_unsubscribe_simple(self, unsubscribe_url: str) -> Dict:
-        """간단한 구독해지 처리 (requests 사용)"""
-        result = {"success": False, "message": "", "steps": []}
-
-        try:
-            # 페이지 접속
-            response = requests.get(unsubscribe_url, timeout=10)
-            response.raise_for_status()
-
-            result["steps"].append(f"페이지 접속: {unsubscribe_url}")
-
-            # HTML 파싱
-            soup = BeautifulSoup(response.content, "html.parser")
-
-            # 구독해지 링크 찾기
-            unsubscribe_link = self._find_unsubscribe_link_simple(soup)
-
-            if unsubscribe_link:
-                # 구독해지 링크 클릭
-                if unsubscribe_link.startswith("http"):
-                    final_url = unsubscribe_link
-                else:
-                    final_url = urljoin(unsubscribe_url, unsubscribe_link)
-
-                requests.get(final_url, timeout=10)
-                result["success"] = True
-                result["message"] = "구독해지가 성공적으로 처리되었습니다"
-                result["steps"].append("구독해지 링크 클릭 완료")
-            else:
-                result["message"] = "구독해지 링크를 찾을 수 없습니다"
-                result["steps"].append("구독해지 링크를 찾을 수 없음")
-
-        except Exception as e:
-            result["message"] = f"구독해지 처리 중 오류: {str(e)}"
-            result["steps"].append(f"오류 발생: {str(e)}")
-
-        return result
-
-    def _find_unsubscribe_link_simple(self, soup: BeautifulSoup) -> Optional[str]:
-        """간단한 구독해지 링크 찾기"""
-        unsubscribe_texts = [
-            "unsubscribe",
-            "opt-out",
-            "remove",
-            "cancel",
-            "구독해지",
-            "구독취소",
-            "수신거부",
-            "수신취소",
-        ]
-
-        for text in unsubscribe_texts:
-            # 텍스트가 포함된 링크 찾기
-            link = soup.find("a", string=re.compile(text, re.IGNORECASE))
-            if link and link.get("href"):
-                return link["href"]
-
-            # 텍스트가 포함된 버튼 찾기 (onclick은 제외)
-            button = soup.find("button", string=re.compile(text, re.IGNORECASE))
-            if button and button.get("href"):  # href 속성이 있는 경우만
-                return button["href"]
-
-        return None
+            print(f"⚠️ Failed to find unsubscribe link: {str(e)}")
+            return None
 
     def process_unsubscribe_advanced(
-        self, email_content: str, email_headers: Dict = None
+        self, email_content: str, email_headers: Dict = None, user_email: str = None
     ) -> Dict:
-        """고급 구독해지 처리 (자동 방법 선택)"""
-        # 구독해지 링크 추출
-        unsubscribe_links = self.extract_unsubscribe_links(email_content, email_headers)
+        """Advanced unsubscribe processing (using Playwright service)"""
+        try:
+            print(f"🔧 Starting advanced unsubscribe processing")
 
-        if not unsubscribe_links:
+            # Extract unsubscribe links
+            unsubscribe_links = self.extract_unsubscribe_links(
+                email_content, email_headers
+            )
+
+            if not unsubscribe_links:
+                return {
+                    "success": False,
+                    "message": "No unsubscribe link found.",
+                    "error_type": "no_unsubscribe_link",
+                    "error_details": "Could not find unsubscribe link in email.",
+                }
+
+            print(f"📝 Found unsubscribe links: {unsubscribe_links}")
+
+            # Try unsubscribe for each link
+            failed_links = []
+            for i, link in enumerate(unsubscribe_links):
+                print(f"📝 Processing link {i + 1}/{len(unsubscribe_links)}: {link}")
+
+                result = process_unsubscribe_sync(link, user_email)
+
+                if result["success"]:
+                    return {
+                        "success": True,
+                        "message": f"Unsubscribe success: {result['message']}",
+                        "processed_url": link,
+                        "processing_time": result.get("processing_time", 0),
+                    }
+                else:
+                    failed_links.append(
+                        {
+                            "link_number": i + 1,
+                            "url": link,
+                            "error": result.get("message", "Unknown error"),
+                        }
+                    )
+
+            # All links failed
             return {
                 "success": False,
-                "message": "구독해지 링크를 찾을 수 없습니다",
-                "steps": ["구독해지 링크 추출 실패"],
+                "message": "Failed on all unsubscribe links.",
+                "error_type": "all_links_failed",
+                "error_details": f"Tried {len(failed_links)} unsubscribe links, all failed.",
+                "failed_links": failed_links,
+                "attempted_links": unsubscribe_links,
             }
 
-        # 첫 번째 링크로 시도
-        unsubscribe_url = unsubscribe_links[0]
+        except Exception as e:
+            print(f"❌ Failed advanced unsubscribe processing: {str(e)}")
+            return {
+                "success": False,
+                "message": f"Advanced unsubscribe processing failed: {str(e)}",
+                "error_details": str(e),
+            }
 
-        # 먼저 간단한 방법 시도
-        result = self.process_unsubscribe_simple(unsubscribe_url)
+    def process_unsubscribe_with_mechanicalsoup_ai(
+        self, unsubscribe_url: str, user_email: str = None
+    ) -> Dict:
+        """Universal unsubscribe processing using Playwright + AI (legacy function name kept)"""
+        return process_unsubscribe_sync(unsubscribe_url, user_email)
 
-        # 간단한 방법이 실패하면 Selenium 사용
-        if not result["success"]:
-            self.logger.info("간단한 방법 실패, Selenium 사용")
-            result = self.process_unsubscribe_with_selenium(unsubscribe_url)
+    def test_unsubscribe_service(
+        self, service_name: str, test_url: str, user_email: str = None
+    ) -> Dict:
+        """Unsubscribe service test"""
+        try:
+            print(f"🧪 Starting unsubscribe service test: {service_name}")
 
-        return result
+            # Use Playwright service for testing
+            result = process_unsubscribe_sync(test_url, user_email)
+
+            return {
+                "service_name": service_name,
+                "test_url": test_url,
+                "success": result["success"],
+                "message": result["message"],
+                "processing_time": result.get("processing_time", 0),
+            }
+
+        except Exception as e:
+            print(f"❌ Unsubscribe service test failed: {str(e)}")
+            return {
+                "service_name": service_name,
+                "test_url": test_url,
+                "success": False,
+                "message": f"Test failed: {str(e)}",
+                "error_details": str(e),
+            }
+
+    def run_comprehensive_tests(self, test_cases: List[Dict]) -> Dict:
+        """Run comprehensive tests"""
+        try:
+            print(f"🧪 Starting comprehensive tests: {len(test_cases)} cases")
+
+            results = []
+            passed = 0
+            failed = 0
+
+            for test_case in test_cases:
+                result = self.test_unsubscribe_service(
+                    test_case["service_name"],
+                    test_case["test_url"],
+                    test_case.get("user_email"),
+                )
+
+                results.append(result)
+
+                if result["success"]:
+                    passed += 1
+                else:
+                    failed += 1
+
+            return {
+                "total_tests": len(test_cases),
+                "passed": passed,
+                "failed": failed,
+                "success_rate": (passed / len(test_cases) * 100) if test_cases else 0,
+                "results": results,
+            }
+
+        except Exception as e:
+            print(f"❌ Comprehensive tests failed: {str(e)}")
+            return {
+                "total_tests": 0,
+                "passed": 0,
+                "failed": 0,
+                "success_rate": 0,
+                "error": str(e),
+            }
+
+    def get_test_cases(self) -> List[Dict]:
+        """Return test cases list"""
+        return [
+            {
+                "service_name": "Netflix",
+                "test_url": "https://www.netflix.com/account",
+                "description": "Netflix unsubscribe test",
+            },
+            {
+                "service_name": "Spotify",
+                "test_url": "https://www.spotify.com/account/subscription/",
+                "description": "Spotify unsubscribe test",
+            },
+            {
+                "service_name": "YouTube",
+                "test_url": "https://www.youtube.com/paid_memberships",
+                "description": "YouTube Premium unsubscribe test",
+            },
+        ]
+
+    def analyze_failure_cases(self, test_results: Dict) -> Dict:
+        """Analyze failure cases"""
+        try:
+            failed_results = [
+                result
+                for result in test_results.get("results", [])
+                if not result.get("success", False)
+            ]
+
+            failure_analysis = {
+                "total_failures": len(failed_results),
+                "failure_reasons": {},
+                "service_failure_counts": {},
+            }
+
+            for result in failed_results:
+                service_name = result.get("service_name", "Unknown")
+                message = result.get("message", "Unknown error")
+
+                # Service-wise failure counts
+                failure_analysis["service_failure_counts"][service_name] = (
+                    failure_analysis["service_failure_counts"].get(service_name, 0) + 1
+                )
+
+                # Analyze failure reasons
+                if "timeout" in message.lower():
+                    failure_analysis["failure_reasons"]["timeout"] = (
+                        failure_analysis["failure_reasons"].get("timeout", 0) + 1
+                    )
+                elif "element not found" in message.lower():
+                    failure_analysis["failure_reasons"]["element_not_found"] = (
+                        failure_analysis["failure_reasons"].get("element_not_found", 0)
+                        + 1
+                    )
+                elif "network" in message.lower():
+                    failure_analysis["failure_reasons"]["network_error"] = (
+                        failure_analysis["failure_reasons"].get("network_error", 0) + 1
+                    )
+                else:
+                    failure_analysis["failure_reasons"]["other"] = (
+                        failure_analysis["failure_reasons"].get("other", 0) + 1
+                    )
+
+            return failure_analysis
+
+        except Exception as e:
+            print(f"❌ Failed to analyze failure cases: {str(e)}")
+            return {"error": str(e)}
+
+    def log_unsubscribe_attempt(
+        self, url: str, user_email: str = None, start_time: float = None
+    ) -> None:
+        """Log unsubscribe attempt"""
+        self.stats["total_attempts"] += 1
+        self.logger.info(f"Unsubscribe attempt: {url}, User: {user_email}")
+
+    def log_unsubscribe_result(
+        self, result: Dict, processing_time: float, url: str
+    ) -> None:
+        """Log unsubscribe result"""
+        if result.get("success"):
+            self.stats["successful_unsubscribes"] += 1
+        else:
+            self.stats["failed_unsubscribes"] += 1
+
+        self.stats["processing_times"].append(processing_time)
+        self.logger.info(
+            f"Unsubscribe result: {result.get('message', 'N/A')}, "
+            f"Processing time: {processing_time:.2f}s, URL: {url}"
+        )
+
+    def log_ai_analysis(self, ai_response: Dict, url: str) -> None:
+        """Log AI analysis"""
+        self.logger.info(f"AI analysis result: {ai_response}, URL: {url}")
+
+    def get_statistics(self) -> Dict:
+        """Return statistics information"""
+        playwright_stats = self.playwright_service.get_statistics()
+
+        return {
+            "total_attempts": self.stats["total_attempts"]
+            + playwright_stats["total_attempts"],
+            "successful_unsubscribes": self.stats["successful_unsubscribes"]
+            + playwright_stats["successful_unsubscribes"],
+            "failed_unsubscribes": self.stats["failed_unsubscribes"]
+            + playwright_stats["failed_unsubscribes"],
+            "success_rate": playwright_stats["success_rate"],
+            "average_processing_time": playwright_stats["average_processing_time"],
+            "service_success_rates": self.stats["service_success_rates"],
+            "error_counts": self.stats["error_counts"],
+        }
+
+    def export_statistics_report(self, filename: str = None) -> str:
+        """Export statistics report"""
+        try:
+            if not filename:
+                filename = f"unsubscribe_statistics_{int(time.time())}.json"
+
+            stats = self.get_statistics()
+
+            with open(filename, "w", encoding="utf-8") as f:
+                json.dump(stats, f, ensure_ascii=False, indent=2)
+
+            print(f"📊 Statistics report saved: {filename}")
+            return filename
+
+        except Exception as e:
+            print(f"❌ Failed to export statistics report: {str(e)}")
+            return ""
+
+    def log_performance_metrics(
+        self, url: str, method: str, processing_time: float, success: bool
+    ) -> None:
+        """Log performance metrics"""
+        self.logger.info(
+            f"Performance metrics: URL={url}, Method={method}, "
+            f"Time={processing_time:.2f}s, Success={success}"
+        )
+
+    def monitor_system_health(self) -> Dict:
+        """Monitor system health"""
+        try:
+            # Check Playwright service status
+            playwright_stats = self.playwright_service.get_statistics()
+
+            return {
+                "status": "healthy",
+                "playwright_service": {
+                    "total_attempts": playwright_stats["total_attempts"],
+                    "success_rate": playwright_stats["success_rate"],
+                    "average_processing_time": playwright_stats[
+                        "average_processing_time"
+                    ],
+                },
+                "advanced_service": {
+                    "total_attempts": self.stats["total_attempts"],
+                    "successful_unsubscribes": self.stats["successful_unsubscribes"],
+                    "failed_unsubscribes": self.stats["failed_unsubscribes"],
+                },
+                "timestamp": time.time(),
+            }
+
+        except Exception as e:
+            return {
+                "status": "unhealthy",
+                "error": str(e),
+                "timestamp": time.time(),
+            }

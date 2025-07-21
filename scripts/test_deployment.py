@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-CleanBox 배포 후 기능 테스트 스크립트
+CleanBox deployment post-check functional test script
 """
 
 import requests
@@ -11,29 +11,29 @@ from datetime import datetime
 
 
 def test_webhook_endpoint(base_url):
-    """웹훅 엔드포인트 테스트"""
-    print("🔍 웹훅 엔드포인트 테스트 중...")
+    """Webhook endpoint test"""
+    print("🔍 Testing webhook endpoint...")
 
     try:
-        # GET 테스트
+        # GET test
         response = requests.get(f"{base_url}/webhook/gmail/test", timeout=10)
         if response.status_code == 200:
-            print("✅ 웹훅 테스트 엔드포인트 정상 작동")
+            print("✅ Webhook endpoint is working properly")
             return True
         else:
-            print(f"❌ 웹훅 테스트 실패: {response.status_code}")
+            print(f"❌ Webhook endpoint test failed: {response.status_code}")
             return False
     except Exception as e:
-        print(f"❌ 웹훅 테스트 오류: {e}")
+        print(f"❌ Webhook endpoint test error: {e}")
         return False
 
 
 def test_webhook_post(base_url):
-    """웹훅 POST 요청 테스트"""
-    print("🔍 웹훅 POST 요청 테스트 중...")
+    """Webhook POST request test"""
+    print("🔍 Testing webhook POST request...")
 
     try:
-        # 테스트 데이터
+        # Test data
         test_data = {
             "message": {
                 "data": "eyJlbWFpbEFkZHJlc3MiOiJ0ZXN0QGV4YW1wbGUuY29tIiwiaGlzdG9yeUlkIjoiMTIzNDU2Nzg5MCJ9"
@@ -47,98 +47,98 @@ def test_webhook_post(base_url):
             timeout=10,
         )
 
-        if response.status_code in [200, 404]:  # 404는 계정을 찾을 수 없는 경우
-            print("✅ 웹훅 POST 요청 처리 정상")
+        if response.status_code in [200, 404]:  # 404 if account not found
+            print("✅ Webhook POST request processed successfully")
             return True
         else:
-            print(f"❌ 웹훅 POST 요청 실패: {response.status_code}")
+            print(f"❌ Webhook POST request failed: {response.status_code}")
             return False
     except Exception as e:
-        print(f"❌ 웹훅 POST 요청 오류: {e}")
+        print(f"❌ Webhook POST request error: {e}")
         return False
 
 
 def test_main_page(base_url):
-    """메인 페이지 접근 테스트"""
-    print("🔍 메인 페이지 테스트 중...")
+    """Main page access test"""
+    print("🔍 Testing main page access...")
 
     try:
         response = requests.get(base_url, timeout=10)
         if response.status_code == 200:
-            print("✅ 메인 페이지 정상 접근")
+            print("✅ Main page accessed successfully")
             return True
         else:
-            print(f"❌ 메인 페이지 접근 실패: {response.status_code}")
+            print(f"❌ Main page access failed: {response.status_code}")
             return False
     except Exception as e:
-        print(f"❌ 메인 페이지 접근 오류: {e}")
+        print(f"❌ Main page access error: {e}")
         return False
 
 
 def test_health_check(base_url):
-    """헬스 체크 엔드포인트 테스트"""
-    print("🔍 헬스 체크 테스트 중...")
+    """Health check endpoint test"""
+    print("🔍 Testing health check...")
 
     try:
         response = requests.get(f"{base_url}/health", timeout=10)
         if response.status_code == 200:
-            print("✅ 헬스 체크 정상")
+            print("✅ Health check passed")
             return True
         else:
-            print(f"⚠️ 헬스 체크 엔드포인트 없음: {response.status_code}")
-            return True  # 헬스 체크는 선택사항
+            print(f"⚠️  Health check endpoint missing: {response.status_code}")
+            return True  # Health check is optional
     except Exception as e:
-        print(f"⚠️ 헬스 체크 오류: {e}")
-        return True  # 헬스 체크는 선택사항
+        print(f"⚠️  Health check error: {e}")
+        return True  # Health check is optional
 
 
 def main():
-    """메인 테스트 함수"""
-    print("🚀 CleanBox 배포 테스트 시작")
+    """Main test function"""
+    print("🚀 Starting CleanBox deployment test")
     print("=" * 50)
 
-    # 환경변수에서 URL 가져오기
+    # Get URL from environment variable
     base_url = os.environ.get("CLEANBOX_URL", "https://cleanbox-app.onrender.com")
 
     if not base_url:
-        print("❌ CLEANBOX_URL 환경변수가 설정되지 않았습니다.")
+        print("❌ CLEANBOX_URL environment variable is not set.")
         print(
-            "사용법: CLEANBOX_URL=https://your-app.onrender.com python test_deployment.py"
+            "Usage: CLEANBOX_URL=https://your-app.onrender.com python test_deployment.py"
         )
         sys.exit(1)
 
-    print(f"📍 테스트 대상 URL: {base_url}")
+    print(f"📍 Test target URL: {base_url}")
     print()
 
-    # 테스트 실행
+    # Run tests
     tests = [
-        ("메인 페이지", lambda: test_main_page(base_url)),
-        ("웹훅 테스트 엔드포인트", lambda: test_webhook_endpoint(base_url)),
-        ("웹훅 POST 요청", lambda: test_webhook_post(base_url)),
-        ("헬스 체크", lambda: test_health_check(base_url)),
+        ("Main page", lambda: test_main_page(base_url)),
+        ("Webhook endpoint", lambda: test_webhook_endpoint(base_url)),
+        ("Webhook POST request", lambda: test_webhook_post(base_url)),
+        ("Health check", lambda: test_health_check(base_url)),
     ]
 
     passed = 0
     total = len(tests)
 
     for test_name, test_func in tests:
-        print(f"\n📋 {test_name} 테스트")
+        print(f"\n📋 {test_name} test")
         print("-" * 30)
 
         if test_func():
             passed += 1
-            print(f"✅ {test_name} 통과")
+            print(f"✅ {test_name} passed")
         else:
-            print(f"❌ {test_name} 실패")
+            print(f"❌ {test_name} failed")
 
     print("\n" + "=" * 50)
-    print(f"📊 테스트 결과: {passed}/{total} 통과")
+    print(f"📊 Test result: {passed}/{total} passed")
 
     if passed == total:
-        print("🎉 모든 테스트 통과! CleanBox가 정상적으로 배포되었습니다.")
+        print("🎉 All tests passed! CleanBox has been deployed successfully.")
         return 0
     else:
-        print("⚠️ 일부 테스트가 실패했습니다. 로그를 확인해주세요.")
+        print("⚠️  Some tests failed. Please check the logs.")
         return 1
 
 

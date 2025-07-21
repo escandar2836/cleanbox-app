@@ -1,37 +1,113 @@
 # Standard library imports
 import os
 import traceback
+import logging
 from datetime import datetime, timedelta
 
 # Third-party imports
-from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for
+from flask import (
+    Blueprint,
+    render_template,
+    request,
+    jsonify,
+    flash,
+    redirect,
+    url_for,
+    session,
+)
 from flask_login import login_required, current_user
+from flask_apscheduler import APScheduler
 
 # Local imports
 from ..models import Email, Category, UserAccount, WebhookStatus, db
+from .. import cache
 from .gmail_service import GmailService
 from .ai_classifier import AIClassifier
+from ..auth.routes import (
+    check_and_refresh_token,
+    get_current_account_id,
+    grant_service_account_pubsub_permissions,
+)
+
+logger = logging.getLogger(__name__)
 
 email_bp = Blueprint("email", __name__)
+
+
+# Lazy imports to avoid circular import issues
+def get_scheduler():
+    """Get scheduler instance lazily to avoid circular imports"""
+    from app import scheduler
+
+    return scheduler
+
+
+def get_scheduled_webhook_monitoring():
+    """Get scheduled webhook monitoring function lazily to avoid circular imports"""
+    from app import scheduled_webhook_monitoring
+
+    return scheduled_webhook_monitoring
 
 
 @email_bp.route("/")
 @login_required
 def list_emails():
-    """이메일 목록 페이지 (모든 계정 통합)"""
+    """Email list page (all accounts combined)"""
     try:
-        # 모든 활성 계정 가져오기
+        # Check for new email notification
+        new_emails_notification = None
+        notification_file = f"notifications/{current_user.id}_new_emails.txt"
+
+        if os.path.exists(notification_file):
+            try:
+                with open(notification_file, "r") as f:
+                    content = f.read().strip()
+                    if content:
+                        timestamp_str, count_str = content.split(",")
+                        notification_time = datetime.fromisoformat(timestamp_str)
+
+                        # Show notification only within 1 hour
+                        if datetime.utcnow() - notification_time < timedelta(hours=1):
+                            new_emails_notification = {
+                                "count": int(count_str),
+                                "timestamp": notification_time,
+                            }
+
+                # Delete notification file (show only once)
+                os.remove(notification_file)
+            except Exception as e:
+                print(f"Notification file handling failed: {str(e)}")
+
+        # Get all active accounts
         accounts = UserAccount.query.filter_by(
             user_id=current_user.id, is_active=True
         ).all()
 
         if not accounts:
-            flash("연결된 계정이 없습니다.", "error")
+            flash("No connected accounts.", "error")
             return render_template(
-                "email/list.html", user=current_user, emails=[], stats={}, accounts=[]
+                "email/list.html",
+                user=current_user,
+                emails=[],
+                stats={},
+                accounts=[],
+                new_emails_notification=new_emails_notification,
             )
 
-        # 모든 계정의 이메일 통합 조회 (생성 시간 기준 내림차순)
+        # Check and refresh token for each account
+        for account in accounts:
+            try:
+                token_valid = check_and_refresh_token(current_user.id, account.id)
+
+                if not token_valid:
+                    flash(
+                        f"Authentication for account {account.account_email} has expired. Please log in again.",
+                        "warning",
+                    )
+            except Exception as e:
+                print(f"Token check failed: {str(e)}")
+
+        # Query emails for all accounts (sorted by creation time desc)
         emails = (
             Email.query.filter(
                 Email.user_id == current_user.id,
@@ -42,12 +118,12 @@ def list_emails():
             .all()
         )
 
-        # 계정 정보를 이메일에 추가
+        # Add account info to emails
         account_dict = {acc.id: acc for acc in accounts}
         for email in emails:
             email.account_info = account_dict.get(email.account_id)
 
-        # 계정별 이메일 수 계산
+        # Calculate email count per account
         account_stats = {}
         for account in accounts:
             account_emails = Email.query.filter_by(
@@ -74,7 +150,7 @@ def list_emails():
                 "analyzed": account_analyzed,
             }
 
-        # 통계 정보
+        # Stats info
         stats = {
             "total": len(emails),
             "unread": sum(1 for e in emails if not e.is_read),
@@ -89,10 +165,11 @@ def list_emails():
             emails=emails,
             stats=stats,
             accounts=accounts,
+            new_emails_notification=new_emails_notification,
         )
 
     except Exception as e:
-        flash(f"이메일 목록을 불러오는 중 오류가 발생했습니다: {str(e)}", "error")
+        flash(f"Error loading email list: {str(e)}", "error")
         return render_template(
             "email/list.html", user=current_user, emails=[], stats={}, accounts=[]
         )
@@ -101,22 +178,22 @@ def list_emails():
 @email_bp.route("/category/<int:category_id>")
 @login_required
 def category_emails(category_id):
-    """카테고리별 이메일 목록 (모든 계정 통합)"""
+    """Email list by category (all accounts combined)"""
     try:
-        # 사용자별 카테고리 확인
+        # Check user's category
         category = Category.query.filter_by(
             id=category_id, user_id=current_user.id
         ).first()
         if not category:
-            flash("카테고리를 찾을 수 없습니다.", "error")
+            flash("Category not found.", "error")
             return redirect(url_for("email.list_emails"))
 
-        # 모든 활성 계정 가져오기
+        # Get all active accounts
         accounts = UserAccount.query.filter_by(
             user_id=current_user.id, is_active=True
         ).all()
 
-        # 해당 카테고리의 모든 계정 이메일 조회
+        # Query emails for the category from all accounts
         emails = (
             Email.query.filter(
                 Email.user_id == current_user.id,
@@ -127,12 +204,12 @@ def category_emails(category_id):
             .all()
         )
 
-        # 계정 정보를 이메일에 추가
+        # Add account info to emails
         account_dict = {acc.id: acc for acc in accounts}
         for email in emails:
             email.account_info = account_dict.get(email.account_id)
 
-        # 계정별 이메일 수 계산
+        # Calculate email count per account
         account_stats = {}
         for account in accounts:
             account_emails = [e for e in emails if e.account_id == account.id]
@@ -152,281 +229,245 @@ def category_emails(category_id):
         )
 
     except Exception as e:
-        flash(f"카테고리 이메일을 불러오는 중 오류가 발생했습니다: {str(e)}", "error")
+        flash(f"Error loading category emails: {str(e)}", "error")
         return redirect(url_for("email.list_emails"))
 
 
 @email_bp.route("/process-new", methods=["POST"])
 @login_required
 def process_new_emails():
-    """가입 날짜 이후의 새 이메일 처리"""
+    """Process new emails"""
     try:
-        # 모든 활성 계정 가져오기
+        # Get all active accounts
         accounts = UserAccount.query.filter_by(
             user_id=current_user.id, is_active=True
         ).all()
 
         if not accounts:
-            return jsonify({"success": False, "message": "연결된 계정이 없습니다."})
+            return jsonify({"success": False, "message": "No connected accounts."})
 
         total_processed = 0
         total_classified = 0
         account_results = []
-        all_accounts_no_emails = True  # 모든 계정에서 새 이메일이 없는지 확인
+        new_emails_processed = False  # Whether new emails were processed
 
-        # 사용자의 가입 날짜 이후의 이메일만 처리
-        after_date = current_user.first_service_access
-
-        # 모든 계정에 대해 새 이메일 처리
         for account in accounts:
             try:
-
+                print(f"🔍 Processing new emails for account {account.account_email}")
                 gmail_service = GmailService(current_user.id, account.id)
-                ai_classifier = AIClassifier()
 
-                # 가입 날짜 이후의 이메일 가져오기
-                recent_emails = gmail_service.fetch_recent_emails(
-                    max_results=50, after_date=after_date
+                # Get new emails
+                new_emails = gmail_service.get_new_emails()
+                print(
+                    f"📧 Found {len(new_emails)} new emails in account {account.account_email}"
                 )
 
-                if not recent_emails:
+                if not new_emails:
                     account_results.append(
                         {
                             "account": account.account_email,
+                            "status": "no_new_emails",
                             "processed": 0,
                             "classified": 0,
-                            "status": "no_new_emails",
                         }
                     )
                     continue
 
-                # 이메일이 있으면 all_accounts_no_emails를 False로 설정
-                all_accounts_no_emails = False
+                # Process new emails
+                processed_count = 0
+                classified_count = 0
 
-                # 사용자 카테고리 가져오기 (AI 분류용 딕셔너리 형태로 변환)
-                category_objects = gmail_service.get_user_categories()
-                categories = [
-                    {
-                        "id": cat.id,
-                        "name": cat.name,
-                        "description": cat.description or "",
-                    }
-                    for cat in category_objects
-                ]
-
-                account_processed = 0
-                account_classified = 0
-
-                for email_data in recent_emails:
+                for email_data in new_emails:
                     try:
-                        # 이미 처리된 이메일인지 확인
-                        existing_email = Email.query.filter_by(
-                            user_id=current_user.id,
-                            account_id=account.id,
-                            gmail_id=email_data["gmail_id"],
-                        ).first()
-
-                        if existing_email:
-                            continue  # 이미 처리된 이메일은 건너뛰기
-
-                        # DB에 저장
+                        # Save email to DB
                         email_obj = gmail_service.save_email_to_db(email_data)
+                        processed_count += 1
 
-                        if email_obj:
-                            account_processed += 1
-                            total_processed += 1
+                        # AI classification
+                        ai_classifier = AIClassifier()
+                        classification_result = ai_classifier.classify_email(
+                            email_obj.content, email_obj.subject, email_obj.sender
+                        )
 
-                            # AI 분류 및 요약 시도
-                            if categories:
-                                category_id, summary = (
-                                    ai_classifier.classify_and_summarize_email(
-                                        email_data["body"],
-                                        email_data["subject"],
-                                        email_data["sender"],
-                                        categories,
-                                    )
-                                )
-
-                                if category_id:
-                                    gmail_service.update_email_category(
-                                        email_data["gmail_id"], category_id
-                                    )
-                                    account_classified += 1
-                                    total_classified += 1
-
-                                # 요약 저장
-                                if (
-                                    summary
-                                    and summary
-                                    != "AI 처리를 사용할 수 없습니다. 수동으로 확인해주세요."
-                                ):
-                                    email_obj.summary = summary
-                                    db.session.commit()
+                        if classification_result["category_id"]:
+                            # Update category
+                            gmail_service.update_email_category(
+                                email_obj.gmail_id, classification_result["category_id"]
+                            )
+                            classified_count += 1
 
                     except Exception as e:
+                        print(f"❌ Failed to process email: {str(e)}")
                         continue
+
+                total_processed += processed_count
+                total_classified += classified_count
+
+                if processed_count > 0:
+                    new_emails_processed = True
 
                 account_results.append(
                     {
                         "account": account.account_email,
-                        "processed": account_processed,
-                        "classified": account_classified,
                         "status": "success",
+                        "processed": processed_count,
+                        "classified": classified_count,
                     }
                 )
 
+                print(
+                    f"✅ Finished processing account {account.account_email} - Processed: {processed_count}, Classified: {classified_count}"
+                )
+
             except Exception as e:
+                print(f"❌ Failed to process account {account.account_email}: {str(e)}")
                 account_results.append(
                     {
                         "account": account.account_email,
-                        "processed": 0,
-                        "classified": 0,
                         "status": "error",
                         "error": str(e),
                     }
                 )
 
-        # 모든 계정에서 새 이메일이 없는 경우
-        if all_accounts_no_emails:
-            return jsonify(
-                {
-                    "success": True,
-                    "processed": 0,
-                    "classified": 0,
-                    "account_results": account_results,
-                    "no_new_emails": True,
-                    "message": "새로운 이메일이 없습니다.",
-                    "redirect": False,
-                }
-            )
+        # Return result
+        if total_processed == 0:
+            flash("No new emails.", "info")
+            return redirect(url_for("email.list_emails"))
 
-        return jsonify(
-            {
-                "success": True,
-                "processed": total_processed,
-                "classified": total_classified,
-                "account_results": account_results,
-                "no_new_emails": False,
-                "message": f"새 이메일 처리 완료: {total_processed}개 처리, {total_classified}개 AI 분류",
-                "redirect": True,
-            }
-        )
+        # Invalidate cache (recalculate max email id since new emails were processed)
+        cache_key = f"max_email_id_{current_user.id}"
+        cache.delete(cache_key)
+        print(f"✅ Cache invalidated: {cache_key}")
+
+        # Create success message
+        success_message = f"New email processing complete: {total_processed} processed, {total_classified} AI classified"
+
+        if account_results and len(account_results) > 0:
+            success_message += "\n\nResults by account:"
+            for result in account_results:
+                if result["status"] == "success":
+                    success_message += f"\n• {result['account']}: {result['processed']} processed, {result['classified']} classified"
+                elif result["status"] == "no_new_emails":
+                    success_message += f"\n• {result['account']}: No new emails"
+                else:
+                    success_message += (
+                        f"\n• {result['account']}: Error - {result['error']}"
+                    )
+
+        flash(success_message, "success")
+        return redirect(url_for("email.list_emails"))
 
     except Exception as e:
-        return jsonify(
-            {
-                "success": False,
-                "message": f"새 이메일 처리 중 오류: {str(e)}",
-                "redirect": False,
-            }
-        )
+        print(f"❌ Error processing new emails: {str(e)}")
+        flash(f"Error occurred while processing new emails: {str(e)}", "error")
+        return redirect(url_for("email.list_emails"))
 
 
 @email_bp.route("/<int:email_id>/read")
 @login_required
 def mark_as_read(email_id):
-    """이메일을 읽음으로 표시"""
+    """Mark email as read"""
     try:
         email_obj = Email.query.filter_by(id=email_id, user_id=current_user.id).first()
         if not email_obj:
-            flash("이메일을 찾을 수 없습니다.", "error")
+            flash("Email not found.", "error")
             return redirect(url_for("email.list_emails"))
 
         gmail_service = GmailService(current_user.id)
         gmail_service.mark_as_read(email_obj.gmail_id)
 
-        flash("이메일을 읽음으로 표시했습니다.", "success")
+        flash("Marked as read.", "success")
         return redirect(url_for("email.list_emails"))
 
     except Exception as e:
-        flash(f"이메일 상태 변경 중 오류가 발생했습니다: {str(e)}", "error")
+        flash(f"Error occurred while changing email status: {str(e)}", "error")
         return redirect(url_for("email.list_emails"))
 
 
 @email_bp.route("/<int:email_id>/archive")
 @login_required
 def archive_email(email_id):
-    """이메일 아카이브"""
+    """Archive email"""
     try:
         email_obj = Email.query.filter_by(id=email_id, user_id=current_user.id).first()
         if not email_obj:
-            flash("이메일을 찾을 수 없습니다.", "error")
+            flash("Email not found.", "error")
             return redirect(url_for("email.list_emails"))
 
         gmail_service = GmailService(current_user.id)
         gmail_service.archive_email(email_obj.gmail_id)
 
-        flash("이메일을 아카이브했습니다.", "success")
+        flash("Email archived.", "success")
         return redirect(url_for("email.list_emails"))
 
     except Exception as e:
-        flash(f"이메일 아카이브 중 오류가 발생했습니다: {str(e)}", "error")
+        flash(f"Error occurred while archiving email: {str(e)}", "error")
         return redirect(url_for("email.list_emails"))
 
 
 @email_bp.route("/<int:email_id>/classify", methods=["POST"])
 @login_required
 def classify_email(email_id):
-    """이메일 수동 분류"""
+    """Manual email classification"""
     try:
         email_obj = Email.query.filter_by(id=email_id, user_id=current_user.id).first()
         if not email_obj:
-            return jsonify({"success": False, "message": "이메일을 찾을 수 없습니다."})
+            return jsonify({"success": False, "message": "Email not found."})
 
         category_id = request.form.get("category_id")
         if category_id:
             category_id = int(category_id)
-            if category_id == 0:  # 미분류
+            if category_id == 0:  # Unclassified
                 category_id = None
 
-        gmail_service = GmailService(current_user.id)
-        success = gmail_service.update_email_category(email_obj.gmail_id, category_id)
+        # Direct database update
+        email_obj.category_id = category_id
+        email_obj.updated_at = datetime.utcnow()
+        db.session.commit()
 
-        if success:
-            return jsonify({"success": True, "message": "이메일이 분류되었습니다."})
-        else:
-            return jsonify({"success": False, "message": "이메일 분류에 실패했습니다."})
+        return jsonify({"success": True, "message": "Email classified."})
 
     except Exception as e:
-        return jsonify({"success": False, "message": f"오류: {str(e)}"})
+        db.session.rollback()
+        return jsonify({"success": False, "message": f"Error: {str(e)}"})
 
 
 @email_bp.route("/<int:email_id>/analyze")
 @login_required
 def analyze_email(email_id):
-    """이메일 AI 분석 - 분류 및 요약"""
+    """Email AI analysis - classification and summary"""
     try:
         email_obj = Email.query.filter_by(id=email_id, user_id=current_user.id).first()
         if not email_obj:
-            return jsonify({"success": False, "message": "이메일을 찾을 수 없습니다."})
+            return jsonify({"success": False, "message": "Email not found."})
 
         ai_classifier = AIClassifier()
 
-        # 사용자 카테고리 가져오기
+        # Get user categories for AI
         categories = ai_classifier.get_user_categories_for_ai(current_user.id)
 
         if not categories:
-            return jsonify(
-                {"success": False, "message": "사용 가능한 카테고리가 없습니다."}
-            )
+            return jsonify({"success": False, "message": "No available categories."})
 
-        # 디버깅 정보 출력
-        print(f"🔍 AI 분석 시작 - 이메일 ID: {email_id}")
-        print(f"   제목: {email_obj.subject}")
-        print(f"   발신자: {email_obj.sender}")
-        print(f"   내용 길이: {len(email_obj.content) if email_obj.content else 0}")
-        print(f"   카테고리 수: {len(categories)}")
+        # Debug information output
+        print(f"🔍 AI analysis started - Email ID: {email_id}")
+        print(f"   Subject: {email_obj.subject}")
+        print(f"   Sender: {email_obj.sender}")
+        print(
+            f"   Content length: {len(email_obj.content) if email_obj.content else 0}"
+        )
+        print(f"   Number of categories: {len(categories)}")
 
-        # AI 분류 및 요약 수행
+        # AI classification and summarization
         category_id, summary = ai_classifier.classify_and_summarize_email(
             email_obj.content, email_obj.subject, email_obj.sender, categories
         )
 
-        print(f"📊 AI 분석 결과:")
-        print(f"   카테고리 ID: {category_id}")
-        print(f"   요약: {summary[:100]}..." if summary else "   요약: 없음")
+        print(f"📊 AI analysis result:")
+        print(f"   Category ID: {category_id}")
+        print(f"   Summary: {summary[:100]}..." if summary else "   Summary: None")
 
-        # 결과 업데이트
+        # Update result
         if category_id:
             email_obj.category_id = category_id
         else:
@@ -434,23 +475,23 @@ def analyze_email(email_id):
 
         if (
             summary
-            and summary != "AI 처리를 사용할 수 없습니다. 수동으로 확인해주세요."
+            and summary != "AI processing is not available. Please check manually."
         ):
             email_obj.summary = summary
 
-        # AI 분석 완료 후 Gmail에서 아카이브 처리
+        # AI analysis completed, archive email in Gmail
         try:
             gmail_service = GmailService(current_user.id, email_obj.account_id)
             gmail_service.archive_email(email_obj.gmail_id)
             email_obj.is_archived = True
-            print(f"✅ 이메일 아카이브 완료: {email_obj.subject}")
+            print(f"✅ Email archived: {email_obj.subject}")
         except Exception as e:
-            print(f"❌ 이메일 아카이브 실패: {str(e)}")
+            print(f"❌ Failed to archive email: {str(e)}")
 
         db.session.commit()
 
-        # 카테고리 정보 가져오기
-        category_name = "미분류"
+        # Get category information
+        category_name = "Unclassified"
         if category_id:
             category = Category.query.filter_by(
                 id=category_id, user_id=current_user.id
@@ -469,17 +510,17 @@ def analyze_email(email_id):
         return jsonify({"success": True, "analysis": analysis})
 
     except Exception as e:
-        return jsonify({"success": False, "message": f"분석 중 오류: {str(e)}"})
+        return jsonify(
+            {"success": False, "message": f"Error occurred during analysis: {str(e)}"}
+        )
 
 
 @email_bp.route("/statistics")
 @login_required
 def email_statistics():
-    """이메일 통계 (모든 계정 합산)"""
+    """Email statistics (all accounts combined)"""
     try:
-        from ..auth.routes import get_current_account_id
-
-        # 모든 활성 계정 가져오기
+        # Get all active accounts
         accounts = UserAccount.query.filter_by(
             user_id=current_user.id, is_active=True
         ).all()
@@ -497,7 +538,7 @@ def email_statistics():
                 }
             )
 
-        # 모든 계정의 통계 합산
+        # Sum statistics for all accounts
         total_stats = {"total": 0, "unread": 0, "archived": 0, "categories": {}}
 
         for account in accounts:
@@ -505,12 +546,12 @@ def email_statistics():
                 gmail_service = GmailService(current_user.id, account.id)
                 account_stats = gmail_service.get_email_statistics()
 
-                # 기본 통계 합산
+                # Basic statistics addition
                 total_stats["total"] += account_stats.get("total", 0)
                 total_stats["unread"] += account_stats.get("unread", 0)
                 total_stats["archived"] += account_stats.get("archived", 0)
 
-                # 카테고리별 통계 합산
+                # Category-wise statistics addition
                 for category_id, count in account_stats.get("categories", {}).items():
                     if category_id in total_stats["categories"]:
                         total_stats["categories"][category_id] += count
@@ -518,44 +559,48 @@ def email_statistics():
                         total_stats["categories"][category_id] = count
 
             except Exception as e:
-                print(f"계정 {account.account_email} 통계 조회 실패: {str(e)}")
+                print(
+                    f"Failed to retrieve statistics for account {account.account_email}: {str(e)}"
+                )
                 continue
 
         return jsonify({"success": True, "statistics": total_stats})
 
     except Exception as e:
-        return jsonify({"success": False, "message": f"통계 조회 중 오류: {str(e)}"})
+        return jsonify(
+            {"success": False, "message": f"Error retrieving statistics: {str(e)}"}
+        )
 
 
 @email_bp.route("/<int:email_id>")
 @login_required
 def view_email(email_id):
-    """이메일 상세 보기"""
+    """View email details"""
     try:
         email_obj = Email.query.filter_by(id=email_id, user_id=current_user.id).first()
         if not email_obj:
-            flash("이메일을 찾을 수 없습니다.", "error")
+            flash("Email not found.", "error")
             return redirect(url_for("email.list_emails"))
 
-        # 이메일 상세보기 시 자동 읽음 처리
+        # When viewing email details, automatically mark as read
         if not email_obj.is_read:
             email_obj.is_read = True
             email_obj.updated_at = datetime.utcnow()
             db.session.commit()
 
-        # 카테고리 정보 (미분류 및 카테고리 없음 케이스 커버)
+        # Category information (cover case of unclassified and no category)
         category = None
         if email_obj.category_id:
-            # 사용자 권한 확인하여 카테고리 조회
+            # Check user permissions to retrieve category
             category = Category.query.filter_by(
                 id=email_obj.category_id, user_id=current_user.id
             ).first()
-            # 카테고리가 없거나 삭제된 경우 category_id를 None으로 설정
+            # If category is not found or deleted, set category_id to None
             if not category:
                 email_obj.category_id = None
                 db.session.commit()
 
-        # 사용자 카테고리 목록 (분류 변경용)
+        # User category list (for changing categories)
         user_categories = Category.query.filter_by(
             user_id=current_user.id, is_active=True
         ).all()
@@ -569,130 +614,782 @@ def view_email(email_id):
         )
 
     except Exception as e:
-        flash(f"이메일을 불러오는 중 오류가 발생했습니다: {str(e)}", "error")
+        flash(f"Error loading email: {str(e)}", "error")
         return redirect(url_for("email.list_emails"))
 
 
 @email_bp.route("/bulk-actions", methods=["POST"])
 @login_required
 def bulk_actions():
-    """이메일 대량 작업"""
+    """Bulk email actions"""
     try:
         action = request.form.get("action")
         email_ids = request.form.getlist("email_ids")
 
         if not email_ids:
-            flash("선택된 이메일이 없습니다.", "error")
-            return redirect(request.referrer or url_for("email.list_emails"))
+            return (
+                jsonify({"success": False, "message": "No emails selected."}),
+                400,
+            )
 
         gmail_service = GmailService(current_user.id)
         processed_count = 0
 
         if action == "delete":
-            # 대량 삭제
+            # Bulk deletion (improved version)
+            print(
+                f"🔍 Bulk deletion started - Number of selected emails: {len(email_ids)}"
+            )
+
+            # Variables for collecting results
+            success_count = 0
+            failed_emails = []
+            result_message = ""
+
             for email_id in email_ids:
                 try:
                     email_obj = Email.query.filter_by(
                         id=int(email_id), user_id=current_user.id
                     ).first()
-                    if email_obj:
-                        # Gmail에서 삭제
-                        gmail_service.delete_email(email_obj.gmail_id)
-                        # DB에서 삭제
-                        db.session.delete(email_obj)
-                        processed_count += 1
-                except Exception as e:
-                    print(f"이메일 삭제 실패 (ID: {email_id}): {str(e)}")
-                    continue
 
+                    if not email_obj:
+                        print(f"❌ Email {email_id} not found")
+                        failed_emails.append(
+                            {
+                                "id": email_id,
+                                "subject": "Unknown",
+                                "error": "Email not found",
+                                "error_type": "not_found",
+                            }
+                        )
+                        continue
+
+                    # Delete from Gmail
+                    gmail_service = GmailService(current_user.id, email_obj.account_id)
+                    gmail_service.delete_email(email_obj.gmail_id)
+
+                    # Delete from DB
+                    db.session.delete(email_obj)
+                    success_count += 1
+                    print(f"✅ Email {email_id} deletion successful")
+
+                except Exception as e:
+                    error_msg = str(e)
+                    print(f"❌ Failed to delete email (ID: {email_id}): {error_msg}")
+
+                    # Classify error type
+                    error_type = "unknown"
+                    if "404" in error_msg and "not found" in error_msg.lower():
+                        error_type = "not_found"
+                        error_details = "Email already deleted or not found"
+                    elif "403" in error_msg:
+                        error_type = "forbidden"
+                        error_details = "No permission to delete"
+                    elif "401" in error_msg:
+                        error_type = "unauthorized"
+                        error_details = "Authentication failed"
+                    elif "500" in error_msg:
+                        error_type = "server_error"
+                        error_details = "Server error occurred"
+                    elif (
+                        "network" in error_msg.lower()
+                        or "connection" in error_msg.lower()
+                    ):
+                        error_type = "network_error"
+                        error_details = "Network connection error"
+                    else:
+                        error_details = error_msg
+
+                    failed_emails.append(
+                        {
+                            "id": email_id,
+                            "subject": email_obj.subject if email_obj else "Unknown",
+                            "error": error_details,
+                            "error_type": error_type,
+                        }
+                    )
+
+            # Commit DB changes
             db.session.commit()
-            flash(f"{processed_count}개의 이메일을 삭제했습니다.", "success")
+
+            # Group errors by type
+            error_groups = {}
+            for email in failed_emails:
+                error_type = email.get("error_type", "unknown")
+                if error_type not in error_groups:
+                    error_groups[error_type] = []
+                error_groups[error_type].append(email)
+
+            # Generate result message
+            total_processed = success_count + len(failed_emails)
+            message_parts = []
+
+            # Success count is always displayed (even if 0)
+            message_parts.append(f"✅ Success: {success_count} emails")
+
+            # Display only actual errors
+            for error_type, emails in error_groups.items():
+                if emails:  # Only display actual errors
+                    error_name = {
+                        "not_found": "Already deleted",
+                        "forbidden": "No permission",
+                        "unauthorized": "Authentication failed",
+                        "server_error": "Server error",
+                        "network_error": "Network error",
+                        "unknown": "Unknown error",
+                    }.get(error_type, error_type)
+
+                    message_parts.append(f"❌ {error_name}: {len(emails)} emails")
+
+            result_message = (
+                f"Deletion complete ({total_processed} emails):\n"
+                + "\n".join(message_parts)
+            )
+
+            print(f"🎉 Bulk deletion completed - {result_message}")
+
+            return jsonify({"success": True, "message": result_message})
 
         elif action == "archive":
-            # 대량 아카이브
+            # Bulk archiving (improved version)
+            print(
+                f"🔍 Bulk archiving started - Number of selected emails: {len(email_ids)}"
+            )
+
+            # Variables for collecting results
+            success_count = 0
+            failed_emails = []
+            result_message = ""
+
             for email_id in email_ids:
                 try:
                     email_obj = Email.query.filter_by(
                         id=int(email_id), user_id=current_user.id
                     ).first()
-                    if email_obj:
-                        gmail_service.archive_email(email_obj.gmail_id)
-                        processed_count += 1
-                except Exception as e:
-                    print(f"이메일 아카이브 실패 (ID: {email_id}): {str(e)}")
-                    continue
 
-            flash(f"{processed_count}개의 이메일을 아카이브했습니다.", "success")
+                    if not email_obj:
+                        print(f"❌ Email {email_id} not found")
+                        failed_emails.append(
+                            {
+                                "id": email_id,
+                                "subject": "Unknown",
+                                "error": "Email not found",
+                                "error_type": "not_found",
+                            }
+                        )
+                        continue
+
+                    gmail_service = GmailService(current_user.id, email_obj.account_id)
+                    gmail_service.archive_email(email_obj.gmail_id)
+                    success_count += 1
+                    print(f"✅ Email {email_id} archiving successful")
+
+                except Exception as e:
+                    error_msg = str(e)
+                    print(f"❌ Failed to archive email (ID: {email_id}): {error_msg}")
+
+                    # Classify error type
+                    error_type = "unknown"
+                    if "404" in error_msg and "not found" in error_msg.lower():
+                        error_type = "not_found"
+                        error_details = "Email already deleted or not found"
+                    elif "403" in error_msg:
+                        error_type = "forbidden"
+                        error_details = "No permission to archive"
+                    elif "401" in error_msg:
+                        error_type = "unauthorized"
+                        error_details = "Authentication failed"
+                    elif "500" in error_msg:
+                        error_type = "server_error"
+                        error_details = "Server error occurred"
+                    elif (
+                        "network" in error_msg.lower()
+                        or "connection" in error_msg.lower()
+                    ):
+                        error_type = "network_error"
+                        error_details = "Network connection error"
+                    else:
+                        error_details = error_msg
+
+                    failed_emails.append(
+                        {
+                            "id": email_id,
+                            "subject": email_obj.subject if email_obj else "Unknown",
+                            "error": error_details,
+                            "error_type": error_type,
+                        }
+                    )
+
+            # Group errors by type
+            error_groups = {}
+            for email in failed_emails:
+                error_type = email.get("error_type", "unknown")
+                if error_type not in error_groups:
+                    error_groups[error_type] = []
+                error_groups[error_type].append(email)
+
+            # Generate result message
+            total_processed = success_count + len(failed_emails)
+            message_parts = []
+
+            # Success count is always displayed (even if 0)
+            message_parts.append(f"✅ Success: {success_count} emails")
+
+            # Display only actual errors
+            for error_type, emails in error_groups.items():
+                if emails:  # Only display actual errors
+                    error_name = {
+                        "not_found": "Already deleted",
+                        "forbidden": "No permission",
+                        "unauthorized": "Authentication failed",
+                        "server_error": "Server error",
+                        "network_error": "Network error",
+                        "unknown": "Unknown error",
+                    }.get(error_type, error_type)
+
+                    message_parts.append(f"❌ {error_name}: {len(emails)} emails")
+
+            result_message = (
+                f"Archiving complete ({total_processed} emails):\n"
+                + "\n".join(message_parts)
+            )
+
+            print(f"🎉 Bulk archiving completed - {result_message}")
+
+            return jsonify({"success": True, "message": result_message})
 
         elif action == "mark_read":
-            # 대량 읽음 표시
+            # Bulk marking as read (improved version)
+            print(
+                f"🔍 Bulk marking as read started - Number of selected emails: {len(email_ids)}"
+            )
+
+            # Variables for collecting results
+            success_count = 0
+            failed_emails = []
+
             for email_id in email_ids:
                 try:
                     email_obj = Email.query.filter_by(
                         id=int(email_id), user_id=current_user.id
                     ).first()
-                    if email_obj:
-                        gmail_service.mark_as_read(email_obj.gmail_id)
-                        processed_count += 1
-                except Exception as e:
-                    print(f"이메일 읽음 표시 실패 (ID: {email_id}): {str(e)}")
-                    continue
 
-            flash(f"{processed_count}개의 이메일을 읽음으로 표시했습니다.", "success")
+                    if not email_obj:
+                        print(f"❌ Email {email_id} not found")
+                        failed_emails.append(
+                            {
+                                "id": email_id,
+                                "subject": "Unknown",
+                                "error": "Email not found",
+                                "error_type": "not_found",
+                            }
+                        )
+                        continue
+
+                    gmail_service = GmailService(current_user.id, email_obj.account_id)
+                    gmail_service.mark_as_read(email_obj.gmail_id)
+                    success_count += 1
+                    print(f"✅ Email {email_id} marking as read successful")
+
+                except Exception as e:
+                    error_msg = str(e)
+                    print(
+                        f"❌ Failed to mark email as read (ID: {email_id}): {error_msg}"
+                    )
+
+                    # Classify error type
+                    error_type = "unknown"
+                    if "404" in error_msg and "not found" in error_msg.lower():
+                        error_type = "not_found"
+                        error_details = "Email already deleted or not found"
+                    elif "403" in error_msg:
+                        error_type = "forbidden"
+                        error_details = "No permission to mark as read"
+                    elif "401" in error_msg:
+                        error_type = "unauthorized"
+                        error_details = "Authentication failed"
+                    elif "500" in error_msg:
+                        error_type = "server_error"
+                        error_details = "Server error occurred"
+                    elif (
+                        "network" in error_msg.lower()
+                        or "connection" in error_msg.lower()
+                    ):
+                        error_type = "network_error"
+                        error_details = "Network connection error"
+                    else:
+                        error_details = error_msg
+
+                    failed_emails.append(
+                        {
+                            "id": email_id,
+                            "subject": email_obj.subject if email_obj else "Unknown",
+                            "error": error_details,
+                            "error_type": error_type,
+                        }
+                    )
+
+            # Group errors by type
+            error_groups = {}
+            for email in failed_emails:
+                error_type = email.get("error_type", "unknown")
+                if error_type not in error_groups:
+                    error_groups[error_type] = []
+                error_groups[error_type].append(email)
+
+            # Generate result message
+            total_processed = success_count + len(failed_emails)
+            message_parts = []
+
+            # Success count is always displayed (even if 0)
+            message_parts.append(f"✅ Success: {success_count} emails")
+
+            # Display only actual errors
+            for error_type, emails in error_groups.items():
+                if emails:  # Only display actual errors
+                    error_name = {
+                        "not_found": "Already deleted",
+                        "forbidden": "No permission",
+                        "unauthorized": "Authentication failed",
+                        "server_error": "Server error",
+                        "network_error": "Network error",
+                        "unknown": "Unknown error",
+                    }.get(error_type, error_type)
+
+                    message_parts.append(f"❌ {error_name}: {len(emails)} emails")
+
+            result_message = (
+                f"Marking as read complete ({total_processed} emails):\n"
+                + "\n".join(message_parts)
+            )
+
+            print(f"🎉 Bulk marking as read completed - {result_message}")
+
+            return jsonify({"success": True, "message": result_message})
 
         elif action == "unsubscribe":
-            # 구독해지 기능은 현재 지원하지 않습니다
-            flash("구독해지 기능은 현재 지원하지 않습니다.", "warning")
+            # Bulk unsubscription (grouped by sender)
+            print(
+                f"🔍 Bulk unsubscription started - Number of selected emails: {len(email_ids)}"
+            )
+
+            # Group selected emails by sender
+            sender_groups = {}
+            for email_id in email_ids:
+                try:
+                    email_obj = Email.query.filter_by(
+                        id=int(email_id), user_id=current_user.id
+                    ).first()
+
+                    if not email_obj:
+                        print(f"❌ Email {email_id} not found")
+                        continue
+
+                    sender = email_obj.sender
+                    if sender not in sender_groups:
+                        sender_groups[sender] = []
+                    sender_groups[sender].append(email_obj)
+
+                except Exception as e:
+                    print(
+                        f"❌ Exception occurred while retrieving email {email_id}: {str(e)}"
+                    )
+                    continue
+
+            print(
+                f"📝 Grouping emails by sender completed - {len(sender_groups)} senders"
+            )
+
+            # Variables for collecting results
+            successful_senders = []  # List of successful senders
+            failed_senders = []  # List of failed senders (sender, reason)
+            already_unsubscribed_senders = []  # List of already unsubscribed senders
+
+            # Process each sender group
+            for sender, emails in sender_groups.items():
+                print(f"📝 Processing sender '{sender}' - {len(emails)} emails")
+
+                # Check if any email has already been unsubscribed
+                unsubscribed_count = sum(1 for email in emails if email.is_unsubscribed)
+                if unsubscribed_count == len(emails):
+                    print(
+                        f"⏭️ All emails for sender '{sender}' have already been unsubscribed"
+                    )
+                    already_unsubscribed_senders.append(sender)
+                    continue
+
+                # Select a representative email (first non-unsubscribed email)
+                representative_email = None
+                for email in emails:
+                    if not email.is_unsubscribed:
+                        representative_email = email
+                        break
+
+                if not representative_email:
+                    print(
+                        f"⏭️ All emails for sender '{sender}' have already been unsubscribed"
+                    )
+                    already_unsubscribed_senders.append(sender)
+                    continue
+
+                print(
+                    f"📝 Selecting representative email for sender '{sender}': {representative_email.subject}"
+                )
+
+                try:
+                    # Process unsubscription
+                    gmail_service = GmailService(
+                        current_user.id, representative_email.account_id
+                    )
+                    print(
+                        f"📝 GmailService initialized - Account: {representative_email.account_id}"
+                    )
+
+                    result = gmail_service.process_unsubscribe(representative_email)
+                    print(f"📝 process_unsubscribe result: {result}")
+
+                    if result["success"]:
+                        print(f"✅ Successfully unsubscribed sender '{sender}'")
+                        successful_senders.append(
+                            {
+                                "sender": sender,
+                                "email_count": len(emails),
+                                "bulk_updated_count": result.get(
+                                    "bulk_updated_count", 0
+                                ),
+                                "representative_subject": representative_email.subject,
+                            }
+                        )
+                    else:
+                        # Analyze failure reason
+                        error_type = result.get("error_type", "unknown")
+                        error_details = result.get("error_details", "Unknown error")
+                        error_message = result.get("message", "Failed to unsubscribe")
+
+                        if error_type == "already_unsubscribed":
+                            already_unsubscribed_senders.append(sender)
+                            continue
+
+                        print(
+                            f"❌ Failed to unsubscribe sender '{sender}': {error_message}"
+                        )
+                        failed_senders.append(
+                            {
+                                "sender": sender,
+                                "email_count": len(emails),
+                                "error": error_message,
+                                "error_type": error_type,
+                                "representative_subject": representative_email.subject,
+                            }
+                        )
+
+                except Exception as e:
+                    print(
+                        f"❌ Exception occurred while processing sender '{sender}': {str(e)}"
+                    )
+                    failed_senders.append(
+                        {
+                            "sender": sender,
+                            "email_count": len(emails),
+                            "error": f"Processing error: {str(e)}",
+                            "error_type": "processing_error",
+                            "representative_subject": (
+                                representative_email.subject
+                                if representative_email
+                                else "Unknown"
+                            ),
+                        }
+                    )
+
+            # Generate result message
+            message_parts = []
+            total_senders = len(sender_groups)
+
+            # Successful senders
+            if successful_senders:
+                message_parts.append(
+                    f"✅ Successful senders ({len(successful_senders)} senders):"
+                )
+                for sender_info in successful_senders:
+                    bulk_info = (
+                        f" (Bulk update: {sender_info['bulk_updated_count']} emails)"
+                        if sender_info["bulk_updated_count"] > 0
+                        else ""
+                    )
+                    message_parts.append(
+                        f"  • {sender_info['sender']} - {sender_info['email_count']} emails{bulk_info}"
+                    )
+
+            # Failed senders
+            if failed_senders:
+                message_parts.append(
+                    f"❌ Failed senders ({len(failed_senders)} senders):"
+                )
+                for sender_info in failed_senders:
+                    error_name = {
+                        "no_unsubscribe_link": "Unsubscribe link not found",
+                        "all_links_failed": "All links failed",
+                        "processing_error": "Processing error",
+                        "network_error": "Network error",
+                        "timeout_error": "Timeout",
+                        "unknown": "Unknown error",
+                    }.get(sender_info["error_type"], sender_info["error_type"])
+
+                    message_parts.append(
+                        f"  • {sender_info['sender']} - {sender_info['email_count']} emails ({error_name}: {sender_info['error']})"
+                    )
+
+            # Already unsubscribed senders
+            if already_unsubscribed_senders:
+                message_parts.append(
+                    f"⏭️ Already unsubscribed senders ({len(already_unsubscribed_senders)} senders):"
+                )
+                for sender in already_unsubscribed_senders:
+                    message_parts.append(f"  • {sender}")
+
+            # Generate summary
+            total_processed = (
+                len(successful_senders)
+                + len(failed_senders)
+                + len(already_unsubscribed_senders)
+            )
+            result_message = (
+                f"Processing complete ({total_processed}/{total_senders} senders):\n"
+                + "\n".join(message_parts)
+            )
+
+            print(f"🎉 Bulk unsubscription completed - {result_message}")
+
+            return jsonify({"success": True, "message": result_message})
 
         else:
-            flash("지원하지 않는 작업입니다.", "error")
-
-        return redirect(request.referrer or url_for("email.list_emails"))
+            return (
+                jsonify({"success": False, "message": "Unsupported action."}),
+                400,
+            )
 
     except Exception as e:
-        flash(f"대량 작업 중 오류가 발생했습니다: {str(e)}", "error")
-        return redirect(request.referrer or url_for("email.list_emails"))
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "message": f"Error occurred while performing bulk actions: {str(e)}",
+                }
+            ),
+            500,
+        )
 
 
 @email_bp.route("/<int:email_id>/unsubscribe")
 @login_required
 def unsubscribe_email(email_id):
-    """개별 이메일 구독해지 (현재 지원하지 않음)"""
-    flash("구독해지 기능은 현재 지원하지 않습니다.", "warning")
-    return redirect(url_for("email.list_emails"))
+    """Individual email unsubscription (improved version)"""
+    print(f"🔍 Individual unsubscription started - Email ID: {email_id}")
+    try:
+        # Retrieve email
+        email = Email.query.filter_by(id=email_id, user_id=current_user.id).first()
+
+        if not email:
+            print(f"❌ Email {email_id} not found")
+            return (
+                jsonify({"success": False, "message": "Email not found."}),
+                404,
+            )
+
+        print(
+            f"📝 Retrieved email {email_id} successfully - Subject: {email.subject}, Sender: {email.sender}"
+        )
+
+        # Check if email has already been unsubscribed
+        if email.is_unsubscribed:
+            print(f"⏭️ Email {email_id} has already been unsubscribed")
+            return jsonify(
+                {
+                    "success": True,
+                    "message": f"Email already unsubscribed. (Sender: {email.sender})",
+                    "steps": ["Email already unsubscribed"],
+                    "email_id": email_id,
+                    "sender": email.sender,
+                    "subject": email.subject,
+                }
+            )
+
+        print(f"📝 Starting unsubscription process for email {email_id}")
+        # Initialize Gmail service
+        gmail_service = GmailService(current_user.id, email.account_id)
+        print(f"📝 GmailService initialized - Account: {email.account_id}")
+
+        # Process unsubscription
+        result = gmail_service.process_unsubscribe(email)
+        print(f"📝 process_unsubscribe result: {result}")
+
+        # Return result
+        if result["success"]:
+            print(f"✅ Successfully unsubscribed email {email_id}")
+
+            # Generate success message
+            success_message = "Unsubscription successful."
+
+            # Include bulk update information if available
+            if "bulk_updated_count" in result and result["bulk_updated_count"] > 0:
+                success_message += f" (Unsubscribed from {result['bulk_updated_count']} emails from the same sender)"
+
+            # Include bulk update information in response
+            response_data = {
+                "success": True,
+                "message": success_message,
+                "steps": result.get("steps", []),
+                "email_id": email_id,
+                "sender": email.sender,
+                "subject": email.subject,
+            }
+
+            # Include bulk update information if available
+            if "bulk_updated_count" in result:
+                response_data["bulk_updated_count"] = result["bulk_updated_count"]
+                response_data["bulk_updated_message"] = result["bulk_updated_message"]
+                print(
+                    f"📝 Added bulk update information: {result['bulk_updated_count']} emails"
+                )
+
+            return jsonify(response_data)
+        else:
+            error_message = result.get("message", "Failed to unsubscribe")
+            error_type = result.get("error_type", "unknown")
+            error_details = result.get("error_details", "")
+
+            print(f"❌ Failed to unsubscribe email {email_id}: {error_message}")
+            print(f"�� Error type: {error_type}")
+            print(f"📝 Error details: {error_details}")
+
+            # Generate error message with user-friendly language
+            error_name = {
+                "no_unsubscribe_link": "Unsubscribe link not found",
+                "all_links_failed": "All links failed",
+                "processing_error": "Processing error",
+                "network_error": "Network error",
+                "timeout_error": "Timeout",
+                "captcha_required": "CAPTCHA required",
+                "email_confirmation_required": "Email confirmation required",
+                "already_unsubscribed": "Already unsubscribed",
+                "unknown": "Unknown error",
+            }.get(error_type, error_type)
+
+            # Generate detailed error message
+            detailed_message = f"Unsubscription failed: {error_name}"
+            if error_details:
+                detailed_message += f" - {error_details}"
+            elif error_message and error_message != "Failed to unsubscribe":
+                detailed_message += f" - {error_message}"
+
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "message": detailed_message,
+                        "error_type": error_type,
+                        "error_details": error_details,
+                        "steps": result.get("steps", []),
+                        "email_id": email_id,
+                        "sender": email.sender,
+                        "subject": email.subject,
+                    }
+                ),
+                400,
+            )
+
+    except Exception as e:
+        print(f"❌ Exception occurred while processing unsubscription: {str(e)}")
+
+        # Generate error message with user-friendly language
+        error_message = str(e)
+        error_type = "system_error"
+
+        if "404" in error_message and "not found" in error_message.lower():
+            error_type = "not_found"
+            detailed_message = (
+                "Email not found - It might have been deleted or no longer exists."
+            )
+        elif "403" in error_message:
+            error_type = "forbidden"
+            detailed_message = (
+                "No permission to unsubscribe - Please check your account permissions."
+            )
+        elif "401" in error_message:
+            error_type = "unauthorized"
+            detailed_message = "Authentication failed - Please try logging in again."
+        elif "500" in error_message:
+            error_type = "server_error"
+            detailed_message = "Server error occurred - Please try again later."
+        elif (
+            "network" in error_message.lower() or "connection" in error_message.lower()
+        ):
+            error_type = "network_error"
+            detailed_message = (
+                "Network connection error - Please check your internet connection."
+            )
+        elif "timeout" in error_message.lower():
+            error_type = "timeout_error"
+            detailed_message = "Request timed out - Please try again later."
+        else:
+            detailed_message = f"System error occurred: {error_message}"
+
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "message": detailed_message,
+                    "error_type": error_type,
+                    "error_details": error_message,
+                    "steps": [f"Error: {error_message}"],
+                    "email_id": email_id,
+                }
+            ),
+            500,
+        )
+
+
+@email_bp.route("/clear-bulk-result", methods=["POST"])
+@login_required
+def clear_bulk_result():
+    """Clear bulk processing session"""
+    session.pop("bulk_unsubscribe_result", None)
+    return jsonify({"success": True})
 
 
 def process_missed_emails_for_account(
     user_id: str, account_id: int, from_date: datetime
 ) -> dict:
-    """특정 계정의 누락된 이메일 처리"""
+    """Process missed emails for a specific account"""
     try:
         from .gmail_service import GmailService
         from .ai_classifier import AIClassifier
 
-        print(f"📧 누락된 이메일 처리 시작 - 계정: {account_id}, 시작일: {from_date}")
+        print(
+            f"📧 Processing missed emails started - Account: {account_id}, Start date: {from_date}"
+        )
 
-        # Gmail 서비스 및 AI 분류기 초기화
+        # Initialize Gmail service and AI classifier
         gmail_service = GmailService(user_id, account_id)
         ai_classifier = AIClassifier()
 
-        # 누락된 기간의 이메일 가져오기
+        # Fetch missed emails from the specified period
         missed_emails = gmail_service.fetch_recent_emails(
-            max_results=100, after_date=from_date  # 최대 100개 이메일 처리
+            max_results=100, after_date=from_date  # Process up to 100 emails
         )
 
         if not missed_emails:
-            print(f"📭 누락된 이메일 없음 - 계정: {account_id}")
+            print(f"�� No missed emails - Account: {account_id}")
             return {
                 "success": True,
                 "processed_count": 0,
                 "classified_count": 0,
-                "message": "누락된 이메일이 없습니다.",
+                "message": "No missed emails.",
             }
 
-        print(f"📥 누락된 이메일 {len(missed_emails)}개 발견 - 계정: {account_id}")
+        print(f"📥 Found {len(missed_emails)} missed emails - Account: {account_id}")
 
-        # 사용자 카테고리 가져오기 (AI 분류용 딕셔너리 형태로 변환)
+        # Get user categories (AI classification format)
         category_objects = gmail_service.get_user_categories()
         categories = [
             {"id": cat.id, "name": cat.name, "description": cat.description or ""}
@@ -704,7 +1401,7 @@ def process_missed_emails_for_account(
 
         for email_data in missed_emails:
             try:
-                # 이메일이 이미 DB에 있는지 확인
+                # Check if email already exists in DB
                 existing_email = Email.query.filter_by(
                     user_id=user_id,
                     account_id=account_id,
@@ -713,11 +1410,11 @@ def process_missed_emails_for_account(
 
                 if existing_email:
                     print(
-                        f"⏭️ 이미 처리된 이메일 건너뛰기: {email_data.get('subject', 'No subject')}"
+                        f"⏭️ Skipping already processed email: {email_data.get('subject', 'No subject')}"
                     )
                     continue
 
-                # 이메일 분류
+                # Classify email
                 classification_result = ai_classifier.classify_email(
                     email_data.get("subject", ""),
                     email_data.get("snippet", ""),
@@ -725,7 +1422,7 @@ def process_missed_emails_for_account(
                     categories,
                 )
 
-                # 이메일 DB에 저장
+                # Save email to DB
                 email = Email(
                     user_id=user_id,
                     account_id=account_id,
@@ -751,12 +1448,12 @@ def process_missed_emails_for_account(
                     classified_count += 1
 
                 print(
-                    f"✅ 누락된 이메일 처리 완료: {email_data.get('subject', 'No subject')} -> {classification_result.get('category_name', '미분류')}"
+                    f"✅ Missed emails processed: {email_data.get('subject', 'No subject')} -> {classification_result.get('category_name', 'Unclassified')}"
                 )
 
             except Exception as e:
                 print(
-                    f"❌ 누락된 이메일 처리 실패: {email_data.get('subject', 'No subject')}, 오류: {str(e)}"
+                    f"❌ Failed to process missed email: {email_data.get('subject', 'No subject')}, Error: {str(e)}"
                 )
                 continue
 
@@ -767,43 +1464,43 @@ def process_missed_emails_for_account(
             "processed_count": processed_count,
             "classified_count": classified_count,
             "total_missed": len(missed_emails),
-            "message": f"누락된 이메일 {processed_count}개 처리 완료 (분류: {classified_count}개)",
+            "message": f"Processed {processed_count} missed emails (classified: {classified_count} emails)",
         }
 
         print(
-            f"🎉 누락된 이메일 처리 완료 - 계정: {account_id}, 처리: {processed_count}개, 분류: {classified_count}개"
+            f"🎉 Missed emails processed successfully - Account: {account_id}, Processed: {processed_count}, Classified: {classified_count}"
         )
 
         return result
 
     except Exception as e:
-        print(f"❌ 누락된 이메일 처리 중 오류 - 계정: {account_id}, 오류: {str(e)}")
+        print(f"❌ Failed to process missed emails: {str(e)}")
         return {
             "success": False,
             "error": str(e),
-            "message": f"누락된 이메일 처리 실패: {str(e)}",
+            "message": f"Failed to process missed emails: {str(e)}",
         }
 
 
 def setup_gmail_webhook(
     account_id: int, topic_name: str, label_ids: list = None
 ) -> dict:
-    """Gmail 웹훅을 설정합니다."""
+    """Set up Gmail webhook"""
     try:
         account = UserAccount.query.get(account_id)
         if not account:
-            return {"success": False, "error": f"계정 {account_id}를 찾을 수 없습니다."}
+            return {"success": False, "error": f"Account {account_id} not found."}
         gmail_service = GmailService(account.user_id, account_id)
         success = gmail_service.setup_gmail_watch(topic_name)
         if success:
             return {
                 "success": True,
-                "message": f"계정 {account.account_email}의 웹훅 설정 완료",
+                "message": f"Webhook set up successfully for account {account.account_email}",
             }
         else:
             return {
                 "success": False,
-                "error": f"계정 {account.account_email}의 웹훅 설정 실패",
+                "error": f"Failed to set up webhook for account {account.account_email}",
             }
     except Exception as e:
         return {"success": False, "error": str(e)}
@@ -812,82 +1509,85 @@ def setup_gmail_webhook(
 def setup_gmail_webhook_with_permissions(
     account_id: int, topic_name: str, label_ids: list = None
 ) -> dict:
-    """Gmail 웹훅을 설정합니다. (권한 확인 포함)"""
+    """Set up Gmail webhook (includes permission check)"""
     try:
-        from ..auth.routes import grant_service_account_pubsub_permissions
         import os
 
-        # 1단계: 서비스 계정 권한 확인 및 부여
+        # 1st step: Check service account permissions and grant them
         project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
         if project_id:
-            print(f"🔧 Gmail 웹훅 설정 전 서비스 계정 권한 확인 중...")
+            print(
+                f"🔧 Checking service account permissions before setting up webhook..."
+            )
             service_account_success = grant_service_account_pubsub_permissions(
                 project_id
             )
             if not service_account_success:
-                print(f"⚠️ 서비스 계정 권한 부여 실패, 웹훅 설정을 계속 진행합니다.")
+                print(f"⚠️ Service account permission grant failed, continuing setup.")
 
-        # 2단계: 기존 웹훅 설정 로직
+        # 2nd step: Existing webhook setup logic
         return setup_gmail_webhook(account_id, topic_name, label_ids)
 
     except Exception as e:
-        print(f"❌ Gmail 웹훅 설정 중 오류: {str(e)}")
+        print(f"❌ Error setting up webhook: {str(e)}")
         return {"success": False, "error": str(e)}
 
 
 def setup_webhook_for_account(user_id: str, account_id: int) -> bool:
-    """계정에 대한 웹훅을 설정합니다."""
+    """Set up webhook for an account"""
     try:
-        # 계정 정보 가져오기
+        # Get account information
         account = UserAccount.query.filter_by(id=account_id, user_id=user_id).first()
         if not account:
-            print(f"❌ 계정 {account_id}를 찾을 수 없습니다.")
+            print(f"❌ Account {account_id} not found.")
             return False
 
-        # 토픽 이름 설정
+        # Set topic name
         topic_name = os.getenv("GMAIL_WEBHOOK_TOPIC", "gmail-notifications")
         full_topic_name = (
             f"projects/{os.getenv('GOOGLE_CLOUD_PROJECT')}/topics/{topic_name}"
         )
 
-        print(f"🔧 웹훅 설정 시작 - 계정: {account_id}, 토픽: {full_topic_name}")
+        print(
+            f"🔧 Starting webhook setup - Account: {account_id}, Topic: {full_topic_name}"
+        )
 
-        # Gmail API 요청
-        print(f"📤 Gmail API 요청 - 계정: {account_id}")
-        print(f"   토픽: {full_topic_name}")
-        print(f"   라벨: {['INBOX']}")
+        # Make Gmail API request
+        print(f"📤 Making Gmail API request - Account: {account_id}")
+        print(f"    Topic: {full_topic_name}")
+        print(f"    Label: {['INBOX']}")
 
-        # 권한 확인을 포함한 웹훅 설정
+        # Set webhook with permission check
         result = setup_gmail_webhook_with_permissions(
             account_id, full_topic_name, ["INBOX"]
         )
 
         if result.get("success"):
-            print(f"✅ 계정 {account_id}의 웹훅 설정 완료")
+            print(f"✅ Webhook set up successfully for account {account_id}")
             return True
         else:
-            print(f"❌ Gmail 웹훅 설정 실패: {account_id}")
-            print(f"   오류 타입: {type(result.get('error')).__name__}")
-            print(f"   오류 메시지: {result.get('error')}")
+            print(f"❌ Failed to set up webhook for account {account_id}")
+            print(f"    Error type: {type(result.get('error')).__name__}")
+            print(f"    Error message: {result.get('error')}")
             return False
 
     except Exception as e:
-        print(f"❌ 웹훅 설정 중 오류: {str(e)}")
+        print(f"❌ Error setting up webhook: {str(e)}")
         return False
 
 
 @email_bp.route("/setup-webhook", methods=["POST"])
 @login_required
 def setup_webhook():
-    """Gmail 웹훅 설정"""
+    """Set up Gmail webhook"""
     try:
-        # 모든 활성 계정 가져오기
+        # Get all active accounts
         accounts = UserAccount.query.filter_by(
             user_id=current_user.id, is_active=True
         ).all()
 
         if not accounts:
-            return jsonify({"success": False, "message": "연결된 계정이 없습니다."})
+            return jsonify({"success": False, "message": "No connected accounts."})
 
         success_count = 0
         failed_accounts = []
@@ -896,10 +1596,10 @@ def setup_webhook():
             try:
                 gmail_service = GmailService(current_user.id, account.id)
 
-                # 웹훅 중지 후 재설정
+                # Stop webhook and reset it
                 gmail_service.stop_gmail_watch()
 
-                # 웹훅 설정 (topic_name은 환경변수에서 가져오거나 기본값 사용)
+                # Set webhook (topic_name is fetched from environment variables or default value)
                 topic_name = os.environ.get(
                     "GMAIL_WEBHOOK_TOPIC",
                     "projects/cleanbox-466314/topics/gmail-notifications",
@@ -911,13 +1611,15 @@ def setup_webhook():
                     failed_accounts.append(account.account_email)
 
             except Exception as e:
-                print(f"웹훅 설정 실패 - 계정 {account.account_email}: {str(e)}")
+                print(
+                    f"Failed to set up webhook for account {account.account_email}: {str(e)}"
+                )
                 failed_accounts.append(account.account_email)
 
         if success_count > 0:
-            message = f"웹훅 설정 완료: {success_count}개 계정"
+            message = f"Webhook set up successfully: {success_count} accounts"
             if failed_accounts:
-                message += f", 실패: {', '.join(failed_accounts)}"
+                message += f", Failed: {', '.join(failed_accounts)}"
 
             return jsonify(
                 {
@@ -931,29 +1633,31 @@ def setup_webhook():
             return jsonify(
                 {
                     "success": False,
-                    "message": f"모든 계정에서 웹훅 설정 실패: {', '.join(failed_accounts)}",
+                    "message": f"Failed to set up webhook for all accounts: {', '.join(failed_accounts)}",
                 }
             )
 
     except Exception as e:
-        return jsonify({"success": False, "message": f"웹훅 설정 중 오류: {str(e)}"})
+        return jsonify(
+            {"success": False, "message": f"Error setting up webhook: {str(e)}"}
+        )
 
 
 @email_bp.route("/webhook-status")
 @login_required
 def webhook_status():
-    """웹훅 상태 확인 (자동 복구 포함)"""
+    """Check webhook status (includes automatic recovery)"""
     try:
-        # 먼저 사용자의 웹훅 상태 확인 및 자동 복구
+        # First, check the webhook status of the user and automatically recover
         repair_result = check_and_repair_webhooks_for_user(current_user.id)
 
-        # 모든 활성 계정 가져오기
+        # Get all active accounts
         accounts = UserAccount.query.filter_by(
             user_id=current_user.id, is_active=True
         ).all()
 
         if not accounts:
-            return jsonify({"success": False, "message": "연결된 계정이 없습니다."})
+            return jsonify({"success": False, "message": "No connected accounts."})
 
         webhook_statuses = []
         total_accounts = len(accounts)
@@ -984,19 +1688,17 @@ def webhook_status():
                         "is_primary": account.is_primary,
                         "is_active": False,
                         "status": "error",
-                        "message": f"상태 확인 실패: {str(e)}",
+                        "message": f"Failed to retrieve status: {str(e)}",
                     }
                 )
 
-        # 복구 결과 메시지 추가
+        # Add repair message
         repair_message = ""
         if repair_result["success"]:
             if repair_result["repaired_count"] > 0:
-                repair_message = (
-                    f"웹훅 자동 복구 완료: {repair_result['repaired_count']}개 계정"
-                )
+                repair_message = f"Automatic recovery completed: {repair_result['repaired_count']} accounts"
             elif repair_result["healthy_count"] > 0:
-                repair_message = f"모든 웹훅이 정상 상태입니다 ({repair_result['healthy_count']}개 계정)"
+                repair_message = f"All webhooks are in good condition ({repair_result['healthy_count']} accounts)"
 
         return jsonify(
             {
@@ -1010,21 +1712,26 @@ def webhook_status():
         )
 
     except Exception as e:
-        return jsonify({"success": False, "message": f"웹훅 상태 확인 실패: {str(e)}"})
+        return jsonify(
+            {
+                "success": False,
+                "message": f"Failed to retrieve webhook status: {str(e)}",
+            }
+        )
 
 
 @email_bp.route("/auto-renew-webhook", methods=["POST"])
 @login_required
 def auto_renew_webhook():
-    """웹훅 자동 재설정 (만료된 웹훅 자동 갱신)"""
+    """Automatically renew expired webhook (automatic renewal of expired webhook)"""
     try:
-        # 모든 활성 계정 가져오기
+        # Get all active accounts
         accounts = UserAccount.query.filter_by(
             user_id=current_user.id, is_active=True
         ).all()
 
         if not accounts:
-            return jsonify({"success": False, "message": "연결된 계정이 없습니다."})
+            return jsonify({"success": False, "message": "No connected accounts."})
 
         renewed_count = 0
         failed_count = 0
@@ -1032,14 +1739,16 @@ def auto_renew_webhook():
 
         for account in accounts:
             try:
-                print(f"🔄 웹훅 자동 재설정 - 계정: {account.account_email}")
+                print(
+                    f"🔄 Automatically renewing webhook - Account: {account.account_email}"
+                )
 
-                # 웹훅 상태 확인
+                # Check webhook status
                 webhook_status = WebhookStatus.query.filter_by(
                     user_id=current_user.id, account_id=account.id, is_active=True
                 ).first()
 
-                # 웹훅이 없거나 만료된 경우 재설정
+                # If webhook is not set up or expired, set it up again
                 if not webhook_status or webhook_status.is_expired:
                     success = setup_webhook_for_account(current_user.id, account.id)
 
@@ -1049,7 +1758,7 @@ def auto_renew_webhook():
                             {
                                 "account": account.account_email,
                                 "status": "renewed",
-                                "message": "웹훅 재설정 완료",
+                                "message": "Webhook reset successfully",
                             }
                         )
                     else:
@@ -1058,7 +1767,7 @@ def auto_renew_webhook():
                             {
                                 "account": account.account_email,
                                 "status": "failed",
-                                "message": "웹훅 재설정 실패",
+                                "message": "Failed to reset webhook",
                             }
                         )
                 else:
@@ -1066,12 +1775,14 @@ def auto_renew_webhook():
                         {
                             "account": account.account_email,
                             "status": "healthy",
-                            "message": "웹훅 정상 상태",
+                            "message": "Webhook is in good condition",
                         }
                     )
 
             except Exception as e:
-                print(f"계정 {account.account_email} 웹훅 재설정 실패: {str(e)}")
+                print(
+                    f"Failed to reset webhook for account {account.account_email}: {str(e)}"
+                )
                 failed_count += 1
                 account_results.append(
                     {
@@ -1081,15 +1792,15 @@ def auto_renew_webhook():
                     }
                 )
 
-        # 결과 메시지 생성
+        # Generate result message
         if renewed_count > 0:
-            message = f"{renewed_count}개 계정의 웹훅을 재설정했습니다."
+            message = f"{renewed_count} accounts' webhooks have been reset."
             if failed_count > 0:
-                message += f" {failed_count}개 계정에서 실패했습니다."
+                message += f" {failed_count} accounts failed."
         elif failed_count > 0:
-            message = f"{failed_count}개 계정에서 웹훅 재설정에 실패했습니다."
+            message = f"{failed_count} accounts failed to reset webhook."
         else:
-            message = "모든 웹훅이 정상 상태입니다."
+            message = "All webhooks are in good condition."
 
         return jsonify(
             {
@@ -1103,23 +1814,26 @@ def auto_renew_webhook():
 
     except Exception as e:
         return jsonify(
-            {"success": False, "message": f"웹훅 자동 재설정 중 오류: {str(e)}"}
+            {
+                "success": False,
+                "message": f"Error automatically renewing webhook: {str(e)}",
+            }
         )
 
 
 def check_and_repair_webhooks_for_user(user_id: str) -> dict:
-    """사용자의 웹훅 상태를 확인하고 만료된 웹훅을 자동 복구 (누락된 이메일 처리 포함)"""
+    """Check user's webhook status and automatically recover expired webhooks (includes handling missed emails)"""
     try:
         from datetime import datetime, timedelta
 
-        print(f"🔍 사용자 웹훅 상태 확인: {user_id}")
+        print(f"🔍 Checking user's webhook status: {user_id}")
 
-        # 사용자의 모든 활성 계정 가져오기
+        # Get all active accounts of the user
         accounts = UserAccount.query.filter_by(user_id=user_id, is_active=True).all()
 
         if not accounts:
-            print(f"⚠️ 사용자 {user_id}의 활성 계정이 없음")
-            return {"success": False, "message": "활성 계정이 없습니다."}
+            print(f"⚠️ User {user_id} has no active accounts")
+            return {"success": False, "message": "No active accounts."}
 
         repaired_count = 0
         failed_count = 0
@@ -1129,55 +1843,65 @@ def check_and_repair_webhooks_for_user(user_id: str) -> dict:
 
         for account in accounts:
             try:
-                # 웹훅 상태 확인
+                # Check webhook status
                 webhook_status = WebhookStatus.query.filter_by(
                     user_id=user_id, account_id=account.id, is_active=True
                 ).first()
 
-                # 웹훅이 없거나 만료된 경우 복구
+                # If webhook is not set up or expired, recover it
                 if not webhook_status or webhook_status.is_expired:
-                    print(f"🔄 웹훅 복구 시도 - 계정: {account.account_email}")
+                    print(
+                        f"🔄 Trying to recover webhook - Account: {account.account_email}"
+                    )
 
                     success = setup_webhook_for_account(user_id, account.id)
 
                     if success:
                         repaired_count += 1
-                        print(f"✅ 웹훅 복구 성공 - 계정: {account.account_email}")
-
-                        # 누락된 이메일 처리 결과 확인 (setup_webhook_for_account에서 이미 처리됨)
-                        # 여기서는 로그만 확인
                         print(
-                            f"📧 누락된 이메일 처리 완료 - 계정: {account.account_email}"
+                            f"✅ Webhook recovery successful - Account: {account.account_email}"
+                        )
+
+                        # Check missed emails processing result (already handled in setup_webhook_for_account)
+                        # Here, we just log the result
+                        print(
+                            f"📧 Missed emails processed - Account: {account.account_email}"
                         )
                     else:
                         failed_count += 1
-                        print(f"❌ 웹훅 복구 실패 - 계정: {account.account_email}")
+                        print(
+                            f"❌ Failed to recover webhook - Account: {account.account_email}"
+                        )
                 else:
-                    # 만료 예정인지 확인 (48시간 이내)
+                    # Check if it's time to renew (within 48 hours)
                     expiry_threshold = datetime.utcnow() + timedelta(hours=48)
                     if webhook_status.expires_at <= expiry_threshold:
-                        print(f"🔄 웹훅 예방적 갱신 - 계정: {account.account_email}")
+                        print(
+                            f"🔄 Preventive renewal - Account: {account.account_email}"
+                        )
 
                         success = setup_webhook_for_account(user_id, account.id)
 
                         if success:
                             repaired_count += 1
                             print(
-                                f"✅ 웹훅 예방적 갱신 성공 - 계정: {account.account_email}"
+                                f"✅ Preventive renewal successful - Account: {account.account_email}"
                             )
                         else:
                             failed_count += 1
                             print(
-                                f"❌ 웹훅 예방적 갱신 실패 - 계정: {account.account_email}"
+                                f"❌ Failed to preventively renew webhook - Account: {account.account_email}"
                             )
                     else:
                         healthy_count += 1
-                        print(f"✅ 웹훅 정상 상태 - 계정: {account.account_email}")
+                        print(
+                            f"✅ Webhook is in good condition - Account: {account.account_email}"
+                        )
 
             except Exception as e:
                 failed_count += 1
                 print(
-                    f"❌ 웹훅 복구 중 오류 - 계정: {account.account_email}, 오류: {str(e)}"
+                    f"❌ Error occurred while recovering webhook - Account: {account.account_email}, Error: {str(e)}"
                 )
 
         result = {
@@ -1191,24 +1915,25 @@ def check_and_repair_webhooks_for_user(user_id: str) -> dict:
         }
 
         print(
-            f"🎉 사용자 웹훅 상태 확인 완료 - 복구: {repaired_count}개, 실패: {failed_count}개, 정상: {healthy_count}개"
+            f"🎉 User's webhook status check completed - Recovered: {repaired_count}, Failed: {failed_count}, Healthy: {healthy_count}"
         )
 
         return result
 
     except Exception as e:
-        print(f"❌ 사용자 웹훅 상태 확인 중 오류: {str(e)}")
+        print(f"❌ Error checking user's webhook status: {str(e)}")
         return {"success": False, "error": str(e)}
 
 
 def monitor_and_renew_webhooks():
-    """모든 사용자의 웹훅 상태를 모니터링하고 만료된 웹훅을 자동 재설정"""
+    """Monitor all users' webhook status and automatically renew expired webhooks + automatically handle missed emails"""
     try:
         from datetime import datetime, timedelta
+        from .models import User
 
-        print("🔄 웹훅 모니터링 시작...")
+        print("🔄 Starting webhook monitoring...")
 
-        # 만료 예정인 웹훅들 조회 (48시간 이내 만료 - 더 일찍 예방적 갱신)
+        # Get webhooks expiring within 48 hours (earlier preventive renewal)
         expiry_threshold = datetime.utcnow() + timedelta(hours=48)
 
         expiring_webhooks = WebhookStatus.query.filter(
@@ -1218,11 +1943,13 @@ def monitor_and_renew_webhooks():
 
         renewed_count = 0
         failed_count = 0
+        missed_email_total = 0
+        missed_email_results = []
 
         for webhook in expiring_webhooks:
             try:
                 print(
-                    f"🔄 웹훅 자동 갱신 - 사용자: {webhook.user_id}, 계정: {webhook.account_id}"
+                    f"🔄 Automatically renewing webhook - User: {webhook.user_id}, Account: {webhook.account_id}"
                 )
 
                 success = setup_webhook_for_account(webhook.user_id, webhook.account_id)
@@ -1230,22 +1957,46 @@ def monitor_and_renew_webhooks():
                 if success:
                     renewed_count += 1
                     print(
-                        f"✅ 웹훅 갱신 성공 - 사용자: {webhook.user_id}, 계정: {webhook.account_id}"
+                        f"✅ Webhook renewal successful - User: {webhook.user_id}, Account: {webhook.account_id}"
+                    )
+
+                    # Missed email processing criteria: after expiration, if none, use service join date
+                    from_date = None
+                    if webhook.expires_at:
+                        from_date = webhook.expires_at
+                    else:
+                        user = User.query.get(webhook.user_id)
+                        from_date = (
+                            user.first_service_access
+                            if user
+                            else datetime.utcnow() - timedelta(days=7)
+                        )
+
+                    missed_result = process_missed_emails_for_account(
+                        webhook.user_id, webhook.account_id, from_date
+                    )
+                    missed_email_total += missed_result.get("processed_count", 0)
+                    missed_email_results.append(
+                        {
+                            "user_id": webhook.user_id,
+                            "account_id": webhook.account_id,
+                            "missed_result": missed_result,
+                        }
                     )
                 else:
                     failed_count += 1
                     print(
-                        f"❌ 웹훅 갱신 실패 - 사용자: {webhook.user_id}, 계정: {webhook.account_id}"
+                        f"❌ Failed to renew webhook - User: {webhook.user_id}, Account: {webhook.account_id}"
                     )
 
             except Exception as e:
                 failed_count += 1
                 print(
-                    f"❌ 웹훅 갱신 중 오류 - 사용자: {webhook.user_id}, 계정: {webhook.account_id}, 오류: {str(e)}"
+                    f"❌ Error occurred while renewing webhook - User: {webhook.user_id}, Account: {webhook.account_id}, Error: {str(e)}"
                 )
 
         print(
-            f"🎉 웹훅 모니터링 완료 - 갱신: {renewed_count}개, 실패: {failed_count}개"
+            f"🎉 Webhook monitoring completed - Renewed: {renewed_count} webhooks, Failed: {failed_count}, Missed email processing: {missed_email_total} emails"
         )
 
         return {
@@ -1253,48 +2004,56 @@ def monitor_and_renew_webhooks():
             "renewed_count": renewed_count,
             "failed_count": failed_count,
             "total_checked": len(expiring_webhooks),
+            "missed_email_total": missed_email_total,
+            "missed_email_results": missed_email_results,
         }
 
     except Exception as e:
-        print(f"❌ 웹훅 모니터링 중 오류: {str(e)}")
+        print(f"❌ Error occurred while monitoring webhooks: {str(e)}")
         return {"success": False, "error": str(e)}
 
 
 @email_bp.route("/monitor-webhooks", methods=["POST"])
 @login_required
 def trigger_webhook_monitoring():
-    """웹훅 모니터링 수동 트리거 (관리자용)"""
+    """Manual trigger for webhook monitoring (admin use)"""
     try:
         result = monitor_and_renew_webhooks()
 
         if result["success"]:
-            message = f"웹훅 모니터링 완료 - 갱신: {result['renewed_count']}개, 실패: {result['failed_count']}개"
+            message = f"Webhook monitoring completed - Renewed: {result['renewed_count']} webhooks, Failed: {result['failed_count']}"
             return jsonify({"success": True, "message": message, "result": result})
         else:
             return jsonify(
-                {"success": False, "message": f"웹훅 모니터링 실패: {result['error']}"}
+                {
+                    "success": False,
+                    "message": f"Failed to monitor webhooks: {result['error']}",
+                }
             )
 
     except Exception as e:
         return jsonify(
-            {"success": False, "message": f"웹훅 모니터링 중 오류: {str(e)}"}
+            {
+                "success": False,
+                "message": f"Error occurred while monitoring webhooks: {str(e)}",
+            }
         )
 
 
 @email_bp.route("/process-missed-emails", methods=["POST"])
 @login_required
 def process_missed_emails():
-    """누락된 이메일 수동 처리"""
+    """Manual processing of missed emails"""
     try:
         from datetime import datetime, timedelta
 
-        # 모든 활성 계정 가져오기
+        # Get all active accounts
         accounts = UserAccount.query.filter_by(
             user_id=current_user.id, is_active=True
         ).all()
 
         if not accounts:
-            return jsonify({"success": False, "message": "연결된 계정이 없습니다."})
+            return jsonify({"success": False, "message": "No connected accounts."})
 
         total_processed = 0
         total_classified = 0
@@ -1302,24 +2061,24 @@ def process_missed_emails():
 
         for account in accounts:
             try:
-                # 웹훅 상태 확인
+                # Check webhook status
                 webhook_status = WebhookStatus.query.filter_by(
                     user_id=current_user.id, account_id=account.id, is_active=True
                 ).first()
 
-                # 누락된 기간 계산
+                # Calculate missed period
                 missed_period_start = None
                 if webhook_status and webhook_status.is_expired:
                     missed_period_start = webhook_status.expires_at
                 else:
-                    # 웹훅이 없거나 만료되지 않은 경우, 7일 전부터 처리
+                    # If webhook is not set up or not expired, process from 7 days ago
                     missed_period_start = datetime.utcnow() - timedelta(days=7)
 
                 print(
-                    f"📧 누락된 이메일 처리 - 계정: {account.account_email}, 시작일: {missed_period_start}"
+                    f"📧 Processing missed emails - Account: {account.account_email}, Start date: {missed_period_start}"
                 )
 
-                # 누락된 이메일 처리
+                # Process missed emails
                 result = process_missed_emails_for_account(
                     current_user.id, account.id, missed_period_start
                 )
@@ -1347,7 +2106,9 @@ def process_missed_emails():
                     )
 
             except Exception as e:
-                print(f"계정 {account.account_email} 누락된 이메일 처리 실패: {str(e)}")
+                print(
+                    f"Failed to process missed emails for account {account.account_email}: {str(e)}"
+                )
                 account_results.append(
                     {
                         "account": account.account_email,
@@ -1356,11 +2117,11 @@ def process_missed_emails():
                     }
                 )
 
-        # 결과 메시지 생성
+        # Generate result message
         if total_processed > 0:
-            message = f"누락된 이메일 {total_processed}개 처리 완료 (분류: {total_classified}개)"
+            message = f"Processed {total_processed} missed emails (classified: {total_classified} emails)"
         else:
-            message = "처리할 누락된 이메일이 없습니다."
+            message = "No missed emails to process."
 
         return jsonify(
             {
@@ -1374,20 +2135,17 @@ def process_missed_emails():
 
     except Exception as e:
         return jsonify(
-            {"success": False, "message": f"누락된 이메일 처리 중 오류: {str(e)}"}
+            {"success": False, "message": f"Error processing missed emails: {str(e)}"}
         )
 
 
 @email_bp.route("/scheduler-status")
 @login_required
 def scheduler_status():
-    """스케줄러 상태 확인"""
+    """Check scheduler status"""
     try:
-        from flask_apscheduler import APScheduler
-        from app import scheduler
-
-        # 스케줄러 작업 상태 확인
-        jobs = scheduler.get_jobs()
+        # Check scheduler job status
+        jobs = get_scheduler().get_jobs()
         webhook_job = None
 
         for job in jobs:
@@ -1397,7 +2155,7 @@ def scheduler_status():
 
         if webhook_job:
             status = {
-                "scheduler_running": scheduler.running,
+                "scheduler_running": get_scheduler().running,
                 "webhook_job_active": webhook_job.next_run_time is not None,
                 "next_run_time": (
                     webhook_job.next_run_time.isoformat()
@@ -1408,7 +2166,7 @@ def scheduler_status():
             }
         else:
             status = {
-                "scheduler_running": scheduler.running,
+                "scheduler_running": get_scheduler().running,
                 "webhook_job_active": False,
                 "next_run_time": None,
                 "job_interval": "Not found",
@@ -1418,34 +2176,41 @@ def scheduler_status():
 
     except Exception as e:
         return jsonify(
-            {"success": False, "message": f"스케줄러 상태 확인 실패: {str(e)}"}
+            {
+                "success": False,
+                "message": f"Failed to retrieve scheduler status: {str(e)}",
+            }
         )
 
 
 @email_bp.route("/trigger-scheduled-monitoring", methods=["POST"])
 @login_required
 def trigger_scheduled_monitoring():
-    """스케줄된 웹훅 모니터링 수동 트리거"""
+    """Manual trigger for scheduled webhook monitoring"""
     try:
-        from app import scheduled_webhook_monitoring
+        print("�� Manual trigger for scheduled webhook monitoring...")
 
-        print("🔄 수동 스케줄된 웹훅 모니터링 트리거...")
-
-        # 스케줄된 함수 직접 호출
-        scheduled_webhook_monitoring()
+        # Directly call the scheduled function
+        get_scheduled_webhook_monitoring()
 
         return jsonify(
-            {"success": True, "message": "스케줄된 웹훅 모니터링이 실행되었습니다."}
+            {
+                "success": True,
+                "message": "Scheduled webhook monitoring has been executed.",
+            }
         )
 
     except Exception as e:
         return jsonify(
-            {"success": False, "message": f"스케줄된 웹훅 모니터링 실행 실패: {str(e)}"}
+            {
+                "success": False,
+                "message": f"Failed to execute scheduled webhook monitoring: {str(e)}",
+            }
         )
 
 
 def get_user_emails(user_id, limit=50):
-    """사용자의 이메일을 가져오는 헬퍼 함수"""
+    """Helper function to retrieve user's emails"""
     return (
         Email.query.filter_by(user_id=user_id)
         .order_by(Email.created_at.desc())
@@ -1457,9 +2222,9 @@ def get_user_emails(user_id, limit=50):
 @email_bp.route("/debug-info")
 @login_required
 def debug_info():
-    """디버깅 정보 확인"""
+    """Check debug information"""
     try:
-        # 사용자 정보
+        # User information
         user_info = {
             "user_id": current_user.id,
             "email": current_user.email,
@@ -1473,18 +2238,18 @@ def debug_info():
             ),
         }
 
-        # 계정 정보
+        # Account information
         accounts = UserAccount.query.filter_by(
             user_id=current_user.id, is_active=True
         ).all()
 
         account_info = []
         for account in accounts:
-            # 각 계정의 최근 이메일 확인
+            # Check recent emails for each account
             gmail_service = GmailService(current_user.id, account.id)
 
             try:
-                # 최근 이메일 가져오기 시도
+                # Try to retrieve recent emails
                 recent_emails = gmail_service.fetch_recent_emails(max_results=5)
 
                 account_data = {
@@ -1497,9 +2262,9 @@ def debug_info():
                     "recent_emails": [],
                 }
 
-                # 최근 이메일 상세 정보
+                # Detailed information about recent emails
                 if recent_emails:
-                    for email in recent_emails[:3]:  # 최대 3개만
+                    for email in recent_emails[:3]:  # Only up to 3 emails
                         account_data["recent_emails"].append(
                             {
                                 "gmail_id": email.get("gmail_id"),
@@ -1538,28 +2303,31 @@ def debug_info():
 
     except Exception as e:
         return jsonify(
-            {"success": False, "message": f"디버깅 정보 조회 실패: {str(e)}"}
+            {
+                "success": False,
+                "message": f"Failed to retrieve debug information: {str(e)}",
+            }
         )
 
 
 @email_bp.route("/debug-webhook-setup")
 @login_required
 def debug_webhook_setup():
-    """웹훅 설정 디버깅 정보"""
+    """Check debug information about webhook setup"""
     try:
-        # 모든 활성 계정 가져오기
+        # Get all active accounts
         accounts = UserAccount.query.filter_by(
             user_id=current_user.id, is_active=True
         ).all()
 
         if not accounts:
-            return jsonify({"success": False, "message": "연결된 계정이 없습니다."})
+            return jsonify({"success": False, "message": "No connected accounts."})
 
         debug_info = {
             "environment": {
                 "project_id": os.environ.get("GOOGLE_CLOUD_PROJECT"),
                 "topic_name": os.environ.get("GMAIL_WEBHOOK_TOPIC"),
-                "webhook_url": "https://cleanbox-app.onrender.com/webhook/gmail",
+                "webhook_url": "https://cleanbox-app-1.onrender.com/webhook/gmail",
             },
             "accounts": [],
         }
@@ -1568,12 +2336,12 @@ def debug_webhook_setup():
             try:
                 gmail_service = GmailService(current_user.id, account.id)
 
-                # 웹훅 상태 확인
+                # Check webhook status
                 webhook_status = gmail_service.get_webhook_status()
 
-                # Gmail API 연결 테스트
+                # Test Gmail API connection
                 try:
-                    # 간단한 Gmail API 호출 테스트
+                    # Simple test call to Gmail API
                     profile = (
                         gmail_service.service.users().getProfile(userId="me").execute()
                     )
@@ -1610,22 +2378,25 @@ def debug_webhook_setup():
 
     except Exception as e:
         return jsonify(
-            {"success": False, "message": f"디버깅 정보 수집 실패: {str(e)}"}
+            {
+                "success": False,
+                "message": f"Failed to retrieve debug information: {str(e)}",
+            }
         )
 
 
 @email_bp.route("/check-oauth-scopes")
 @login_required
 def check_oauth_scopes():
-    """OAuth 스코프 확인"""
+    """Check OAuth scopes"""
     try:
-        # 모든 활성 계정 가져오기
+        # Get all active accounts
         accounts = UserAccount.query.filter_by(
             user_id=current_user.id, is_active=True
         ).all()
 
         if not accounts:
-            return jsonify({"success": False, "message": "연결된 계정이 없습니다."})
+            return jsonify({"success": False, "message": "No connected accounts."})
 
         scope_info = {
             "required_scopes": [
@@ -1640,15 +2411,15 @@ def check_oauth_scopes():
             try:
                 gmail_service = GmailService(current_user.id, account.id)
 
-                # Gmail API 연결 테스트
+                # Test Gmail API connection
                 try:
                     profile = (
                         gmail_service.service.users().getProfile(userId="me").execute()
                     )
 
-                    # 토큰 정보 확인 (가능한 경우)
+                    # Check token information (if available)
                     try:
-                        # 현재 토큰의 스코프 정보 확인
+                        # Check scope information of the current token
                         token_info = (
                             gmail_service.service.users()
                             .getProfile(userId="me")
@@ -1694,41 +2465,41 @@ def check_oauth_scopes():
 
     except Exception as e:
         return jsonify(
-            {"success": False, "message": f"OAuth 스코프 확인 실패: {str(e)}"}
+            {"success": False, "message": f"Failed to check OAuth scopes: {str(e)}"}
         )
 
 
 @email_bp.route("/ai-analysis-stats")
 @login_required
 def ai_analysis_statistics():
-    """AI 분석 통계"""
+    """AI analysis statistics"""
     try:
-        # AI 분석 완료된 이메일 수 (summary가 있는 이메일)
+        # Number of emails with AI analysis completed (emails with summary)
         analyzed_count = (
             Email.query.filter_by(user_id=current_user.id)
             .filter(Email.summary.isnot(None))
             .count()
         )
 
-        # 전체 이메일 수
+        # Total number of emails
         total_count = Email.query.filter_by(user_id=current_user.id).count()
 
-        # AI 분석 완료율
+        # AI analysis completion rate
         analysis_rate = (analyzed_count / total_count * 100) if total_count > 0 else 0
 
-        # 카테고리별 AI 분석 통계
+        # Category-wise AI analysis statistics
         category_stats = (
             db.session.query(Category.name, db.func.count(Email.id).label("count"))
             .join(Email, Category.id == Email.category_id)
             .filter(
                 Email.user_id == current_user.id,
-                Email.summary.isnot(None),  # AI 분석 완료된 이메일만
+                Email.summary.isnot(None),  # Only emails with AI analysis completed
             )
             .group_by(Category.id, Category.name)
             .all()
         )
 
-        # 아카이브된 AI 분석 이메일 수
+        # Number of archived AI analysis emails
         archived_analyzed_count = (
             Email.query.filter_by(user_id=current_user.id, is_archived=True)
             .filter(Email.summary.isnot(None))
@@ -1749,18 +2520,20 @@ def ai_analysis_statistics():
         return jsonify({"success": True, "statistics": stats})
 
     except Exception as e:
-        return jsonify({"success": False, "message": f"통계 조회 중 오류: {str(e)}"})
+        return jsonify(
+            {"success": False, "message": f"Error retrieving statistics: {str(e)}"}
+        )
 
 
 @email_bp.route("/ai-analyzed-emails")
 @login_required
 def get_ai_analyzed_emails():
-    """AI 분석 완료된 이메일 목록"""
+    """List of emails with AI analysis completed"""
     try:
         page = request.args.get("page", 1, type=int)
         per_page = request.args.get("per_page", 20, type=int)
 
-        # AI 분석 완료된 이메일 조회 (summary가 있는 이메일)
+        # Get emails with AI analysis completed (emails with summary)
         emails = (
             Email.query.filter_by(user_id=current_user.id)
             .filter(Email.summary.isnot(None))
@@ -1768,7 +2541,7 @@ def get_ai_analyzed_emails():
             .paginate(page=page, per_page=per_page, error_out=False)
         )
 
-        # 카테고리 정보 추가
+        # Add category information
         for email in emails.items:
             if email.category_id:
                 email.category_info = Category.query.filter_by(
@@ -1785,7 +2558,7 @@ def get_ai_analyzed_emails():
                     "category_name": (
                         email.category_info.name
                         if hasattr(email, "category_info") and email.category_info
-                        else "미분류"
+                        else "Unclassified"
                     ),
                     "is_archived": email.is_archived,
                     "is_read": email.is_read,
@@ -1806,4 +2579,138 @@ def get_ai_analyzed_emails():
         return jsonify({"success": True, "data": result})
 
     except Exception as e:
-        return jsonify({"success": False, "message": f"이메일 조회 중 오류: {str(e)}"})
+        return jsonify(
+            {"success": False, "message": f"Error retrieving emails: {str(e)}"}
+        )
+
+
+@email_bp.route("/api/check-new-emails", methods=["GET"])
+@login_required
+def check_new_emails():
+    """Check if new emails exist (comparison based on email id)"""
+    try:
+        # Get the last seen email id from the client
+        last_seen_email_id = request.args.get("last_seen_email_id", type=int)
+
+        # Generate cache key
+        cache_key = f"max_email_id_{current_user.id}"
+
+        # Use cached max email id if available
+        cached_max_id = cache.get(cache_key)
+
+        if cached_max_id is not None:
+            # Compare cached max email id with the client's last seen email id
+            has_new_emails = (
+                last_seen_email_id is None or cached_max_id > last_seen_email_id
+            )
+
+            result = {
+                "has_new_emails": has_new_emails,
+                "max_email_id": cached_max_id,
+                "last_seen_email_id": last_seen_email_id,
+                "new_count": (
+                    cached_max_id - (last_seen_email_id or 0) if has_new_emails else 0
+                ),
+                "last_check": datetime.utcnow().isoformat(),
+                "cached_until": (datetime.utcnow() + timedelta(seconds=10)).isoformat(),
+            }
+
+            return jsonify(result)
+
+        # If cache is empty, calculate max email id from DB
+        active_accounts = UserAccount.query.filter_by(
+            user_id=current_user.id, is_active=True
+        ).all()
+
+        if not active_accounts:
+            return jsonify(
+                {
+                    "has_new_emails": False,
+                    "max_email_id": 0,
+                    "last_seen_email_id": last_seen_email_id,
+                    "new_count": 0,
+                    "last_check": datetime.utcnow().isoformat(),
+                }
+            )
+
+        # Find max email id across all user's accounts
+        max_email_id = 0
+        for account in active_accounts:
+            max_id_for_account = (
+                db.session.query(db.func.max(Email.id))
+                .filter(
+                    Email.user_id == current_user.id, Email.account_id == account.id
+                )
+                .scalar()
+            )
+
+            if max_id_for_account and max_id_for_account > max_email_id:
+                max_email_id = max_id_for_account
+
+        # Cache result (10 seconds)
+        cache.set(cache_key, max_email_id, timeout=10)
+
+        # Check for new emails
+        has_new_emails = last_seen_email_id is None or max_email_id > last_seen_email_id
+
+        result = {
+            "has_new_emails": has_new_emails,
+            "max_email_id": max_email_id,
+            "last_seen_email_id": last_seen_email_id,
+            "new_count": (
+                max_email_id - (last_seen_email_id or 0) if has_new_emails else 0
+            ),
+            "last_check": datetime.utcnow().isoformat(),
+            "cached_until": (datetime.utcnow() + timedelta(seconds=10)).isoformat(),
+        }
+
+        return jsonify(result)
+
+    except Exception as e:
+        logger.error(f"Error checking for new emails: {e}")
+        return (
+            jsonify({"has_new_emails": False, "error": "An error occurred"}),
+            500,
+        )
+
+
+@email_bp.route("/api/update-last-seen-email", methods=["POST"])
+@login_required
+def update_last_seen_email():
+    """Update the last seen email id for the client"""
+    try:
+        data = request.get_json()
+        last_seen_email_id = data.get("last_seen_email_id", type=int)
+
+        if last_seen_email_id is None:
+            return (
+                jsonify(
+                    {"success": False, "message": "last_seen_email_id is required"}
+                ),
+                400,
+            )
+
+        # Generate cache key
+        cache_key = f"last_seen_email_id_{current_user.id}"
+
+        # Save the client's last seen email id in cache
+        cache.set(cache_key, last_seen_email_id, timeout=3600)  # Cache for 1 hour
+
+        logger.info(
+            f"User {current_user.id}'s last seen email id updated: {last_seen_email_id}"
+        )
+
+        return jsonify(
+            {
+                "success": True,
+                "last_seen_email_id": last_seen_email_id,
+                "updated_at": datetime.utcnow().isoformat(),
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Error updating last seen email id: {e}")
+        return (
+            jsonify({"success": False, "message": "An error occurred"}),
+            500,
+        )
