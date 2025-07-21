@@ -236,11 +236,15 @@
         `;
         
         toastContainer.appendChild(toastElement);
-        const toast = new bootstrap.Toast(toastElement, { delay: 0 }); // 자동 숨김 비활성화
+        const toast = new bootstrap.Toast(toastElement, { delay: 15000 }); // 15초 후 자동 숨김
         toast.show();
         
-        // 자동 제거 제거 - 토스트가 계속 남아있음
-        // 사용자가 직접 X 버튼이나 새로고침 버튼으로 제어
+        // 15초 후 DOM에서 완전 제거 (delay와 동일한 시간)
+        setTimeout(() => {
+            if (toastElement.parentNode) {
+                toastElement.remove();
+            }
+        }, 15000);
     }
     
     // 토스트 컨테이너 생성
