@@ -1,8 +1,7 @@
-"""CleanBox 카테고리 관리 라우트 모듈."""
-
+# Standard library imports
 import os
-from typing import Any
 
+# Third-party imports
 from flask import (
     Blueprint,
     request,
@@ -16,6 +15,7 @@ from flask import (
 )
 from flask_login import login_user, logout_user, login_required, current_user
 
+# Local imports
 from ..models import User, UserToken, UserAccount, Category, db
 
 category_bp = Blueprint("category", __name__)
@@ -23,8 +23,8 @@ category_bp = Blueprint("category", __name__)
 
 @category_bp.route("/")
 @login_required
-def list_categories() -> Any:
-    """카테고리 관리 페이지."""
+def list_categories():
+    """카테고리 관리 페이지"""
     # 인증 상태 재확인
     if not current_user.is_authenticated:
         flash("로그인이 필요합니다.", "error")
@@ -66,8 +66,8 @@ def list_categories() -> Any:
 
 @category_bp.route("/add", methods=["GET", "POST"])
 @login_required
-def add_category() -> Any:
-    """새 카테고리 추가."""
+def add_category():
+    """새 카테고리 추가"""
     if request.method == "POST":
         try:
             name = request.form.get("name")
@@ -113,8 +113,8 @@ def add_category() -> Any:
 
 @category_bp.route("/edit/<int:category_id>", methods=["GET", "POST"])
 @login_required
-def edit_category(category_id: int) -> Any:
-    """카테고리 수정."""
+def edit_category(category_id):
+    """카테고리 수정"""
     category = Category.query.filter_by(id=category_id, user_id=current_user.id).first()
 
     if not category:
@@ -169,8 +169,8 @@ def edit_category(category_id: int) -> Any:
 
 @category_bp.route("/delete/<int:category_id>", methods=["POST"])
 @login_required
-def delete_category(category_id: int) -> Any:
-    """카테고리 삭제."""
+def delete_category(category_id):
+    """카테고리 삭제"""
     try:
         category = Category.query.filter_by(
             id=category_id, user_id=current_user.id

@@ -1,9 +1,8 @@
-"""CleanBox 애플리케이션 설정 모듈."""
-
+# Standard library imports
 import os
 from datetime import timedelta
-from typing import Optional
 
+# Third-party imports
 from cryptography.fernet import Fernet
 from dotenv import load_dotenv
 
@@ -11,15 +10,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-def get_encryption_key() -> bytes:
-    """암호화 키를 생성하거나 로드합니다."""
+def get_encryption_key():
+    """암호화 키 생성 또는 로드"""
     key = os.environ.get("CLEANBOX_ENCRYPTION_KEY")
 
     if not key:
         # 키가 없으면 새로 생성
         key = Fernet.generate_key().decode()
-        # 운영 환경에서는 로그로 대체
-        print(f"⚠️ 새로운 암호화 키가 생성되었습니다. .env 파일에 다음을 추가하세요:")
+        print(f"⚠️  새로운 암호화 키가 생성되었습니다. .env 파일에 다음을 추가하세요:")
         print(f"CLEANBOX_ENCRYPTION_KEY={key}")
 
     # 키 유효성 검증
@@ -31,10 +29,7 @@ def get_encryption_key() -> bytes:
 
 
 class Config:
-    """CleanBox 애플리케이션 기본 설정 클래스."""
-
     SECRET_KEY = os.environ.get("SECRET_KEY") or "dev-secret-key"
-
     # PostgreSQL 연결 설정
     database_uri = os.environ.get("DATABASE_URI") or os.environ.get("DATABASE_URL")
 
@@ -88,6 +83,19 @@ class Config:
     ENABLE_AI_FEATURES = os.environ.get("CLEANBOX_ENABLE_AI", "true").lower() == "true"
     OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4.1-nano")
 
+    # 스케줄러 설정 제거 - PROJECT_DESCRIPTION 기준으로 불필요한 기능
+    # ENABLE_SCHEDULER = (
+    #     os.environ.get("CLEANBOX_ENABLE_SCHEDULER", "true").lower() == "true"
+    # )
+    # SYNC_INTERVAL_MINUTES = int(
+    #     os.environ.get("CLEANBOX_SYNC_INTERVAL", "5").split("#")[0].strip()
+    # )
+    # TOKEN_CHECK_INTERVAL_HOURS = int(
+    #     os.environ.get("CLEANBOX_TOKEN_CHECK_INTERVAL", "1").split("#")[0].strip()
+    # )
+
+    # 기타 CleanBox 관련 환경설정 추가 가능
+
     # 캐시 설정 (메모리 기반 간단한 캐시)
     CACHE_TYPE = "simple"
     CACHE_DEFAULT_TIMEOUT = 300  # 5분
@@ -95,7 +103,7 @@ class Config:
 
 
 class TestConfig(Config):
-    """테스트용 설정 클래스."""
+    """테스트용 설정"""
 
     TESTING = True
     SQLALCHEMY_DATABASE_URI = os.environ.get(

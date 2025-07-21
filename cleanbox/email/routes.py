@@ -1,11 +1,10 @@
-"""CleanBox 이메일 관리 라우트 모듈."""
-
+# Standard library imports
 import os
 import traceback
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
 
+# Third-party imports
 from flask import (
     Blueprint,
     render_template,
@@ -19,6 +18,7 @@ from flask import (
 from flask_login import login_required, current_user
 from flask_apscheduler import APScheduler
 
+# Local imports
 from ..models import Email, Category, UserAccount, WebhookStatus, db
 from .. import cache
 from .gmail_service import GmailService
@@ -35,15 +35,15 @@ email_bp = Blueprint("email", __name__)
 
 
 # Lazy imports to avoid circular import issues
-def get_scheduler() -> APScheduler:
-    """Get scheduler instance lazily to avoid circular imports."""
+def get_scheduler():
+    """Get scheduler instance lazily to avoid circular imports"""
     from app import scheduler
 
     return scheduler
 
 
-def get_scheduled_webhook_monitoring() -> Any:
-    """Get scheduled webhook monitoring function lazily to avoid circular imports."""
+def get_scheduled_webhook_monitoring():
+    """Get scheduled webhook monitoring function lazily to avoid circular imports"""
     from app import scheduled_webhook_monitoring
 
     return scheduled_webhook_monitoring
@@ -235,8 +235,8 @@ def category_emails(category_id):
 
 @email_bp.route("/process-new", methods=["POST"])
 @login_required
-def process_new_emails() -> Any:
-    """새 이메일 처리."""
+def process_new_emails():
+    """새 이메일 처리"""
     try:
         # 모든 활성 계정 가져오기
         accounts = UserAccount.query.filter_by(
@@ -253,13 +253,13 @@ def process_new_emails() -> Any:
 
         for account in accounts:
             try:
-                logger.info(f"계정 {account.account_email} 새 이메일 처리 시작")
+                print(f"🔍 계정 {account.account_email} 새 이메일 처리 시작")
                 gmail_service = GmailService(current_user.id, account.id)
 
                 # 새 이메일 가져오기
                 new_emails = gmail_service.get_new_emails()
-                logger.info(
-                    f"계정 {account.account_email}에서 {len(new_emails)}개의 새 이메일 발견"
+                print(
+                    f"📧 계정 {account.account_email}에서 {len(new_emails)}개의 새 이메일 발견"
                 )
 
                 if not new_emails:
@@ -297,7 +297,7 @@ def process_new_emails() -> Any:
                             classified_count += 1
 
                     except Exception as e:
-                        logger.error(f"이메일 처리 실패: {str(e)}")
+                        print(f"❌ 이메일 처리 실패: {str(e)}")
                         continue
 
                 total_processed += processed_count
@@ -315,12 +315,12 @@ def process_new_emails() -> Any:
                     }
                 )
 
-                logger.info(
-                    f"계정 {account.account_email} 처리 완료 - 처리: {processed_count}개, 분류: {classified_count}개"
+                print(
+                    f"✅ 계정 {account.account_email} 처리 완료 - 처리: {processed_count}개, 분류: {classified_count}개"
                 )
 
             except Exception as e:
-                logger.error(f"계정 {account.account_email} 처리 실패: {str(e)}")
+                print(f"❌ 계정 {account.account_email} 처리 실패: {str(e)}")
                 account_results.append(
                     {
                         "account": account.account_email,
@@ -337,7 +337,7 @@ def process_new_emails() -> Any:
         # 캐시 무효화 (새 이메일이 처리되었으므로 최대 email id 재계산 필요)
         cache_key = f"max_email_id_{current_user.id}"
         cache.delete(cache_key)
-        logger.info(f"캐시 무효화: {cache_key}")
+        print(f"✅ 캐시 무효화: {cache_key}")
 
         # 성공 메시지 생성
         success_message = f"새 이메일 처리 완료: {total_processed}개 처리, {total_classified}개 AI 분류"
@@ -358,7 +358,7 @@ def process_new_emails() -> Any:
         return redirect(url_for("email.list_emails"))
 
     except Exception as e:
-        logger.error(f"새 이메일 처리 중 오류: {str(e)}")
+        print(f"❌ 새 이메일 처리 중 오류: {str(e)}")
         flash(f"새 이메일 처리 중 오류가 발생했습니다: {str(e)}", "error")
         return redirect(url_for("email.list_emails"))
 
@@ -2094,8 +2094,8 @@ def trigger_scheduled_monitoring():
         )
 
 
-def get_user_emails(user_id: str, limit: int = 50) -> List[Email]:
-    """사용자의 이메일을 가져오는 헬퍼 함수."""
+def get_user_emails(user_id, limit=50):
+    """사용자의 이메일을 가져오는 헬퍼 함수"""
     return (
         Email.query.filter_by(user_id=user_id)
         .order_by(Email.created_at.desc())
@@ -2461,8 +2461,8 @@ def get_ai_analyzed_emails():
 
 @email_bp.route("/api/check-new-emails", methods=["GET"])
 @login_required
-def check_new_emails() -> Any:
-    """새 이메일 존재 여부 체크 (email id 기반 비교)."""
+def check_new_emails():
+    """새 이메일 존재 여부 체크 (email id 기반 비교)"""
     try:
         # 클라이언트에서 마지막으로 본 email id 받기
         last_seen_email_id = request.args.get("last_seen_email_id", type=int)
@@ -2551,8 +2551,8 @@ def check_new_emails() -> Any:
 
 @email_bp.route("/api/update-last-seen-email", methods=["POST"])
 @login_required
-def update_last_seen_email() -> Any:
-    """클라이언트의 마지막으로 본 email id 업데이트."""
+def update_last_seen_email():
+    """클라이언트의 마지막으로 본 email id 업데이트"""
     try:
         data = request.get_json()
         last_seen_email_id = data.get("last_seen_email_id", type=int)
