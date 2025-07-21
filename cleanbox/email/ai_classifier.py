@@ -166,7 +166,7 @@ Analysis Guidelines:
 - Understand the meaning of category names and descriptions accurately for classification
 - For categories with no description, classify by name
 - Write the summary naturally, capturing the core intent of the email
-- Write in Korean"""
+- Write in English"""
         return prompt
 
     def _parse_unified_response(
