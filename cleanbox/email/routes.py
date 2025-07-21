@@ -44,9 +44,16 @@ def get_scheduler() -> APScheduler:
 
 def get_scheduled_webhook_monitoring() -> Any:
     """Get scheduled webhook monitoring function lazily to avoid circular imports."""
-    from app import scheduled_webhook_monitoring
+    try:
+        from app import scheduled_webhook_monitoring
 
-    return scheduled_webhook_monitoring
+        return scheduled_webhook_monitoring
+    except ImportError:
+        # app.py에서 함수를 찾을 수 없는 경우 대체 함수 반환
+        def fallback_webhook_monitoring():
+            return monitor_and_renew_webhooks()
+
+        return fallback_webhook_monitoring
 
 
 @email_bp.route("/")
@@ -2057,6 +2064,8 @@ def scheduler_status():
                     else None
                 ),
                 "job_interval": str(webhook_job.trigger),
+                "job_name": webhook_job.name,
+                "total_jobs": len(jobs),
             }
         else:
             status = {
@@ -2064,6 +2073,8 @@ def scheduler_status():
                 "webhook_job_active": False,
                 "next_run_time": None,
                 "job_interval": "Not found",
+                "job_name": "Not found",
+                "total_jobs": len(jobs),
             }
 
         return jsonify({"success": True, "status": status})
@@ -2082,11 +2093,15 @@ def trigger_scheduled_monitoring():
         print("🔄 수동 스케줄된 웹훅 모니터링 트리거...")
 
         # 스케줄된 함수 직접 호출
-        get_scheduled_webhook_monitoring()
+        scheduled_function = get_scheduled_webhook_monitoring()
+        result = scheduled_function()
 
-        return jsonify(
-            {"success": True, "message": "스케줄된 웹훅 모니터링이 실행되었습니다."}
-        )
+        if result and result.get("success"):
+            message = f"스케줄된 웹훅 모니터링 완료 - 갱신: {result.get('renewed_count', 0)}개, 실패: {result.get('failed_count', 0)}개"
+        else:
+            message = "스케줄된 웹훅 모니터링 실행됨 (결과 없음)"
+
+        return jsonify({"success": True, "message": message, "result": result})
 
     except Exception as e:
         return jsonify(

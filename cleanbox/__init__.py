@@ -104,6 +104,28 @@ def create_app(config_class=Config):
         # 로그인되지 않은 사용자는 랜딩 페이지 표시
         return render_template("landing.html")
 
+    # 서버 시작 시 웹훅 상태 확인 및 복구
+    @app.before_first_request
+    def initialize_webhooks():
+        """서버 시작 시 모든 웹훅 상태 확인 및 복구"""
+        try:
+            from .email.routes import monitor_and_renew_webhooks
+
+            print("🔄 서버 시작 시 웹훅 상태 확인 및 복구 중...")
+            result = monitor_and_renew_webhooks()
+
+            if result["success"]:
+                print(
+                    f"✅ 서버 시작 시 웹훅 복구 완료 - 갱신: {result['renewed_count']}개, 실패: {result['failed_count']}개"
+                )
+            else:
+                print(
+                    f"❌ 서버 시작 시 웹훅 복구 실패: {result.get('error', '알 수 없는 오류')}"
+                )
+
+        except Exception as e:
+            print(f"❌ 서버 시작 시 웹훅 복구 중 오류: {str(e)}")
+
     # home 엔드포인트 추가
     @app.route("/home")
     def home():
