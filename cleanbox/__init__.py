@@ -105,6 +105,7 @@ def create_app(config_class=Config):
         return render_template("landing.html")
 
     # 서버 시작 시 웹훅 상태 확인 및 복구
+    @app.before_first_request
     def initialize_webhooks():
         """서버 시작 시 모든 웹훅 상태 확인 및 복구"""
         try:
