@@ -1,6 +1,7 @@
 # Standard library imports
 import os
 import traceback
+import logging
 from datetime import datetime, timedelta
 
 # Third-party imports
@@ -11,6 +12,8 @@ from flask_login import login_required, current_user
 from ..models import Email, Category, UserAccount, WebhookStatus, db
 from .gmail_service import GmailService
 from .ai_classifier import AIClassifier
+
+logger = logging.getLogger(__name__)
 
 email_bp = Blueprint("email", __name__)
 
