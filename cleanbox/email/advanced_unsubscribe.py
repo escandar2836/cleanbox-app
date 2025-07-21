@@ -209,8 +209,7 @@ class AdvancedUnsubscribeService:
             failed_links = []
             for i, link in enumerate(unsubscribe_links):
                 print(f"📝 Processing link {i + 1}/{len(unsubscribe_links)}: {link}")
-
-                result = await self.playwright_service.process_unsubscribe_async(
+                result = await self.playwright_service.process_unsubscribe_with_playwright_ai(
                     link, user_email
                 )
 
