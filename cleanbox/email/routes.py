@@ -302,6 +302,11 @@ def process_new_emails():
             flash("새로운 이메일이 없습니다.", "info")
             return redirect(url_for("email.list_emails"))
 
+        # 캐시 무효화 (새 이메일이 처리되었으므로 최대 email id 재계산 필요)
+        cache_key = f"max_email_id_{current_user.id}"
+        cache.delete(cache_key)
+        print(f"✅ 캐시 무효화: {cache_key}")
+
         # 성공 메시지 생성
         success_message = f"새 이메일 처리 완료: {total_processed}개 처리, {total_classified}개 AI 분류"
 
@@ -2421,3 +2426,135 @@ def get_ai_analyzed_emails():
 
     except Exception as e:
         return jsonify({"success": False, "message": f"이메일 조회 중 오류: {str(e)}"})
+
+
+@email_bp.route("/api/check-new-emails", methods=["GET"])
+@login_required
+def check_new_emails():
+    """새 이메일 존재 여부 체크 (email id 기반 비교)"""
+    try:
+        # 클라이언트에서 마지막으로 본 email id 받기
+        last_seen_email_id = request.args.get("last_seen_email_id", type=int)
+
+        # 캐시 키 생성
+        cache_key = f"max_email_id_{current_user.id}"
+
+        # 캐시된 최대 email id가 있으면 사용
+        cached_max_id = cache.get(cache_key)
+
+        if cached_max_id is not None:
+            # 캐시된 최대 email id와 클라이언트의 마지막으로 본 email id 비교
+            has_new_emails = (
+                last_seen_email_id is None or cached_max_id > last_seen_email_id
+            )
+
+            result = {
+                "has_new_emails": has_new_emails,
+                "max_email_id": cached_max_id,
+                "last_seen_email_id": last_seen_email_id,
+                "new_count": (
+                    cached_max_id - (last_seen_email_id or 0) if has_new_emails else 0
+                ),
+                "last_check": datetime.utcnow().isoformat(),
+                "cached_until": (datetime.utcnow() + timedelta(seconds=10)).isoformat(),
+            }
+
+            return jsonify(result)
+
+        # 캐시가 없으면 DB에서 최대 email id 계산
+        active_accounts = UserAccount.query.filter_by(
+            user_id=current_user.id, is_active=True
+        ).all()
+
+        if not active_accounts:
+            return jsonify(
+                {
+                    "has_new_emails": False,
+                    "max_email_id": 0,
+                    "last_seen_email_id": last_seen_email_id,
+                    "new_count": 0,
+                    "last_check": datetime.utcnow().isoformat(),
+                }
+            )
+
+        # 사용자의 모든 계정에서 최대 email id 찾기
+        max_email_id = 0
+        for account in active_accounts:
+            max_id_for_account = (
+                db.session.query(db.func.max(Email.id))
+                .filter(
+                    Email.user_id == current_user.id, Email.account_id == account.id
+                )
+                .scalar()
+            )
+
+            if max_id_for_account and max_id_for_account > max_email_id:
+                max_email_id = max_id_for_account
+
+        # 결과 캐시 (10초)
+        cache.set(cache_key, max_email_id, timeout=10)
+
+        # 새 이메일 여부 확인
+        has_new_emails = last_seen_email_id is None or max_email_id > last_seen_email_id
+
+        result = {
+            "has_new_emails": has_new_emails,
+            "max_email_id": max_email_id,
+            "last_seen_email_id": last_seen_email_id,
+            "new_count": (
+                max_email_id - (last_seen_email_id or 0) if has_new_emails else 0
+            ),
+            "last_check": datetime.utcnow().isoformat(),
+            "cached_until": (datetime.utcnow() + timedelta(seconds=10)).isoformat(),
+        }
+
+        return jsonify(result)
+
+    except Exception as e:
+        logger.error(f"새 이메일 체크 오류: {e}")
+        return (
+            jsonify({"has_new_emails": False, "error": "체크 중 오류가 발생했습니다"}),
+            500,
+        )
+
+
+@email_bp.route("/api/update-last-seen-email", methods=["POST"])
+@login_required
+def update_last_seen_email():
+    """클라이언트의 마지막으로 본 email id 업데이트"""
+    try:
+        data = request.get_json()
+        last_seen_email_id = data.get("last_seen_email_id", type=int)
+
+        if last_seen_email_id is None:
+            return (
+                jsonify(
+                    {"success": False, "message": "last_seen_email_id가 필요합니다"}
+                ),
+                400,
+            )
+
+        # 캐시 키 생성
+        cache_key = f"last_seen_email_id_{current_user.id}"
+
+        # 클라이언트의 마지막으로 본 email id를 캐시에 저장
+        cache.set(cache_key, last_seen_email_id, timeout=3600)  # 1시간 캐시
+
+        logger.info(
+            f"사용자 {current_user.id}의 마지막으로 본 email id 업데이트: {last_seen_email_id}"
+        )
+
+        return jsonify(
+            {
+                "success": True,
+                "last_seen_email_id": last_seen_email_id,
+                "updated_at": datetime.utcnow().isoformat(),
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"마지막으로 본 email id 업데이트 오류: {e}")
+        return (
+            jsonify({"success": False, "message": "업데이트 중 오류가 발생했습니다"}),
+            500,
+        )

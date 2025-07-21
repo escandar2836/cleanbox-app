@@ -77,7 +77,7 @@
                 {% if emails %}
                 <div class="list-group">
                     {% for email in emails %}
-                    <div class="list-group-item">
+                    <div class="list-group-item" data-email-id="{{ email.id }}">
                         <div class="d-flex align-items-start">
                             <!-- 체크박스 -->
                             <div class="me-3 mt-1">

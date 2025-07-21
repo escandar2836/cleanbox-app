@@ -12,7 +12,7 @@ from flask import Blueprint, request, jsonify, session
 from ..models import User, UserAccount, Email, WebhookStatus, db
 from .gmail_service import GmailService
 from .ai_classifier import AIClassifier
-from .. import socketio
+from .. import cache
 
 logger = logging.getLogger(__name__)
 
@@ -60,9 +60,14 @@ def gmail_webhook():
         # 새 이메일 처리
         result = process_new_emails_for_account(account)
 
-        # 새 이메일이 처리되었으면 WebSocket 알림 전송
+        # 새 이메일이 처리되었으면 캐시 무효화 및 알림
         if result and result.get("processed_count", 0) > 0:
-            # WebSocket으로 실시간 알림 전송
+            # 캐시 무효화 (실시간 알림을 위해)
+            cache_key = f"max_email_id_{account.user_id}"
+            cache.delete(cache_key)
+            logger.info(f"캐시 무효화: {cache_key}")
+
+            # 브라우저 알림을 위한 간단한 알림 데이터
             notification_data = {
                 "type": "new_emails",
                 "user_id": account.user_id,
@@ -71,17 +76,11 @@ def gmail_webhook():
                 "archived_count": result["archived_count"],
                 "account_email": account.account_email,
                 "timestamp": datetime.utcnow().isoformat(),
-                "message": f"{result['processed_count']}개의 새로운 이메일이 처리되었습니다. 새로고침하여 확인하세요.",
+                "message": f"{result['processed_count']}개의 새로운 이메일이 처리되었습니다.",
             }
 
-            # 해당 사용자에게 WebSocket 이벤트 전송
-            socketio.emit(
-                "new_emails_notification",
-                notification_data,
-                room=f"user_{account.user_id}",
-            )
             logger.info(
-                f"WebSocket 알림 전송: {account.user_id} - {result['processed_count']}개 이메일"
+                f"새 이메일 처리 완료: {account.user_id} - {result['processed_count']}개 이메일"
             )
 
         # 웹훅 수신 시간 업데이트
@@ -101,7 +100,7 @@ def gmail_webhook():
         return jsonify({"status": "success"})
 
     except Exception as e:
-        logger.error(f"웹훅 처리 오류: {e}")
+        logger.error(f"웹훅 처리 중 오류: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 

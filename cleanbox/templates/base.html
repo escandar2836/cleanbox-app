@@ -124,16 +124,13 @@
     </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
     
     <script>
-    // 전역 소켓 연결 변수 (성능 최적화)
-    let globalSocket = null;
-    let reconnectAttempts = 0;
-    let isConnecting = false;
-    const maxReconnectAttempts = 3; // 5 → 3으로 감소
-    const reconnectDelay = 5000; // 3초 → 5초로 증가
-    const connectionTimeout = 30000; // 60초 → 30초로 단축
+    // 전역 변수 (가벼운 폴링용)
+    let emailCheckInterval = null;
+    let isUserActive = true;
+    const CHECK_INTERVAL = 15000; // 15초로 단축 - 더 빠른 반응성
+    const INACTIVE_TIMEOUT = 300000; // 5분
     
     // Flash 메시지 자동 제거 함수
     function hideFlashMessages() {
@@ -144,42 +141,29 @@
     }
     
     // Modal 표시 전 flash 메시지 숨기기
-    function showModalWithFlashHide(modalId) {
+    document.addEventListener('show.bs.modal', function() {
         hideFlashMessages();
-        const modal = new bootstrap.Modal(document.getElementById(modalId));
-        modal.show();
-    }
+    });
     
     // 브라우저 알림 권한 요청
     function requestNotificationPermission() {
         if ('Notification' in window) {
             Notification.requestPermission().then(function(permission) {
-                console.log('알림 권한:', permission);
+                if (permission === 'granted') {
+                    console.log('✅ 브라우저 알림 권한 허용됨');
+                }
             });
         }
     }
     
     // 브라우저 알림 표시
-    function showBrowserNotification(title, body, icon = null) {
+    function showBrowserNotification(title, body, icon) {
         if ('Notification' in window && Notification.permission === 'granted') {
-            const notification = new Notification(title, {
+            new Notification(title, {
                 body: body,
                 icon: icon || '/static/favicon.ico',
-                badge: '/static/favicon.ico',
-                tag: 'cleanbox-notification'
+                badge: '/static/favicon.ico'
             });
-            
-            // 알림 클릭 시 페이지 새로고침
-            notification.onclick = function() {
-                window.focus();
-                location.reload();
-                notification.close();
-            };
-            
-            // 5초 후 자동으로 닫기
-            setTimeout(() => {
-                notification.close();
-            }, 5000);
         }
     }
     
@@ -198,7 +182,7 @@
             </div>
             <div class="toast-body">
                 <p class="mb-1">${data.message}</p>
-                <small class="text-muted">처리된 이메일: ${data.processed_count}개</small>
+                <small class="text-muted">처리된 이메일: ${data.total_count}개</small>
                 <div class="mt-2">
                     <button class="btn btn-sm btn-primary" onclick="location.reload()">새로고침</button>
                 </div>
@@ -227,125 +211,208 @@
         return container;
     }
     
-    // 전역 WebSocket 연결 초기화 (성능 최적화)
-    function initializeGlobalWebSocket() {
+    // 새 이메일 체크 함수 (email id 기반 비교)
+    function checkNewEmails() {
         {% if current_user and current_user.is_authenticated %}
-        // 이미 연결 중이거나 연결된 상태면 중복 연결 방지
-        if (isConnecting || (globalSocket && globalSocket.connected)) {
-            console.log('🔌 이미 연결 중이거나 연결된 상태 - 중복 연결 방지');
-            return;
-        }
-        
-        // 이메일 관련 페이지에서만 연결 (성능 최적화)
+        // 이메일 관련 페이지에서만 체크
         const currentPath = window.location.pathname;
         const emailRelatedPaths = ['/email', '/main/dashboard'];
-        const shouldConnect = emailRelatedPaths.some(path => currentPath.startsWith(path));
+        const shouldCheck = emailRelatedPaths.some(path => currentPath.startsWith(path));
         
-        if (!shouldConnect) {
-            console.log('📧 이메일 관련 페이지가 아님 - WebSocket 연결 건너뜀');
+        if (!shouldCheck) {
             return;
         }
         
-        console.log('🔌 전역 WebSocket 연결 초기화 시작...');
-        isConnecting = true;
+        // localStorage에서 마지막으로 본 email id 가져오기
+        const lastSeenEmailId = localStorage.getItem('lastSeenEmailId');
+        const lastSeenEmailIdParam = lastSeenEmailId ? `?last_seen_email_id=${lastSeenEmailId}` : '';
         
-        // 기존 연결이 있으면 정리
-        if (globalSocket) {
-            globalSocket.disconnect();
-            globalSocket = null;
-        }
-        
-        // Socket.IO 연결 (타임아웃 단축)
-        globalSocket = io({
-            timeout: connectionTimeout, // 30초 타임아웃
-            reconnection: true,
-            reconnectionAttempts: maxReconnectAttempts,
-            reconnectionDelay: reconnectDelay,
-            reconnectionDelayMax: 15000 // 최대 재연결 지연 시간 증가
-        });
-        
-        // 연결 성공
-        globalSocket.on('connect', function() {
-            console.log('✅ 전역 WebSocket 연결 성공');
-            isConnecting = false;
-            reconnectAttempts = 0;
-            
-            // 사용자별 방에 조인
-            globalSocket.emit('join', { user_id: '{{ current_user.id }}' });
-            console.log('👤 사용자 방 조인:', '{{ current_user.id }}');
-        });
-        
-        // 연결 실패
-        globalSocket.on('connect_error', function(error) {
-            console.error('❌ 전역 WebSocket 연결 실패:', error);
-            isConnecting = false;
-            reconnectAttempts++;
-            
-            if (reconnectAttempts < maxReconnectAttempts) {
-                console.log(`🔄 재연결 시도 ${reconnectAttempts}/${maxReconnectAttempts}...`);
-                setTimeout(() => {
-                    initializeGlobalWebSocket();
-                }, reconnectDelay);
-            } else {
-                console.error('❌ 최대 재연결 시도 횟수 초과');
-            }
-        });
-        
-        // 재연결 시도
-        globalSocket.on('reconnect_attempt', function(attemptNumber) {
-            console.log(`🔄 재연결 시도 ${attemptNumber}/${maxReconnectAttempts}`);
-        });
-        
-        // 재연결 성공
-        globalSocket.on('reconnect', function(attemptNumber) {
-            console.log(`✅ 재연결 성공 (시도 ${attemptNumber})`);
-            reconnectAttempts = 0;
-            
-            // 사용자 방에 다시 조인
-            globalSocket.emit('join', { user_id: '{{ current_user.id }}' });
-        });
-        
-        // 새 이메일 알림 수신
-        globalSocket.on('new_emails_notification', function(data) {
-            console.log('📧 새 이메일 알림 수신:', data);
-            
-            // 브라우저 알림 표시
-            showBrowserNotification(
-                '새 이메일 도착! 📧',
-                data.message,
-                '/static/favicon.ico'
-            );
-            
-            // 화면에 토스트 알림 표시
-            showToastNotification(data);
-        });
-        
-        // 연결 해제
-        globalSocket.on('disconnect', function(reason) {
-            console.log('🔌 전역 WebSocket 연결 해제:', reason);
-            isConnecting = false;
-            
-            if (reason === 'io server disconnect') {
-                // 서버에서 연결을 끊은 경우 재연결 시도
-                console.log('🔄 서버에서 연결 해제됨, 재연결 시도...');
-                setTimeout(() => {
-                    initializeGlobalWebSocket();
-                }, reconnectDelay);
-            }
-        });
-        
-        // 연결 해제 실패
-        globalSocket.on('disconnect_error', function(error) {
-            console.error('❌ 연결 해제 오류:', error);
-            isConnecting = false;
-        });
-        
-        {% else %}
-        console.log('👤 로그인되지 않은 사용자 - WebSocket 연결 건너뜀');
+        fetch(`/email/api/check-new-emails${lastSeenEmailIdParam}`)
+            .then(response => response.json())
+            .then(data => {
+                console.log('📧 새 이메일 체크 응답:', data);
+                
+                if (data.has_new_emails && data.new_count > 0) {
+                    console.log('📧 새 이메일 발견:', data.new_count, '개');
+                    console.log('최대 email id:', data.max_email_id, '마지막으로 본 email id:', data.last_seen_email_id);
+                    
+                    // 브라우저 알림
+                    showBrowserNotification(
+                        '새 이메일 도착! 📧',
+                        `${data.new_count}개의 새 이메일이 있습니다.`,
+                        '/static/favicon.ico'
+                    );
+                    
+                    // 토스트 알림
+                    showToastNotification({
+                        message: `${data.new_count}개의 새 이메일이 도착했습니다!`,
+                        total_count: data.new_count
+                    });
+                    
+                    // localStorage 업데이트 (최대 email id로)
+                    if (data.max_email_id) {
+                        localStorage.setItem('lastSeenEmailId', data.max_email_id.toString());
+                        console.log('✅ localStorage 업데이트:', data.max_email_id);
+                    }
+                } else {
+                    console.log('📧 새 이메일 없음');
+                }
+            })
+            .catch(error => {
+                console.error('❌ 새 이메일 체크 오류:', error);
+            });
         {% endif %}
     }
     
-    // 페이지 로드 시 flash 메시지 5초 후 자동 제거
+    // 이메일 목록에서 최대 email id 업데이트 (개선된 버전)
+    function updateLastSeenEmailId() {
+        {% if current_user and current_user.is_authenticated %}
+        // 모든 페이지에서 실행 (이메일 관련 정보가 표시되는 모든 페이지)
+        const currentPath = window.location.pathname;
+        
+        // 페이지의 이메일 요소들에서 최대 id 찾기
+        const emailElements = document.querySelectorAll('[data-email-id]');
+        let maxEmailId = 0;
+        
+        emailElements.forEach(element => {
+            const emailId = parseInt(element.getAttribute('data-email-id'));
+            if (emailId && emailId > maxEmailId) {
+                maxEmailId = emailId;
+            }
+        });
+        
+        // 최대 email id가 있으면 localStorage 업데이트
+        if (maxEmailId > 0) {
+            const currentLastSeen = localStorage.getItem('lastSeenEmailId');
+            const currentLastSeenId = currentLastSeen ? parseInt(currentLastSeen) : 0;
+            
+            // 더 큰 값으로만 업데이트
+            if (maxEmailId > currentLastSeenId) {
+                localStorage.setItem('lastSeenEmailId', maxEmailId.toString());
+                console.log('📧 마지막으로 본 email id 업데이트:', currentLastSeenId, '→', maxEmailId, '(페이지:', currentPath, ')');
+                
+                // 서버에도 업데이트
+                fetch('/email/api/update-last-seen-email', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        last_seen_email_id: maxEmailId
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        console.log('✅ 서버에 마지막으로 본 email id 업데이트 완료');
+                    }
+                })
+                .catch(error => {
+                    console.error('❌ 서버 업데이트 오류:', error);
+                });
+            }
+        } else {
+            // 이메일 ID가 없는 페이지에서는 기존 값 유지
+            console.log('📧 이 페이지에는 이메일 ID가 없습니다:', currentPath);
+        }
+        {% endif %}
+    }
+    
+    // 사용자 활동 기반 이메일 확인 추적 (모든 페이지에서)
+    function trackEmailViewing() {
+        {% if current_user and current_user.is_authenticated %}
+        // 모든 페이지에서 실행 (이메일 관련 정보가 표시되는 모든 페이지)
+        const currentPath = window.location.pathname;
+        console.log('📧 이메일 확인 추적 시작:', currentPath);
+        
+        let hasTracked = false;
+        
+        // 스크롤 이벤트로 이메일 확인 추적
+        function handleScroll() {
+            if (!hasTracked) {
+                const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+                const windowHeight = window.innerHeight;
+                const documentHeight = document.documentElement.scrollHeight;
+                
+                // 페이지의 50% 이상 스크롤했으면 이메일을 확인했다고 판단
+                if (scrollTop + windowHeight >= documentHeight * 0.5) {
+                    updateLastSeenEmailId();
+                    hasTracked = true;
+                    console.log('📧 스크롤 기반 이메일 확인 추적');
+                }
+            }
+        }
+        
+        // 이메일 클릭 이벤트로 추적
+        function handleEmailClick(event) {
+            const emailElement = event.target.closest('[data-email-id]');
+            if (emailElement) {
+                updateLastSeenEmailId();
+                console.log('📧 클릭 기반 이메일 확인 추적');
+            }
+        }
+        
+        // 페이지 포커스 이벤트로 추적 (일정 시간 후)
+        function handleFocus() {
+            setTimeout(() => {
+                if (document.hasFocus()) {
+                    updateLastSeenEmailId();
+                    console.log('📧 포커스 기반 이메일 확인 추적');
+                }
+            }, 5000); // 5초 후 실행
+        }
+        
+        // 이벤트 리스너 등록
+        window.addEventListener('scroll', handleScroll, { passive: true });
+        document.addEventListener('click', handleEmailClick);
+        window.addEventListener('focus', handleFocus);
+        
+        // 페이지 언로드 시 이벤트 리스너 제거
+        window.addEventListener('beforeunload', () => {
+            window.removeEventListener('scroll', handleScroll);
+            document.removeEventListener('click', handleEmailClick);
+            window.removeEventListener('focus', handleFocus);
+        });
+        {% endif %}
+    }
+    
+    // 사용자 활동 감지
+    function resetUserActivity() {
+        isUserActive = true;
+        if (!emailCheckInterval) {
+            startEmailChecking();
+        }
+    }
+    
+    // 이메일 체킹 시작
+    function startEmailChecking() {
+        if (emailCheckInterval) {
+            clearInterval(emailCheckInterval);
+        }
+        
+        // 즉시 한 번 체크
+        checkNewEmails();
+        
+        // 주기적 체크 시작
+        emailCheckInterval = setInterval(() => {
+            if (isUserActive) {
+                checkNewEmails();
+            }
+        }, CHECK_INTERVAL);
+        
+        console.log('🔄 이메일 체킹 시작 (30초 간격)');
+    }
+    
+    // 이메일 체킹 중지
+    function stopEmailChecking() {
+        if (emailCheckInterval) {
+            clearInterval(emailCheckInterval);
+            emailCheckInterval = null;
+            console.log('⏹️ 이메일 체킹 중지');
+        }
+    }
+    
+    // 페이지 로드 시 초기화
     document.addEventListener('DOMContentLoaded', function() {
         // 브라우저 알림 권한 요청
         requestNotificationPermission();
@@ -359,17 +426,43 @@
             });
         }, 5000);
         
-        // 지연 연결 (Lazy Loading) - 2초 후 연결 시도
+        // 사용자 활동 감지 이벤트
+        ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'].forEach(event => {
+            document.addEventListener(event, resetUserActivity, true);
+        });
+        
+        // 비활성 상태 감지
+        let inactivityTimer;
+        function resetInactivityTimer() {
+            clearTimeout(inactivityTimer);
+            inactivityTimer = setTimeout(() => {
+                isUserActive = false;
+                stopEmailChecking();
+                console.log('😴 사용자 비활성 상태 - 체킹 중지');
+            }, INACTIVE_TIMEOUT);
+        }
+        
+        resetInactivityTimer();
+        document.addEventListener('mousemove', resetInactivityTimer);
+        document.addEventListener('keypress', resetInactivityTimer);
+        
+        // 이메일 체킹 시작 (지연 시작)
         setTimeout(() => {
-            initializeGlobalWebSocket();
+            startEmailChecking();
         }, 2000);
+        
+        // 이메일 목록에서 최대 email id 업데이트 (지연 실행)
+        setTimeout(() => {
+            updateLastSeenEmailId();
+        }, 3000);
+        
+        // 사용자 활동 기반 이메일 확인 추적 시작
+        trackEmailViewing();
     });
     
-    // 페이지 언로드 시 WebSocket 연결 해제
+    // 페이지 언로드 시 정리
     window.addEventListener('beforeunload', function() {
-        if (globalSocket) {
-            globalSocket.disconnect();
-        }
+        stopEmailChecking();
     });
     
     // Flash 스타일 메시지 표시 함수

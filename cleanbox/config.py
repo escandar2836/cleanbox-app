@@ -96,6 +96,11 @@ class Config:
 
     # 기타 CleanBox 관련 환경설정 추가 가능
 
+    # 캐시 설정 (메모리 기반 간단한 캐시)
+    CACHE_TYPE = "simple"
+    CACHE_DEFAULT_TIMEOUT = 300  # 5분
+    CACHE_KEY_PREFIX = "cleanbox_"
+
 
 class TestConfig(Config):
     """테스트용 설정"""
