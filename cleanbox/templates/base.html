@@ -127,11 +127,13 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
     
     <script>
-    // 전역 소켓 연결 변수
+    // 전역 소켓 연결 변수 (성능 최적화)
     let globalSocket = null;
     let reconnectAttempts = 0;
-    const maxReconnectAttempts = 5;
-    const reconnectDelay = 3000; // 3초
+    let isConnecting = false;
+    const maxReconnectAttempts = 3; // 5 → 3으로 감소
+    const reconnectDelay = 5000; // 3초 → 5초로 증가
+    const connectionTimeout = 30000; // 60초 → 30초로 단축
     
     // Flash 메시지 자동 제거 함수
     function hideFlashMessages() {
@@ -225,28 +227,47 @@
         return container;
     }
     
-    // 전역 WebSocket 연결 초기화
+    // 전역 WebSocket 연결 초기화 (성능 최적화)
     function initializeGlobalWebSocket() {
         {% if current_user and current_user.is_authenticated %}
+        // 이미 연결 중이거나 연결된 상태면 중복 연결 방지
+        if (isConnecting || (globalSocket && globalSocket.connected)) {
+            console.log('🔌 이미 연결 중이거나 연결된 상태 - 중복 연결 방지');
+            return;
+        }
+        
+        // 이메일 관련 페이지에서만 연결 (성능 최적화)
+        const currentPath = window.location.pathname;
+        const emailRelatedPaths = ['/email', '/main/dashboard'];
+        const shouldConnect = emailRelatedPaths.some(path => currentPath.startsWith(path));
+        
+        if (!shouldConnect) {
+            console.log('📧 이메일 관련 페이지가 아님 - WebSocket 연결 건너뜀');
+            return;
+        }
+        
         console.log('🔌 전역 WebSocket 연결 초기화 시작...');
+        isConnecting = true;
         
         // 기존 연결이 있으면 정리
         if (globalSocket) {
             globalSocket.disconnect();
+            globalSocket = null;
         }
         
-        // Socket.IO 연결 (타임아웃 설정)
+        // Socket.IO 연결 (타임아웃 단축)
         globalSocket = io({
-            timeout: 60000, // 60초 타임아웃
+            timeout: connectionTimeout, // 30초 타임아웃
             reconnection: true,
             reconnectionAttempts: maxReconnectAttempts,
             reconnectionDelay: reconnectDelay,
-            reconnectionDelayMax: 10000
+            reconnectionDelayMax: 15000 // 최대 재연결 지연 시간 증가
         });
         
         // 연결 성공
         globalSocket.on('connect', function() {
             console.log('✅ 전역 WebSocket 연결 성공');
+            isConnecting = false;
             reconnectAttempts = 0;
             
             // 사용자별 방에 조인
@@ -257,6 +278,7 @@
         // 연결 실패
         globalSocket.on('connect_error', function(error) {
             console.error('❌ 전역 WebSocket 연결 실패:', error);
+            isConnecting = false;
             reconnectAttempts++;
             
             if (reconnectAttempts < maxReconnectAttempts) {
@@ -301,6 +323,7 @@
         // 연결 해제
         globalSocket.on('disconnect', function(reason) {
             console.log('🔌 전역 WebSocket 연결 해제:', reason);
+            isConnecting = false;
             
             if (reason === 'io server disconnect') {
                 // 서버에서 연결을 끊은 경우 재연결 시도
@@ -314,6 +337,7 @@
         // 연결 해제 실패
         globalSocket.on('disconnect_error', function(error) {
             console.error('❌ 연결 해제 오류:', error);
+            isConnecting = false;
         });
         
         {% else %}
@@ -326,9 +350,6 @@
         // 브라우저 알림 권한 요청
         requestNotificationPermission();
         
-        // 전역 WebSocket 연결 초기화
-        initializeGlobalWebSocket();
-        
         // Flash 메시지 자동 제거
         setTimeout(() => {
             const flashMessages = document.querySelectorAll('.flash-message-container .alert');
@@ -337,6 +358,11 @@
                 bsAlert.close();
             });
         }, 5000);
+        
+        // 지연 연결 (Lazy Loading) - 2초 후 연결 시도
+        setTimeout(() => {
+            initializeGlobalWebSocket();
+        }, 2000);
     });
     
     // 페이지 언로드 시 WebSocket 연결 해제
