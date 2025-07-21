@@ -10,6 +10,7 @@ from flask_login import login_required, current_user
 
 # Local imports
 from ..models import Email, Category, UserAccount, WebhookStatus, db
+from .. import cache
 from .gmail_service import GmailService
 from .ai_classifier import AIClassifier
 
