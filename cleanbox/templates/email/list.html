@@ -524,14 +524,9 @@ function performBulkAction(action, emailIds) {
                 const modal = bootstrap.Modal.getInstance(document.getElementById('bulkProcessingModal'));
                 modal.hide();
                 
-                // 토스트 알림 표시 (새로고침 포함) - 서버 응답의 message 필드 사용
+                // 토스트 알림 표시 - 서버 응답의 message 필드 사용
                 const successMessage = data.message || `${action} 작업이 완료되었습니다.`;
                 showBulkActionToast(successMessage, 'success');
-                
-                // 3초 후 자동 새로고침
-                setTimeout(() => {
-                    window.location.reload();
-                }, 3000);
             }, 1000);
         }, 500);
     })
