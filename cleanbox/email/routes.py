@@ -621,8 +621,10 @@ def bulk_actions():
         email_ids = request.form.getlist("email_ids")
 
         if not email_ids:
-            flash("선택된 이메일이 없습니다.", "error")
-            return redirect(request.referrer or url_for("email.list_emails"))
+            return (
+                jsonify({"success": False, "message": "선택된 이메일이 없습니다."}),
+                400,
+            )
 
         gmail_service = GmailService(current_user.id)
         processed_count = 0
@@ -737,7 +739,7 @@ def bulk_actions():
 
             print(f"🎉 대량 삭제 완료 - {result_message}")
 
-            return redirect(request.referrer or url_for("email.list_emails"))
+            return jsonify({"success": True, "message": result_message})
 
         elif action == "archive":
             # 대량 아카이브 (개선된 버전)
@@ -842,7 +844,7 @@ def bulk_actions():
 
             print(f"🎉 대량 아카이브 완료 - {result_message}")
 
-            return redirect(request.referrer or url_for("email.list_emails"))
+            return jsonify({"success": True, "message": result_message})
 
         elif action == "mark_read":
             # 대량 읽음 표시 (개선된 버전)
@@ -946,7 +948,7 @@ def bulk_actions():
 
             print(f"🎉 대량 읽음 표시 완료 - {result_message}")
 
-            return redirect(request.referrer or url_for("email.list_emails"))
+            return jsonify({"success": True, "message": result_message})
 
         elif action == "unsubscribe":
             # 대량 구독해지 (발신자별 그룹화 처리)
@@ -1128,15 +1130,24 @@ def bulk_actions():
 
             print(f"🎉 대량 구독해지 완료 - {result_message}")
 
-            return redirect(request.referrer or url_for("email.list_emails"))
+            return jsonify({"success": True, "message": result_message})
 
         else:
-            flash("지원하지 않는 작업입니다.", "error")
-            return redirect(request.referrer or url_for("email.list_emails"))
+            return (
+                jsonify({"success": False, "message": "지원하지 않는 작업입니다."}),
+                400,
+            )
 
     except Exception as e:
-        flash(f"대량 작업 중 오류가 발생했습니다: {str(e)}", "error")
-        return redirect(request.referrer or url_for("email.list_emails"))
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "message": f"대량 작업 중 오류가 발생했습니다: {str(e)}",
+                }
+            ),
+            500,
+        )
 
 
 @email_bp.route("/<int:email_id>/unsubscribe")
