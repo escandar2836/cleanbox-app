@@ -836,7 +836,17 @@ function unsubscribeEmail(emailId) {
         .then(response => {
             clearTimeout(timeoutId);
             if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                // HTTP 에러 상태인 경우 응답 내용을 확인
+                return response.text().then(text => {
+                    try {
+                        // JSON 응답인지 확인
+                        const jsonData = JSON.parse(text);
+                        throw new Error(jsonData.message || `서버 오류가 발생했습니다. (${response.status})`);
+                    } catch (parseError) {
+                        // JSON이 아닌 경우 (HTML 에러 페이지 등)
+                        throw new Error(`서버 오류가 발생했습니다. (${response.status})`);
+                    }
+                });
             }
             return response.json();
         })
