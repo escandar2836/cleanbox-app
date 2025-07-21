@@ -499,52 +499,12 @@ function performBulkAction(action, emailIds) {
     formData.append('action', action);
     emailIds.forEach(id => formData.append('email_ids', id));
     
-    // 진행 상황 업데이트 함수
-    const updateProgress = (current, total, message) => {
-        const progressBar = document.getElementById('bulkProgress');
-        const currentCount = document.getElementById('currentEmailCount');
-        const totalCount = document.getElementById('totalEmailCount');
-        const processingMessage = document.getElementById('bulkProcessingMessage');
-        
-        const progress = Math.round((current / total) * 100);
-        progressBar.style.width = progress + '%';
-        progressBar.textContent = progress + '%';
-        currentCount.textContent = current;
-        totalCount.textContent = total;
-        processingMessage.textContent = message;
-    };
-    
-    // 초기 진행 상황 설정
-    updateProgress(0, emailIds.length, `${emailIds.length}개의 이메일을 ${action}하고 있습니다...`);
-    
-    // 진행 상황 시뮬레이션 (실제 처리 시간을 고려한 개선된 버전)
-    let currentProgress = 0;
-    const startTime = Date.now();
-    const estimatedTime = emailIds.length * 1000; // 이메일당 약 1초 예상
-    
-    const progressInterval = setInterval(() => {
-        const elapsed = Date.now() - startTime;
-        const timeBasedProgress = Math.min((elapsed / estimatedTime) * 100, 90);
-        
-        // 시간 기반 진행률과 랜덤 진행률을 조합
-        currentProgress = Math.min(currentProgress + Math.random() * 5, timeBasedProgress);
-        
-        updateProgress(
-            Math.round(currentProgress), 
-            emailIds.length, 
-            `${action} 처리 중... (${Math.round(currentProgress)}/${emailIds.length})`
-        );
-    }, 300);
-    
     fetch('{{ url_for("email.bulk_actions") }}', {
         method: 'POST',
         body: formData
     })
     .then(response => response.json())
     .then(data => {
-        clearInterval(progressInterval);
-        updateProgress(emailIds.length, emailIds.length, `${action} 완료!`);
-        
         // 모달 내용을 완료 상태로 업데이트
         setTimeout(() => {
             const modalBody = document.querySelector('#bulkProcessingModal .modal-body');
@@ -576,16 +536,18 @@ function performBulkAction(action, emailIds) {
         }, 500);
     })
     .catch(error => {
-        clearInterval(progressInterval);
         console.error('Bulk 처리 오류:', error);
         
         // 오류 메시지 표시
+        showFlashMessage('처리 중 오류가 발생했습니다: ' + error.message, 'danger');
+        
+        // 모달 내용 수정
         const modalBody = document.querySelector('#bulkProcessingModal .modal-body');
         modalBody.innerHTML = `
             <div class="text-center">
                 <i class="fas fa-exclamation-triangle fa-3x text-danger mb-3"></i>
                 <h5 class="text-danger">처리 실패</h5>
-                <p>처리 중 오류가 발생했습니다: ${error.message}</p>
+                <p class="text-muted">처리 중 오류가 발생했습니다.</p>
             </div>
         `;
         
