@@ -1217,7 +1217,7 @@ JSON 형식으로 답변해주세요:
 
             except Exception as ai_error:
                 print(f"⚠️ AI 분석 실패: {str(ai_error)}")
-                return False
+            return False
 
         except Exception as e:
             print(f"⚠️ 구독해지 상태 확인 실패: {str(e)}")

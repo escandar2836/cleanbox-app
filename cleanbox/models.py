@@ -1,9 +1,10 @@
-# Standard library imports
+"""CleanBox 데이터베이스 모델 정의."""
+
 import json
 import os
 from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
 
-# Third-party imports
 from flask_login import UserMixin
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -13,7 +14,7 @@ db = SQLAlchemy()
 
 
 class User(UserMixin, db.Model):
-    """CleanBox 사용자 모델"""
+    """CleanBox 사용자 모델."""
 
     __tablename__ = "users"
 
@@ -44,12 +45,13 @@ class User(UserMixin, db.Model):
         "Email", backref="user", lazy=True, cascade="all, delete-orphan"
     )
 
-    def __repr__(self):
+    def __repr__(self) -> str:
+        """사용자 객체의 문자열 표현을 반환합니다."""
         return f"<User {self.email}>"
 
 
 class UserAccount(db.Model):
-    """사용자별 연결된 Gmail 계정 모델"""
+    """사용자별 연결된 Gmail 계정 모델."""
 
     __tablename__ = "user_accounts"
 
@@ -72,12 +74,13 @@ class UserAccount(db.Model):
         "Email", backref="account", lazy=True, cascade="all, delete-orphan"
     )
 
-    def __repr__(self):
+    def __repr__(self) -> str:
+        """계정 객체의 문자열 표현을 반환합니다."""
         return f"<UserAccount {self.account_email}>"
 
 
 class UserToken(db.Model):
-    """사용자 OAuth 토큰 모델 (암호화 저장)"""
+    """사용자 OAuth 토큰 모델 (암호화 저장)."""
 
     __tablename__ = "user_tokens"
 
@@ -98,8 +101,8 @@ class UserToken(db.Model):
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )
 
-    def set_tokens(self, credentials):
-        """토큰을 암호화하여 저장"""
+    def set_tokens(self, credentials: Any) -> None:
+        """토큰을 암호화하여 저장합니다."""
         from flask import current_app
 
         # 설정에서 키를 가져옴 (config.py에서 이미 검증됨)
@@ -129,8 +132,8 @@ class UserToken(db.Model):
         if credentials.expiry:
             self.expires_at = credentials.expiry
 
-    def get_tokens(self):
-        """암호화된 토큰을 복호화하여 반환"""
+    def get_tokens(self) -> Dict[str, Any]:
+        """암호화된 토큰을 복호화하여 반환합니다."""
         from flask import current_app
 
         # 설정에서 키를 가져옴 (config.py에서 이미 검증됨)
@@ -160,12 +163,13 @@ class UserToken(db.Model):
 
         return tokens
 
-    def __repr__(self):
+    def __repr__(self) -> str:
+        """토큰 객체의 문자열 표현을 반환합니다."""
         return f"<UserToken {self.user_id}>"
 
 
 class Category(db.Model):
-    """이메일 카테고리 모델"""
+    """이메일 카테고리 모델."""
 
     __tablename__ = "categories"
 
@@ -184,12 +188,13 @@ class Category(db.Model):
     # 관계
     emails = db.relationship("Email", backref="category", lazy=True)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
+        """카테고리 객체의 문자열 표현을 반환합니다."""
         return f"<Category {self.name}>"
 
 
 class Email(db.Model):
-    """이메일 모델"""
+    """이메일 모델."""
 
     __tablename__ = "emails"
 
@@ -215,12 +220,13 @@ class Email(db.Model):
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )
 
-    def __repr__(self):
+    def __repr__(self) -> str:
+        """이메일 객체의 문자열 표현을 반환합니다."""
         return f"<Email {self.subject}>"
 
 
 class WebhookStatus(db.Model):
-    """웹훅 상태 추적 모델"""
+    """웹훅 상태 추적 모델."""
 
     __tablename__ = "webhook_status"
 
@@ -243,17 +249,18 @@ class WebhookStatus(db.Model):
     user = db.relationship("User", backref="webhook_statuses")
     account = db.relationship("UserAccount", backref="webhook_statuses")
 
-    def __repr__(self):
+    def __repr__(self) -> str:
+        """웹훅 상태 객체의 문자열 표현을 반환합니다."""
         return f"<WebhookStatus {self.user_id}:{self.account_id}>"
 
     @property
-    def is_expired(self):
-        """웹훅이 만료되었는지 확인"""
+    def is_expired(self) -> bool:
+        """웹훅이 만료되었는지 확인합니다."""
         return datetime.utcnow() > self.expires_at
 
     @property
-    def is_healthy(self):
-        """웹훅이 정상 작동하는지 확인"""
+    def is_healthy(self) -> bool:
+        """웹훅이 정상 작동하는지 확인합니다."""
         if not self.is_active:
             return False
 
