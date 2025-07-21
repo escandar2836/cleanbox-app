@@ -3,6 +3,7 @@ import os
 import traceback
 import logging
 from datetime import datetime, timedelta
+import asyncio
 
 # Third-party imports
 from flask import (
@@ -1045,7 +1046,9 @@ def bulk_actions():
                         f"📝 GmailService initialized - Account: {representative_email.account_id}"
                     )
 
-                    result = gmail_service.process_unsubscribe(representative_email)
+                    result = asyncio.run(
+                        gmail_service.process_unsubscribe(representative_email)
+                    )
                     print(f"📝 process_unsubscribe result: {result}")
 
                     if result["success"]:
@@ -1220,7 +1223,7 @@ def unsubscribe_email(email_id):
         print(f"📝 GmailService initialized - Account: {email.account_id}")
 
         # Process unsubscription
-        result = gmail_service.process_unsubscribe(email)
+        result = asyncio.run(gmail_service.process_unsubscribe(email))
         print(f"📝 process_unsubscribe result: {result}")
 
         # Return result

@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 from cleanbox.email.gmail_service import GmailService
 from datetime import datetime
 
@@ -85,7 +85,8 @@ class TestGmailService:
     @patch("cleanbox.email.gmail_service.Email")
     @patch("cleanbox.email.gmail_service.db")
     @patch("cleanbox.email.gmail_service.AdvancedUnsubscribeService")
-    def test_process_unsubscribe(self, mock_unsub, mock_db, mock_email):
+    @pytest.mark.asyncio
+    async def test_process_unsubscribe(self, mock_unsub, mock_db, mock_email):
         from cleanbox import create_app
 
         app = create_app(testing=True)
@@ -94,11 +95,11 @@ class TestGmailService:
         gs.account_id = 1
         gs.advanced_unsubscribe = mock_unsub.return_value
         email_obj = MagicMock(id=1, sender="a@b.com", content="Body text", headers={})
-        mock_unsub.return_value.process_unsubscribe_advanced.return_value = {
-            "success": True
-        }
+        mock_unsub.return_value.process_unsubscribe_advanced = AsyncMock(
+            return_value={"success": True}
+        )
         with app.app_context():
-            result = GmailService.process_unsubscribe(gs, email_obj)
+            result = await GmailService.process_unsubscribe(gs, email_obj)
             assert result["success"] is True
 
     @patch("cleanbox.email.gmail_service.Email")

@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 from cleanbox.email.advanced_unsubscribe import AdvancedUnsubscribeService
 
 
@@ -13,22 +13,30 @@ class TestAdvancedUnsubscribeService:
         links = service.extract_unsubscribe_links("body text", {})
         assert links == ["http://unsubscribe.com"]
 
-    @patch.object(AdvancedUnsubscribeService, "extract_unsubscribe_links")
+    @pytest.mark.asyncio
+    @patch.object(AdvancedUnsubscribeService, "playwright_service", create=True)
     @patch("cleanbox.email.advanced_unsubscribe.process_unsubscribe_sync")
-    def test_process_unsubscribe_advanced_success(self, mock_sync, mock_extract):
-        mock_extract.return_value = ["http://unsubscribe.com"]
+    async def test_process_unsubscribe_advanced_success(
+        self, mock_sync, mock_playwright
+    ):
+        mock_playwright.extract_unsubscribe_links_with_ai_fallback = AsyncMock(
+            return_value=["http://unsubscribe.com"]
+        )
         mock_sync.return_value = {"success": True, "message": "ok"}
         service = AdvancedUnsubscribeService()
-        result = service.process_unsubscribe_advanced(
+        result = await service.process_unsubscribe_advanced(
             "body text", {}, "user@example.com"
         )
         assert result["success"] is True
 
-    @patch.object(AdvancedUnsubscribeService, "extract_unsubscribe_links")
-    def test_process_unsubscribe_advanced_no_links(self, mock_extract):
-        mock_extract.return_value = []
+    @pytest.mark.asyncio
+    @patch.object(AdvancedUnsubscribeService, "playwright_service", create=True)
+    async def test_process_unsubscribe_advanced_no_links(self, mock_playwright):
+        mock_playwright.extract_unsubscribe_links_with_ai_fallback = AsyncMock(
+            return_value=[]
+        )
         service = AdvancedUnsubscribeService()
-        result = service.process_unsubscribe_advanced(
+        result = await service.process_unsubscribe_advanced(
             "body text", {}, "user@example.com"
         )
         assert result["success"] is False
