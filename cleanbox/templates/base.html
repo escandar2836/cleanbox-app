@@ -98,12 +98,21 @@
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
             <div class="container flash-message-container">
+                <div class="alert alert-info" role="alert">
+                    🔍 Flash 메시지 개수: {{ messages|length }}개
+                </div>
                 {% for category, message in messages %}
                     <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
-                        {{ message }}
+                        🔍 카테고리: {{ category }} | 메시지: {{ message }}
                         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                     </div>
                 {% endfor %}
+            </div>
+        {% else %}
+            <div class="container flash-message-container">
+                <div class="alert alert-warning" role="alert">
+                    🔍 Flash 메시지 없음
+                </div>
             </div>
         {% endif %}
     {% endwith %}
