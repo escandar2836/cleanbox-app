@@ -1173,8 +1173,11 @@ def unsubscribe_email(email_id):
             return jsonify(
                 {
                     "success": True,
-                    "message": "이미 구독해지된 이메일입니다.",
+                    "message": f"이미 구독해지된 이메일입니다. (발신자: {email.sender})",
                     "steps": ["이미 구독해지됨"],
+                    "email_id": email_id,
+                    "sender": email.sender,
+                    "subject": email.subject,
                 }
             )
 
@@ -1191,12 +1194,21 @@ def unsubscribe_email(email_id):
         if result["success"]:
             print(f"✅ 이메일 {email_id} 구독해지 성공")
 
+            # 성공 메시지 생성
+            success_message = "구독해지가 성공적으로 처리되었습니다."
+
+            # 일괄 업데이트 정보가 있으면 메시지에 포함
+            if "bulk_updated_count" in result and result["bulk_updated_count"] > 0:
+                success_message += f" (동일 발신자로부터 온 {result['bulk_updated_count']}개의 이메일도 함께 구독해지 처리되었습니다.)"
+
             # 일괄 업데이트 정보 포함
             response_data = {
                 "success": True,
-                "message": "구독해지가 성공적으로 처리되었습니다.",
+                "message": success_message,
                 "steps": result.get("steps", []),
                 "email_id": email_id,
+                "sender": email.sender,
+                "subject": email.subject,
             }
 
             # 일괄 업데이트 정보가 있으면 추가
@@ -1217,15 +1229,37 @@ def unsubscribe_email(email_id):
             print(f"📝 에러 타입: {error_type}")
             print(f"📝 에러 상세: {error_details}")
 
+            # 에러 타입별 친절한 메시지 생성
+            error_name = {
+                "no_unsubscribe_link": "구독해지 링크 없음",
+                "all_links_failed": "모든 링크 실패",
+                "processing_error": "처리 오류",
+                "network_error": "네트워크 오류",
+                "timeout_error": "시간 초과",
+                "captcha_required": "CAPTCHA 확인 필요",
+                "email_confirmation_required": "이메일 확인 필요",
+                "already_unsubscribed": "이미 구독해지됨",
+                "unknown": "알 수 없는 오류",
+            }.get(error_type, error_type)
+
+            # 상세한 에러 메시지 생성
+            detailed_message = f"구독해지 실패: {error_name}"
+            if error_details:
+                detailed_message += f" - {error_details}"
+            elif error_message and error_message != "구독해지 처리에 실패했습니다.":
+                detailed_message += f" - {error_message}"
+
             return (
                 jsonify(
                     {
                         "success": False,
-                        "message": error_message,
+                        "message": detailed_message,
                         "error_type": error_type,
                         "error_details": error_details,
                         "steps": result.get("steps", []),
                         "email_id": email_id,
+                        "sender": email.sender,
+                        "subject": email.subject,
                     }
                 ),
                 400,
@@ -1233,12 +1267,43 @@ def unsubscribe_email(email_id):
 
     except Exception as e:
         print(f"❌ 구독해지 처리 중 예외 발생: {str(e)}")
+
+        # 예외 타입별 친절한 메시지 생성
+        error_message = str(e)
+        error_type = "system_error"
+
+        if "404" in error_message and "not found" in error_message.lower():
+            error_type = "not_found"
+            detailed_message = "이메일을 찾을 수 없습니다 - 이미 삭제되었거나 메시지가 존재하지 않습니다."
+        elif "403" in error_message:
+            error_type = "forbidden"
+            detailed_message = "구독해지 권한이 없습니다 - 계정 권한을 확인해주세요."
+        elif "401" in error_message:
+            error_type = "unauthorized"
+            detailed_message = "인증에 실패했습니다 - 다시 로그인해주세요."
+        elif "500" in error_message:
+            error_type = "server_error"
+            detailed_message = "서버 오류가 발생했습니다 - 잠시 후 다시 시도해주세요."
+        elif (
+            "network" in error_message.lower() or "connection" in error_message.lower()
+        ):
+            error_type = "network_error"
+            detailed_message = "네트워크 연결 오류 - 인터넷 연결을 확인해주세요."
+        elif "timeout" in error_message.lower():
+            error_type = "timeout_error"
+            detailed_message = "요청 시간이 초과되었습니다 - 잠시 후 다시 시도해주세요."
+        else:
+            detailed_message = f"시스템 오류가 발생했습니다: {error_message}"
+
         return (
             jsonify(
                 {
                     "success": False,
-                    "message": f"구독해지 처리 중 오류가 발생했습니다: {str(e)}",
-                    "steps": [f"오류 발생: {str(e)}"],
+                    "message": detailed_message,
+                    "error_type": error_type,
+                    "error_details": error_message,
+                    "steps": [f"오류 발생: {error_message}"],
+                    "email_id": email_id,
                 }
             ),
             500,
