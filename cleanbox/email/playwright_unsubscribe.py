@@ -1182,7 +1182,7 @@ Please analyze the unsubscribe status on the following web page.
 
 Page title: {title}
 Page URL: {current_url}
-Page content: {page_text[:2000]}  # Using only the first 2000 characters
+Page content: {page_text}
 
 For any message in a language other than English, translate it to English before matching with the "already unsubscribed" or "unsubscribe success" patterns.
 The following messages indicate "already unsubscribed":
