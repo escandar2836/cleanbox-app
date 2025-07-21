@@ -140,9 +140,22 @@
         });
     }
     
+    // Flash 메시지 다시 표시 함수
+    function showFlashMessages() {
+        const flashMessages = document.querySelectorAll('.flash-message-container .alert');
+        flashMessages.forEach(message => {
+            message.style.display = 'block';
+        });
+    }
+    
     // Modal 표시 전 flash 메시지 숨기기
     document.addEventListener('show.bs.modal', function() {
         hideFlashMessages();
+    });
+    
+    // Modal 숨김 후 flash 메시지 다시 표시
+    document.addEventListener('hidden.bs.modal', function() {
+        showFlashMessages();
     });
     
     // 브라우저 알림 권한 요청
