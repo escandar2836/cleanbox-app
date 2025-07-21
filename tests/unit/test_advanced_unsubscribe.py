@@ -22,6 +22,9 @@ class TestAdvancedUnsubscribeService:
         mock_playwright.return_value.extract_unsubscribe_links_with_ai_fallback = (
             AsyncMock(return_value=["http://unsubscribe.com"])
         )
+        mock_playwright.return_value.process_unsubscribe_with_playwright_ai = AsyncMock(
+            return_value={"success": True, "message": "ok"}
+        )
         mock_sync.return_value = {"success": True, "message": "ok"}
         service = AdvancedUnsubscribeService()
         result = await service.process_unsubscribe_advanced(
