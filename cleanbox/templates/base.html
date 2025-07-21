@@ -98,21 +98,12 @@
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
             <div class="container flash-message-container">
-                <div class="alert alert-info" role="alert">
-                    🔍 Flash 메시지 개수: {{ messages|length }}개
-                </div>
                 {% for category, message in messages %}
                     <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
-                        🔍 카테고리: {{ category }} | 메시지: {{ message }}
+                        {{ message }}
                         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                     </div>
                 {% endfor %}
-            </div>
-        {% else %}
-            <div class="container flash-message-container">
-                <div class="alert alert-warning" role="alert">
-                    🔍 Flash 메시지 없음
-                </div>
             </div>
         {% endif %}
     {% endwith %}
@@ -221,6 +212,42 @@
                 toastElement.remove();
             }
         }, 10000);
+    }
+    
+    // Bulk Action 결과 토스트 알림 표시
+    function showBulkActionToast(message, type = 'success') {
+        const toastContainer = document.getElementById('toastContainer') || createToastContainer();
+        
+        const bgClass = type === 'success' ? 'bg-success' : type === 'warning' ? 'bg-warning' : 'bg-danger';
+        const icon = type === 'success' ? 'fa-check-circle' : type === 'warning' ? 'fa-exclamation-triangle' : 'fa-times-circle';
+        
+        const toastElement = document.createElement('div');
+        toastElement.className = 'toast';
+        toastElement.innerHTML = `
+            <div class="toast-header ${bgClass} text-white">
+                <i class="fas ${icon} me-2"></i>
+                <strong class="me-auto">Bulk Action 완료</strong>
+                <small>${new Date().toLocaleTimeString()}</small>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast"></button>
+            </div>
+            <div class="toast-body">
+                <p class="mb-1">${message}</p>
+                <div class="mt-2">
+                    <button class="btn btn-sm btn-primary" onclick="location.reload()">새로고침</button>
+                </div>
+            </div>
+        `;
+        
+        toastContainer.appendChild(toastElement);
+        const toast = new bootstrap.Toast(toastElement, { delay: 8000 });
+        toast.show();
+        
+        // 8초 후 자동 제거
+        setTimeout(() => {
+            if (toastElement.parentNode) {
+                toastElement.remove();
+            }
+        }, 8000);
     }
     
     // 토스트 컨테이너 생성
