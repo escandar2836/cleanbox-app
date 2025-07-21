@@ -236,20 +236,30 @@
                     console.log('📧 새 이메일 발견:', data.new_count, '개');
                     console.log('최대 email id:', data.max_email_id, '마지막으로 본 email id:', data.last_seen_email_id);
                     
-                    // 브라우저 알림
-                    showBrowserNotification(
-                        '새 이메일 도착! 📧',
-                        `${data.new_count}개의 새 이메일이 있습니다.`,
-                        '/static/favicon.ico'
-                    );
+                    // 처음 접속한 경우 체크 (lastSeenEmailId가 없거나 0인 경우)
+                    const isFirstVisit = !lastSeenEmailId || lastSeenEmailId === '0';
                     
-                    // 토스트 알림
-                    showToastNotification({
-                        message: `${data.new_count}개의 새 이메일이 도착했습니다!`,
-                        total_count: data.new_count
-                    });
+                    if (!isFirstVisit) {
+                        // 처음 접속이 아닌 경우에만 알림 표시
+                        console.log('📧 기존 사용자 - 알림 표시');
+                        
+                        // 브라우저 알림
+                        showBrowserNotification(
+                            '새 이메일 도착! 📧',
+                            `${data.new_count}개의 새 이메일이 있습니다.`,
+                            '/static/favicon.ico'
+                        );
+                        
+                        // 토스트 알림
+                        showToastNotification({
+                            message: `${data.new_count}개의 새 이메일이 도착했습니다!`,
+                            total_count: data.new_count
+                        });
+                    } else {
+                        console.log('📧 처음 접속 - 알림 없이 초기화만 진행');
+                    }
                     
-                    // localStorage 업데이트 (최대 email id로)
+                    // localStorage 업데이트 (최대 email id로) - 항상 실행
                     if (data.max_email_id) {
                         localStorage.setItem('lastSeenEmailId', data.max_email_id.toString());
                         console.log('✅ localStorage 업데이트:', data.max_email_id);
