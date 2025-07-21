@@ -54,6 +54,14 @@ def get_scheduled_webhook_monitoring():
 def list_emails():
     """이메일 목록 페이지 (모든 계정 통합)"""
     try:
+        # 세션에서 bulk action 메시지 복원
+        if "bulk_action_message" in session:
+            flash(
+                session["bulk_action_message"], session.get("bulk_action_type", "info")
+            )
+            del session["bulk_action_message"]
+            del session["bulk_action_type"]
+
         # 새 이메일 처리 알림 확인
         new_emails_notification = None
         notification_file = f"notifications/{current_user.id}_new_emails.txt"
@@ -180,6 +188,14 @@ def list_emails():
 def category_emails(category_id):
     """카테고리별 이메일 목록 (모든 계정 통합)"""
     try:
+        # 세션에서 bulk action 메시지 복원
+        if "bulk_action_message" in session:
+            flash(
+                session["bulk_action_message"], session.get("bulk_action_type", "info")
+            )
+            del session["bulk_action_message"]
+            del session["bulk_action_type"]
+
         # 사용자별 카테고리 확인
         category = Category.query.filter_by(
             id=category_id, user_id=current_user.id
@@ -737,8 +753,11 @@ def bulk_actions():
 
             print(f"🎉 대량 삭제 완료 - {result_message}")
 
-            # Flash 메시지와 함께 redirect 반환
+            # Flash 메시지와 함께 redirect 반환 (세션에 저장하여 새로고침 후에도 유지)
             flash(result_message, "success" if success_count > 0 else "warning")
+            # 세션에 flash 메시지 저장
+            session["bulk_action_message"] = result_message
+            session["bulk_action_type"] = "success" if success_count > 0 else "warning"
             return redirect(request.referrer or url_for("email.list_emails"))
 
         elif action == "archive":
@@ -844,8 +863,11 @@ def bulk_actions():
 
             print(f"🎉 대량 아카이브 완료 - {result_message}")
 
-            # Flash 메시지와 함께 redirect 반환
+            # Flash 메시지와 함께 redirect 반환 (세션에 저장하여 새로고침 후에도 유지)
             flash(result_message, "success" if success_count > 0 else "warning")
+            # 세션에 flash 메시지 저장
+            session["bulk_action_message"] = result_message
+            session["bulk_action_type"] = "success" if success_count > 0 else "warning"
             return redirect(request.referrer or url_for("email.list_emails"))
 
         elif action == "mark_read":
@@ -950,8 +972,11 @@ def bulk_actions():
 
             print(f"🎉 대량 읽음 표시 완료 - {result_message}")
 
-            # Flash 메시지와 함께 redirect 반환
+            # Flash 메시지와 함께 redirect 반환 (세션에 저장하여 새로고침 후에도 유지)
             flash(result_message, "success" if success_count > 0 else "warning")
+            # 세션에 flash 메시지 저장
+            session["bulk_action_message"] = result_message
+            session["bulk_action_type"] = "success" if success_count > 0 else "warning"
             return redirect(request.referrer or url_for("email.list_emails"))
 
         elif action == "unsubscribe":
@@ -1134,9 +1159,14 @@ def bulk_actions():
 
             print(f"🎉 대량 구독해지 완료 - {result_message}")
 
-            # Flash 메시지와 함께 redirect 반환
+            # Flash 메시지와 함께 redirect 반환 (세션에 저장하여 새로고침 후에도 유지)
             flash(
                 result_message, "success" if len(successful_senders) > 0 else "warning"
+            )
+            # 세션에 flash 메시지 저장
+            session["bulk_action_message"] = result_message
+            session["bulk_action_type"] = (
+                "success" if len(successful_senders) > 0 else "warning"
             )
             return redirect(request.referrer or url_for("email.list_emails"))
 
