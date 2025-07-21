@@ -346,7 +346,7 @@ class PlaywrightUnsubscribeService:
 
         for link in soup.find_all("a", href=True):
             href = link.get("href", "").lower()
-            link_text = link.get_text().lower()
+            link_text = link.get_text().strip().lower()
 
             unsubscribe_keywords = [
                 "unsubscribe",
@@ -360,16 +360,36 @@ class PlaywrightUnsubscribeService:
                 "email preferences",
                 "manage subscription",
                 "subscription settings",
+                "구독",  # (Korean: subscribe)
+                "취소",  # (Korean: cancel)
             ]
 
-            for keyword in unsubscribe_keywords:
-                if keyword in href or keyword in link_text:
+            generic_texts = ["여기", "click", "link", "here", "보기", "확인"]
+            found = False
+            # 1. 일반적 텍스트라면 부모/조부모 텍스트까지 합쳐서 검사
+            if link_text in generic_texts:
+                parent_text = ""
+                if link.parent:
+                    parent_text += link.parent.get_text().lower()
+                if link.parent and link.parent.parent:
+                    parent_text += link.parent.parent.get_text().lower()
+                if any(keyword in parent_text for keyword in unsubscribe_keywords):
                     unsubscribe_links.append(link["href"])
                     html_links_found += 1
                     print(
-                        f"📝 Unsubscribe link found in HTML: {link['href']} (keyword: {keyword})"
+                        f"📝 Unsubscribe link found in HTML (parent context): {link['href']} (parent context matched)"
                     )
-                    break
+                    found = True
+            # 2. 기존 방식: href나 텍스트에 키워드가 있으면 추가
+            if not found:
+                for keyword in unsubscribe_keywords:
+                    if keyword in href or keyword in link_text:
+                        unsubscribe_links.append(link["href"])
+                        html_links_found += 1
+                        print(
+                            f"📝 Unsubscribe link found in HTML: {link['href']} (keyword: {keyword})"
+                        )
+                        break
 
         print(f"📝 Number of unsubscribe links found in HTML: {html_links_found}")
 
@@ -3078,13 +3098,19 @@ Response format:
         """Extract unsubscribe links from email, fallback to AI-based context analysis if none found (async)"""
         # 1. 기존 동기 방식으로 먼저 시도
         links = self.extract_unsubscribe_links(email_content, email_headers)
-        if links:
-            return links
-
-        print(
-            "🤖 No unsubscribe links found by keyword. Trying AI-based context analysis..."
+        # 2. AI 기반 후보도 함께 추출
+        ai_links = await self.extract_unsubscribe_links_with_ai_judgement(
+            email_content, email_headers, user_email
         )
-        # 2. Playwright 브라우저/컨텍스트 초기화
+        # 3. 두 결과를 합치고, 중복 제거
+        all_links = list({*links, *ai_links})
+        if all_links:
+            print(f"📝 [COMBINED] Unsubscribe links (rule+AI): {all_links}")
+            return all_links
+        print(
+            "🤖 No unsubscribe links found by keyword or AI-based context analysis..."
+        )
+        # 4. Playwright 브라우저/컨텍스트 초기화 (기존 AI fallback)
         await self.initialize_browser()
         temp_page = await self._create_temp_page_from_response(email_content)
         if not temp_page:
@@ -3092,14 +3118,10 @@ Response format:
             return []
         try:
             ai_result = await self._analyze_page_with_ai(temp_page, user_email)
-            # AI가 추천한 링크 추출
-            # (action이 link_click이고, target이 있으면 해당 텍스트와 일치하는 링크 href 반환)
+            target = ai_result.get("target")
             if ai_result.get("success") and ai_result.get("message", "").startswith(
                 "Unsubscribe successful"
             ):
-                # 실제로 클릭된 링크를 추적하려면, _execute_ai_instructions에서 클릭한 element의 href를 반환하도록 개선 필요
-                # 여기서는 임시로, temp_page의 모든 <a> 중 target 텍스트와 일치하는 href를 반환
-                target = ai_result.get("target")
                 if target:
                     from bs4 import BeautifulSoup
 
@@ -3110,6 +3132,57 @@ Response format:
             return []
         finally:
             await temp_page.close()
+
+    async def extract_unsubscribe_links_with_ai_judgement(
+        self, email_content: str, email_headers: Dict = None, user_email: str = None
+    ) -> List[str]:
+        """AI를 이용해 모든 a태그 후보의 구독 해제 여부를 판단한다."""
+        from bs4 import BeautifulSoup
+
+        soup = BeautifulSoup(email_content, "html.parser")
+        candidates = []
+        for link in soup.find_all("a", href=True):
+            link_text = link.get_text().strip()
+            href = link.get("href", "")
+            parent_text = link.parent.get_text().strip() if link.parent else ""
+            grandparent_text = (
+                link.parent.parent.get_text().strip()
+                if link.parent and link.parent.parent
+                else ""
+            )
+            candidates.append(
+                {
+                    "href": href,
+                    "text": link_text,
+                    "parent_text": parent_text,
+                    "grandparent_text": grandparent_text,
+                }
+            )
+        if not candidates:
+            return []
+        prompt = (
+            "아래는 이메일 본문에서 추출한 a태그 후보들입니다. 각 후보가 구독 해제(수신거부, opt-out, unsubscribe) 링크인지 판단해 주세요. "
+            "각 항목별로 {href, is_unsubscribe, reason} 형태의 JSON 배열로 답변해 주세요. "
+            "is_unsubscribe는 true/false로, reason에는 근거를 간단히 적어주세요.\n"
+            "후보 목록:\n"
+            + "\n".join(
+                [
+                    f"- href: {c['href']}, text: {c['text']}, parent: {c['parent_text']}, grandparent: {c['grandparent_text']}"
+                    for c in candidates
+                ]
+            )
+        )
+        # OpenAI API 호출 (기존 _call_openai_api 활용)
+        ai_response = await self._call_openai_api(prompt)
+        # 응답 파싱
+        try:
+            # JSON 배열 형태로 파싱
+            result = json.loads(ai_response)
+            links = [item["href"] for item in result if item.get("is_unsubscribe")]
+            return links
+        except Exception as e:
+            print(f"⚠️ AI 링크 판별 응답 파싱 실패: {str(e)} | 원본: {ai_response}")
+            return []
 
 
 # Synchronous wrapper function (for use in Flask application)
