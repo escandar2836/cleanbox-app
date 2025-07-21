@@ -736,19 +736,10 @@ def bulk_actions():
             )
 
             print(f"🎉 대량 삭제 완료 - {result_message}")
-            # AJAX 요청에서는 Flash 메시지 사용하지 않음 (클라이언트에서 직접 표시)
 
-            # JSON 응답 반환 (클라이언트에서 처리)
-            return jsonify(
-                {
-                    "success": True,
-                    "message": result_message,
-                    "action": action,
-                    "total_processed": len(email_ids),
-                    "success_count": success_count,
-                    "failed_count": len(failed_emails),
-                }
-            )
+            # Flash 메시지와 함께 redirect 반환
+            flash(result_message, "success" if success_count > 0 else "warning")
+            return redirect(request.referrer or url_for("email.list_emails"))
 
         elif action == "archive":
             # 대량 아카이브 (개선된 버전)
@@ -852,19 +843,10 @@ def bulk_actions():
             )
 
             print(f"🎉 대량 아카이브 완료 - {result_message}")
-            # AJAX 요청에서는 Flash 메시지 사용하지 않음 (클라이언트에서 직접 표시)
 
-            # JSON 응답 반환 (클라이언트에서 처리)
-            return jsonify(
-                {
-                    "success": True,
-                    "message": result_message,
-                    "action": action,
-                    "total_processed": len(email_ids),
-                    "success_count": success_count,
-                    "failed_count": len(failed_emails),
-                }
-            )
+            # Flash 메시지와 함께 redirect 반환
+            flash(result_message, "success" if success_count > 0 else "warning")
+            return redirect(request.referrer or url_for("email.list_emails"))
 
         elif action == "mark_read":
             # 대량 읽음 표시 (개선된 버전)
@@ -967,19 +949,10 @@ def bulk_actions():
             )
 
             print(f"🎉 대량 읽음 표시 완료 - {result_message}")
-            # AJAX 요청에서는 Flash 메시지 사용하지 않음 (클라이언트에서 직접 표시)
 
-            # JSON 응답 반환 (클라이언트에서 처리)
-            return jsonify(
-                {
-                    "success": True,
-                    "message": result_message,
-                    "action": action,
-                    "total_processed": len(email_ids),
-                    "success_count": success_count,
-                    "failed_count": len(failed_emails),
-                }
-            )
+            # Flash 메시지와 함께 redirect 반환
+            flash(result_message, "success" if success_count > 0 else "warning")
+            return redirect(request.referrer or url_for("email.list_emails"))
 
         elif action == "unsubscribe":
             # 대량 구독해지 (발신자별 그룹화 처리)
@@ -1160,46 +1133,20 @@ def bulk_actions():
             )
 
             print(f"🎉 대량 구독해지 완료 - {result_message}")
-            # AJAX 요청에서는 Flash 메시지 사용하지 않음 (클라이언트에서 직접 표시)
 
-            # JSON 응답 반환 (클라이언트에서 처리)
-            return jsonify(
-                {
-                    "success": True,
-                    "message": result_message,
-                    "action": action,
-                    "total_processed": len(email_ids),
-                    "success_count": len(successful_senders),
-                    "failed_count": len(failed_senders),
-                    "successful_senders": len(successful_senders),
-                    "failed_senders": len(failed_senders),
-                    "already_unsubscribed_senders": len(already_unsubscribed_senders),
-                }
+            # Flash 메시지와 함께 redirect 반환
+            flash(
+                result_message, "success" if len(successful_senders) > 0 else "warning"
             )
+            return redirect(request.referrer or url_for("email.list_emails"))
 
         else:
-            return (
-                jsonify(
-                    {
-                        "success": False,
-                        "message": "지원하지 않는 작업입니다.",
-                        "error_type": "unsupported_action",
-                    }
-                ),
-                400,
-            )
+            flash("지원하지 않는 작업입니다.", "error")
+            return redirect(request.referrer or url_for("email.list_emails"))
 
     except Exception as e:
-        return (
-            jsonify(
-                {
-                    "success": False,
-                    "message": f"대량 작업 중 오류가 발생했습니다: {str(e)}",
-                    "error_type": "system_error",
-                }
-            ),
-            500,
-        )
+        flash(f"대량 작업 중 오류가 발생했습니다: {str(e)}", "error")
+        return redirect(request.referrer or url_for("email.list_emails"))
 
 
 @email_bp.route("/<int:email_id>/unsubscribe")
