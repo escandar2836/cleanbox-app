@@ -84,6 +84,10 @@ init_db(app)
 # 스케줄러 작업 설정 (app 생성 후)
 with app.app_context():
     setup_scheduler_jobs()
+    # 서버 시작 시 웹훅 복구 실행
+    from cleanbox import initialize_webhooks
+
+    initialize_webhooks()
 
 
 if __name__ == "__main__":
