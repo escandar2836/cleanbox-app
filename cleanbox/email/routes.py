@@ -286,14 +286,22 @@ def process_new_emails():
 
                         # AI classification
                         ai_classifier = AIClassifier()
-                        classification_result = ai_classifier.classify_email(
-                            email_obj.content, email_obj.subject, email_obj.sender
+                        categories = ai_classifier.get_user_categories_for_ai(
+                            current_user.id
+                        )
+                        category_id, summary = (
+                            ai_classifier.classify_and_summarize_email(
+                                email_obj.content,
+                                email_obj.subject,
+                                email_obj.sender,
+                                categories,
+                            )
                         )
 
-                        if classification_result["category_id"]:
+                        if category_id:
                             # Update category
                             gmail_service.update_email_category(
-                                email_obj.gmail_id, classification_result["category_id"]
+                                email_obj.gmail_id, category_id
                             )
                             classified_count += 1
 
@@ -1418,12 +1426,17 @@ def process_missed_emails_for_account(
                     continue
 
                 # Classify email
-                classification_result = ai_classifier.classify_email(
+                ai_classifier = AIClassifier()
+                category_id, summary = ai_classifier.classify_and_summarize_email(
+                    email_data.get("body", ""),
                     email_data.get("subject", ""),
-                    email_data.get("snippet", ""),
                     email_data.get("sender", ""),
                     categories,
                 )
+
+                # Category name 쿼리
+                category = Category.query.filter_by(id=category_id).first()
+                category_name = category.name if category else "Unclassified"
 
                 # Save email to DB
                 email = Email(
@@ -1436,9 +1449,7 @@ def process_missed_emails_for_account(
                     date=email_data.get("date"),
                     snippet=email_data.get("snippet", ""),
                     body=email_data.get("body", ""),
-                    category_id=classification_result.get("category_id"),
-                    category_name=classification_result.get("category_name"),
-                    confidence_score=classification_result.get("confidence_score", 0.0),
+                    category_id=category_id,
                     is_read=False,
                     is_archived=False,
                     created_at=datetime.utcnow(),
@@ -1447,11 +1458,11 @@ def process_missed_emails_for_account(
                 db.session.add(email)
                 processed_count += 1
 
-                if classification_result.get("category_id"):
+                if category_id:
                     classified_count += 1
 
                 print(
-                    f"✅ Missed emails processed: {email_data.get('subject', 'No subject')} -> {classification_result.get('category_name', 'Unclassified')}"
+                    f"✅ Missed emails processed: {email_data.get('subject', 'No subject')} -> {category_name}"
                 )
 
             except Exception as e:
@@ -1932,7 +1943,7 @@ def monitor_and_renew_webhooks():
     """Monitor all users' webhook status and automatically renew expired webhooks + automatically handle missed emails"""
     try:
         from datetime import datetime, timedelta
-        from .models import User
+        from ..models import User
 
         print("🔄 Starting webhook monitoring...")
 
