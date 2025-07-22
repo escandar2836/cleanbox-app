@@ -10,6 +10,7 @@ import time
 import os
 import json
 import psutil
+import random
 from typing import List, Dict, Optional
 from urllib.parse import urlparse
 
@@ -2919,50 +2920,64 @@ Response format:
             }
 
     async def _try_form_submit(self, page: Page, user_email: str = None) -> Dict:
-        """Handle form submission separately"""
+        """Handle form submission with required field auto-fill and retry"""
+        import random
+
         try:
-            # Find form
             forms = await page.query_selector_all("form")
             for form in forms:
-                # If email field exists, fill it
-                if user_email:
-                    email_inputs = await form.query_selector_all(
-                        "input[type='email'], input[name*='email']"
+                max_attempts = 3
+                for attempt in range(max_attempts):
+                    # 1. 모든 required 필드 자동 입력
+                    required_fields = await form.query_selector_all("[required]")
+                    for field in required_fields:
+                        tag = await field.evaluate("el => el.tagName.toLowerCase()")
+                        typ = await field.get_attribute("type") or ""
+                        name = await field.get_attribute("name") or ""
+                        if tag == "input" and typ == "email":
+                            await field.fill(
+                                user_email
+                                or f"user{random.randint(1000,9999)}@example.com"
+                            )
+                        elif tag == "input" and typ in ["text", ""]:
+                            await field.fill(f"RandomText{random.randint(1000,9999)}")
+                        elif tag == "textarea":
+                            await field.fill(
+                                f"Random feedback {random.randint(1000,9999)}"
+                            )
+                        elif tag == "select":
+                            options = await field.query_selector_all("option")
+                            if options and len(options) > 1:
+                                # 첫 번째(placeholder) 제외, 랜덤 선택
+                                idx = random.randint(1, len(options) - 1)
+                                value = await options[idx].get_attribute("value")
+                                await field.select_option(value)
+                        elif tag == "input" and typ == "checkbox":
+                            if not await field.is_checked():
+                                await field.check()
+                        # 기타 타입별 처리 필요시 추가
+                    # 2. 제출
+                    submit_buttons = await form.query_selector_all(
+                        "input[type='submit'], button[type='submit']"
                     )
-                    for email_input in email_inputs:
-                        await email_input.fill(user_email)
-                        print(f"📝 Email input filled: {user_email}")
-
-                # Find submit button
-                submit_buttons = await form.query_selector_all(
-                    "input[type='submit'], button[type='submit']"
-                )
-                for button in submit_buttons:
-                    button_text = await button.text_content()
-                    print(f"📝 Found submit button: {button_text}")
-
-                    # Save current URL before submission
-                    before_url = page.url
-
-                    # Submit form
-                    await button.click()
-
-                    # Wait for network requests to complete
-                    try:
-                        await page.wait_for_load_state("networkidle", timeout=10000)
-                        print("📝 Network requests completed successfully")
-                    except:
-                        await page.wait_for_timeout(3000)
-
-                    # Check result
-                    if await self._check_post_request_success(page):
-                        return {
-                            "success": True,
-                            "message": "Form submission successful",
-                        }
-
-            return {"success": False, "message": "Form submission failed"}
-
+                    for button in submit_buttons:
+                        await button.click()
+                        try:
+                            await page.wait_for_selector(
+                                ".success-message", timeout=3000
+                            )
+                            return {
+                                "success": True,
+                                "message": "Form submission successful",
+                            }
+                        except:
+                            continue  # 실패 시 다음 시도
+                # 모든 시도 실패
+                return {
+                    "success": False,
+                    "message": "Form submission failed after retries",
+                }
+            return {"success": False, "message": "No form found"}
         except Exception as e:
             return {
                 "success": False,
