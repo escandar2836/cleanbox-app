@@ -584,32 +584,45 @@ def email_statistics():
 @email_bp.route("/<int:email_id>")
 @login_required
 def view_email(email_id):
-    """View email details"""
+    """Email detail page"""
     try:
         email_obj = Email.query.filter_by(id=email_id, user_id=current_user.id).first()
         if not email_obj:
             flash("Email not found.", "error")
             return redirect(url_for("email.list_emails"))
 
-        # When viewing email details, automatically mark as read
+        # HTML 여부 판별 (간단한 휴리스틱)
+        html_indicators = [
+            "<html",
+            "<body",
+            "<div",
+            "<p",
+            "<a",
+            "<span",
+            "<table",
+            "<br",
+            "<b>",
+            "<strong>",
+        ]
+        is_html = any(tag in (email_obj.content or "") for tag in html_indicators)
+
+        # 읽음 처리(자동 마킹)
         if not email_obj.is_read:
             email_obj.is_read = True
             email_obj.updated_at = datetime.utcnow()
             db.session.commit()
 
-        # Category information (cover case of unclassified and no category)
+        # 카테고리 정보
         category = None
         if email_obj.category_id:
-            # Check user permissions to retrieve category
             category = Category.query.filter_by(
                 id=email_obj.category_id, user_id=current_user.id
             ).first()
-            # If category is not found or deleted, set category_id to None
             if not category:
                 email_obj.category_id = None
                 db.session.commit()
 
-        # User category list (for changing categories)
+        # 사용자 카테고리 리스트
         user_categories = Category.query.filter_by(
             user_id=current_user.id, is_active=True
         ).all()
@@ -620,10 +633,10 @@ def view_email(email_id):
             email=email_obj,
             category=category,
             categories=user_categories,
+            is_html=is_html,
         )
-
     except Exception as e:
-        flash(f"Error loading email: {str(e)}", "error")
+        flash(f"Error occurred while viewing email: {str(e)}", "error")
         return redirect(url_for("email.list_emails"))
 
 
